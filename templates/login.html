@@ -1,27 +1,11 @@
-<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <title>Login</title>
-  <style>
-    body { font-family: Arial, sans-serif; background:#f4f4f4; }
-    .container { max-width: 400px; margin: 80px auto; padding:20px; background:white; border-radius:8px; box-shadow:0 2px 8px rgba(0,0,0,0.1); }
-    label { display:block; margin-top:10px; }
-    input { width:100%; padding:8px; margin-top:4px; }
-    button { margin-top:15px; padding:10px; width:100%; background:#3b82f6; color:white; border:none; border-radius:5px; cursor:pointer; }
-    a { color:#2563eb; text-decoration:none; }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <h1>RWA Leave System</h1>
-    <form method="POST">
-      <label>Username</label>
-      <input type="text" name="username" required>
-      <label>Password</label>
-      <input type="password" name="password" required>
-      <button type="submit">Log In</button>
-    </form>
-  </div>
-</body>
-</html>
+{% extends "base.html" %}
+{% block content %}
+<div class="card" style="max-width:480px;margin:40px auto;">
+  <h2>Login</h2>
+  <form method="POST">
+    <label>Username</label><input name="username" required>
+    <label>Password</label><input type="password" name="password" required>
+    <button type="submit">Log In</button>
+  </form>
+</div>
+{% endblock %}
