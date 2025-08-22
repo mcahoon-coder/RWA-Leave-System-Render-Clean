@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="card">
+  <h2>Manage Users</h2>
+  <form method="get">
+    <input name="q" placeholder="Search username" value="{{ q or '' }}">
+    <button type="submit">Search</button>
+  </form>
+  <table>
+    <tr><th>Username</th><th>Role</th><th>Balance (h)</th><th>Reset Password</th></tr>
+    {% for u in users %}
+      <tr>
+        <td>{{ u.username }}</td>
+        <td>{{ u.role }}</td>
+        <td>{{ "%.2f"|format(u.hours_balance) }}</td>
+        <td>
+          <form method="post" action="{{ url_for('admin_reset_password', user_id=u.id) }}">
+            <input type="text" name="new_password" placeholder="New password" required>
+            <button>Update</button>
+          </form>
+        </td>
+      </tr>
+    {% else %}
+      <tr><td colspan="4">No users found.</td></tr>
+    {% endfor %}
+  </table>
+</div>
+{% endblock %}
