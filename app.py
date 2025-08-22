@@ -1,54 +1,301 @@
 from flask import Flask, render_template, redirect, url_for, request, flash
 from flask_sqlalchemy import SQLAlchemy
-from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
+from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
+from datetime import datetime, date
 import os
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = 'secret-key'
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///leave.db'
-db = SQLAlchemy(app)
+app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "ChangeThisSecret123!")
 
+# DB: Render Postgres via DATABASE_URL, else local SQLite
+db_url = os.environ.get("DATABASE_URL", "sqlite:///leave_system.db")
+if db_url.startswith("postgres://"):
+    db_url = db_url.replace("postgres://", "postgresql://", 1)
+app.config["SQLALCHEMY_DATABASE_URI"] = db_url
+app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+
+db = SQLAlchemy(app)
 login_manager = LoginManager(app)
-login_manager.login_view = 'login'
+login_manager.login_view = "login"
+
+# ---------- Models ----------
+class Role:
+    admin = "admin"
+    user = "user"
+
+class RequestStatus:
+    pending = "Pending"
+    approved = "Approved"
+    disapproved = "Disapproved"
+    cancelled = "Cancelled"
+
+class RequestMode:
+    hourly = "hourly"
+    daily = "daily"
 
 class User(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    username = db.Column(db.String(50), unique=True, nullable=False)
-    password_hash = db.Column(db.String(255), nullable=False)
-    role = db.Column(db.String(10), default='employee')
+    username = db.Column(db.String(150), unique=True, nullable=False)
+    password_hash = db.Column(db.String(200), nullable=False)
+    role = db.Column(db.String(20), default=Role.user, nullable=False)
+    hours_balance = db.Column(db.Float, default=160.0, nullable=False)  # set per-user
+
+class LeaveRequest(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    kind = db.Column(db.String(20), default="annual")  # 'annual' or 'sick'
+    mode = db.Column(db.String(10), default=RequestMode.hourly, nullable=False)  # hourly/daily
+    start_date = db.Column(db.Date, nullable=False)
+    end_date = db.Column(db.Date, nullable=False)
+    hours = db.Column(db.Float, nullable=False)
+    reason = db.Column(db.String(500), default="")
+    status = db.Column(db.String(20), default=RequestStatus.pending, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    decided_at = db.Column(db.DateTime)
+
+    user = db.relationship("User", backref="leave_requests", lazy="joined")
 
 @login_manager.user_loader
 def load_user(user_id):
     return User.query.get(int(user_id))
 
-@app.route('/login', methods=['GET', 'POST'])
+# ---------- Helpers ----------
+WORKDAY_HOURS = float(os.environ.get("WORKDAY_HOURS", "8"))
+
+HOLIDAYS = set()  # you can fill with dates if you want to exclude specific holidays
+
+def is_workday(d: date):
+    return d.weekday() < 5 and d not in HOLIDAYS  # Mon–Fri & not holiday
+
+def workdays_between(start: date, end: date):
+    if end < start:
+        start, end = end, start
+    n = 0
+    cur = start
+    while cur <= end:
+        if is_workday(cur):
+            n += 1
+        cur = cur.fromordinal(cur.toordinal() + 1)
+    return n
+
+def ensure_db():
+    db.create_all()
+    # Seed admin
+    if not User.query.filter_by(username="mc-admin").first():
+        admin = User(username="mc-admin",
+                     password_hash=generate_password_hash("RWAadmin2"),
+                     role=Role.admin, hours_balance=160.0)
+        db.session.add(admin)
+    # Seed example user
+    if not User.query.filter_by(username="jdoe").first():
+        u = User(username="jdoe",
+                 password_hash=generate_password_hash("password123"),
+                 role=Role.user, hours_balance=120.0)
+        db.session.add(u)
+    db.session.commit()
+
+with app.app_context():
+    ensure_db()
+
+# ---------- Routes ----------
+@app.get("/health")
+def health():
+    return "ok", 200
+
+@app.route("/")
+def home():
+    return redirect(url_for("login"))
+
+@app.route("/login", methods=["GET","POST"])
 def login():
-    if request.method == 'POST':
-        user = User.query.filter_by(username=request.form['username']).first()
-        if user and check_password_hash(user.password_hash, request.form['password']):
+    if request.method == "POST":
+        username = request.form.get("username","").strip()
+        password = request.form.get("password","")
+        user = User.query.filter(User.username.ilike(username)).first()
+        if user and check_password_hash(user.password_hash, password):
             login_user(user)
-            return redirect(url_for('dashboard'))
-        flash("Invalid credentials")
-    return render_template('login.html')
+            flash("Logged in.", "success")
+            return redirect(url_for("dashboard"))
+        flash("Invalid username or password.", "danger")
+    return render_template("login.html")
 
-@app.route('/dashboard')
-@login_required
-def dashboard():
-    return render_template('dashboard.html', user=current_user)
-
-@app.route('/logout')
+@app.get("/logout")
 @login_required
 def logout():
     logout_user()
-    return redirect(url_for('login'))
+    return redirect(url_for("login"))
+
+@app.get("/dashboard")
+@login_required
+def dashboard():
+    recent = (LeaveRequest.query.filter_by(user_id=current_user.id)
+              .order_by(LeaveRequest.created_at.desc()).limit(10).all())
+    return render_template("dashboard.html", me=current_user, workday=WORKDAY_HOURS, recent=recent)
+
+@app.route("/request/new", methods=["GET","POST"])
+@login_required
+def new_request():
+    if request.method == "POST":
+        mode = request.form.get("mode", RequestMode.hourly)
+        kind = request.form.get("kind", "annual")
+        reason = request.form.get("reason","")
+        try:
+            sd = datetime.strptime(request.form["start_date"], "%Y-%m-%d").date()
+            ed = datetime.strptime(request.form["end_date"], "%Y-%m-%d").date()
+        except Exception:
+            flash("Invalid dates.", "warning")
+            return render_template("new_request.html", workday=WORKDAY_HOURS)
+
+        capacity_hours = workdays_between(sd, ed) * WORKDAY_HOURS
+        if capacity_hours <= 0:
+            flash("No working days in that range.", "warning")
+            return render_template("new_request.html", workday=WORKDAY_HOURS)
+
+        if mode == RequestMode.hourly:
+            try:
+                hours = float(request.form.get("hours","0"))
+            except Exception:
+                hours = 0.0
+        else:
+            wd = workdays_between(sd, ed)
+            hours = wd * WORKDAY_HOURS
+
+        if hours <= 0:
+            flash("Requested hours must be greater than zero.", "warning")
+            return render_template("new_request.html", workday=WORKDAY_HOURS)
+
+        if hours > capacity_hours:
+            flash(f"Requested {hours:.2f} exceeds capacity {capacity_hours:.2f} for that range.", "warning")
+            return render_template("new_request.html", workday=WORKDAY_HOURS)
+
+        req = LeaveRequest(user_id=current_user.id, kind=kind, mode=mode,
+                           start_date=sd, end_date=ed, hours=hours, reason=reason)
+        db.session.add(req); db.session.commit()
+        flash("Request submitted.", "success")
+        return redirect(url_for("my_requests"))
+
+    return render_template("new_request.html", workday=WORKDAY_HOURS)
+
+@app.get("/requests")
+@login_required
+def my_requests():
+    filt = request.args.get("status","all")
+    q = LeaveRequest.query
+    if current_user.role != Role.admin:
+        q = q.filter_by(user_id=current_user.id)
+    if filt != "all":
+        q = q.filter_by(status=filt.capitalize())
+    reqs = q.order_by(LeaveRequest.created_at.desc()).all()
+    return render_template("requests.html", reqs=reqs, is_admin=(current_user.role==Role.admin))
+
+@app.post("/requests/<int:req_id>/approve")
+@login_required
+def approve(req_id):
+    if current_user.role != Role.admin:
+        flash("Admins only.", "warning")
+        return redirect(url_for("my_requests"))
+    r = LeaveRequest.query.get_or_404(req_id)
+    if r.status != RequestStatus.pending:
+        flash("Request not pending.", "warning"); return redirect(url_for("my_requests"))
+    u = User.query.get(r.user_id)
+    if u.hours_balance < r.hours:
+        flash("Insufficient balance.", "danger"); return redirect(url_for("my_requests"))
+    u.hours_balance -= r.hours
+    r.status = RequestStatus.approved
+    r.decided_at = datetime.utcnow()
+    db.session.commit()
+    flash("Approved.", "success")
+    return redirect(url_for("my_requests"))
+
+@app.post("/requests/<int:req_id>/disapprove")
+@login_required
+def disapprove(req_id):
+    if current_user.role != Role.admin:
+        flash("Admins only.", "warning")
+        return redirect(url_for("my_requests"))
+    r = LeaveRequest.query.get_or_404(req_id)
+    if r.status != RequestStatus.pending:
+        flash("Request not pending.", "warning"); return redirect(url_for("my_requests"))
+    r.status = RequestStatus.disapproved
+    r.decided_at = datetime.utcnow()
+    db.session.commit()
+    flash("Disapproved.", "info")
+    return redirect(url_for("my_requests"))
+
+@app.post("/requests/<int:req_id>/cancel")
+@login_required
+def cancel(req_id):
+    r = LeaveRequest.query.get_or_404(req_id)
+    if r.user_id != current_user.id and current_user.role != Role.admin:
+        flash("Not allowed.", "danger"); return redirect(url_for("my_requests"))
+    if r.status == RequestStatus.approved:
+        u = User.query.get(r.user_id)
+        u.hours_balance += r.hours
+    r.status = RequestStatus.cancelled
+    r.decided_at = datetime.utcnow()
+    db.session.commit()
+    flash("Cancelled.", "secondary")
+    return redirect(url_for("my_requests"))
+
+# ----- Manage Users (admin) -----
+@app.route("/admin/users", methods=["GET"])
+@login_required
+def manage_users():
+    if current_user.role != Role.admin:
+        flash("Admins only.", "warning")
+        return redirect(url_for("dashboard"))
+    q = request.args.get("q","").strip()
+    query = User.query
+    if q:
+        query = query.filter(User.username.ilike(f"%{q}%"))
+    users = query.order_by(User.username.asc()).all()
+    return render_template("manage_users.html", users=users, q=q)
+
+@app.post("/admin/users/<int:user_id>/reset")
+@login_required
+def admin_reset_password(user_id):
+    if current_user.role != Role.admin:
+        flash("Admins only.", "warning")
+        return redirect(url_for("manage_users"))
+    new_pw = request.form.get("new_password","").strip()
+    if not new_pw:
+        flash("Password cannot be empty.", "warning")
+        return redirect(url_for("manage_users"))
+    u = User.query.get_or_404(user_id)
+    u.password_hash = generate_password_hash(new_pw)
+    db.session.commit()
+    flash(f"Password updated for {u.username}.", "success")
+    return redirect(url_for("manage_users"))
+
+# ----- Self-service password change -----
+@app.route("/account/password", methods=["GET","POST"])
+@login_required
+def update_password():
+    if request.method == "POST":
+        cur = request.form.get("current_password","")
+        new = request.form.get("new_password","").strip()
+        if not check_password_hash(current_user.password_hash, cur):
+            flash("Current password is incorrect.", "danger")
+        elif not new:
+            flash("New password cannot be empty.", "warning")
+        else:
+            current_user.password_hash = generate_password_hash(new)
+            db.session.commit()
+            flash("Password updated.", "success")
+            return redirect(url_for("dashboard"))
+    return render_template("update_password.html")
+
+@app.errorhandler(404)
+def not_found(e):
+    return render_template("error.html", title="Not Found", message="The page you requested was not found."), 404
+
+@app.errorhandler(500)
+def internal_error(e):
+    try:
+        return render_template("error.html", title="Server Error", message=str(e)), 500
+    except Exception:
+        return "Internal Server Error", 500
 
 if __name__ == "__main__":
-    with app.app_context():
-        db.create_all()
-        # Create default admin if not exists
-        if not User.query.filter_by(username='mc-admin').first():
-            admin = User(username='mc-admin', password_hash=generate_password_hash('RWAadmin2'), role='admin')
-            db.session.add(admin)
-            db.session.commit()
-    app.run(host="0.0.0.0", port=5000)
+    app.run()
