@@ -3,10 +3,11 @@
 <div class="card">
   <h2>Requests</h2>
   <table>
-    <tr><th>User</th><th>Dates</th><th>Mode</th><th>Hours</th><th>Status</th><th>Actions</th></tr>
+    <tr><th>User</th><th>Kind</th><th>Dates</th><th>Mode</th><th>Hours</th><th>Status</th><th>Actions</th></tr>
     {% for r in reqs %}
       <tr>
         <td>{{ r.user.username }}</td>
+        <td>{{ r.kind }}</td>
         <td>{{ r.start_date }} → {{ r.end_date }}</td>
         <td>{{ r.mode }}</td>
         <td>{{ r.hours }}</td>
@@ -16,16 +17,18 @@
             {% if r.status == 'Pending' %}
               <form action="{{ url_for('approve', req_id=r.id) }}" method="post" style="display:inline"><button>Approve</button></form>
               <form action="{{ url_for('disapprove', req_id=r.id) }}" method="post" style="display:inline"><button>Disapprove</button></form>
+            {% else %}
+              —
             {% endif %}
           {% else %}
             {% if r.status in ['Pending','Approved'] %}
               <form action="{{ url_for('cancel', req_id=r.id) }}" method="post" style="display:inline"><button>Cancel</button></form>
-            {% endif %}
+            {% else %} — {% endif %}
           {% endif %}
         </td>
       </tr>
     {% else %}
-      <tr><td colspan="6">No requests.</td></tr>
+      <tr><td colspan="7">No requests.</td></tr>
     {% endfor %}
   </table>
 </div>
