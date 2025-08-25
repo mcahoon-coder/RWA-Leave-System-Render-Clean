@@ -2,17 +2,32 @@
 {% block content %}
 <div class="card">
   <h2>Manage Users</h2>
-  <form method="get">
+  <form method="get" style="margin-bottom:12px;">
     <input name="q" placeholder="Search username" value="{{ q or '' }}">
     <button type="submit">Search</button>
   </form>
+
   <table>
-    <tr><th>Username</th><th>Role</th><th>Balance (h)</th><th>Reset Password</th></tr>
+    <tr>
+      <th>Username</th>
+      <th>Role</th>
+      <th>Email</th>
+      <th>Balance (h)</th>
+      <th>Update Email</th>
+      <th>Reset Password</th>
+    </tr>
     {% for u in users %}
       <tr>
         <td>{{ u.username }}</td>
         <td>{{ u.role }}</td>
+        <td>{{ u.email or '—' }}</td>
         <td>{{ "%.2f"|format(u.hours_balance) }}</td>
+        <td>
+          <form method="post" action="{{ url_for('admin_update_user', user_id=u.id) }}">
+            <input type="email" name="email" placeholder="user@domain.com" value="{{ u.email or '' }}" required>
+            <button>Save</button>
+          </form>
+        </td>
         <td>
           <form method="post" action="{{ url_for('admin_reset_password', user_id=u.id) }}">
             <input type="text" name="new_password" placeholder="New password" required>
@@ -21,7 +36,7 @@
         </td>
       </tr>
     {% else %}
-      <tr><td colspan="4">No users found.</td></tr>
+      <tr><td colspan="6">No users found.</td></tr>
     {% endfor %}
   </table>
 </div>
