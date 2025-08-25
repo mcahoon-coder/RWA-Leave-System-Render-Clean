@@ -1,6 +1,6 @@
 from flask import (
     Flask, render_template, redirect, url_for,
-    request, flash, jsonify
+    request, flash, jsonify, send_file, make_response, abort
 )
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import (
@@ -9,9 +9,10 @@ from flask_login import (
 )
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime, date, timedelta
-import os, smtplib, ssl
+import os, smtplib, ssl, io, csv
 from email.message import EmailMessage
 from sqlalchemy import text
+import xlsxwriter  # for Excel export (uses memory, safe on Render)
 
 # ------------------------------
 # App & DB config
@@ -34,7 +35,7 @@ login_manager.login_view = "login"
 # ------------------------------
 # Email settings (env vars)
 # ------------------------------
-MAIL_HOST = os.environ.get("MAIL_HOST", "")
+MAIL_HOST = os.environ.get("MAIL_HOST", "")          # e.g. smtp.gmail.com or your org SMTP
 MAIL_PORT = int(os.environ.get("MAIL_PORT", "587"))
 MAIL_USER = os.environ.get("MAIL_USER", "")
 MAIL_PASSWORD = os.environ.get("MAIL_PASSWORD", "")
@@ -49,16 +50,14 @@ def send_email(to_addrs, subject, body):
     if isinstance(to_addrs, str):
         to_addrs = [to_addrs]
 
-    # If SMTP not configured, skip quietly.
     if not MAIL_HOST or not MAIL_FROM:
-        return
+        return  # SMTP not configured
 
     msg = EmailMessage()
     msg["From"] = MAIL_FROM
     msg["To"] = ", ".join([a for a in to_addrs if a])
     msg["Subject"] = subject
     msg.set_content(body)
-
     if not msg["To"]:
         return
 
@@ -100,7 +99,7 @@ class User(UserMixin, db.Model):
     password_hash = db.Column(db.String(255), nullable=False)
     role = db.Column(db.String(20), default=Role.user, nullable=False)
     hours_balance = db.Column(db.Float, default=160.0, nullable=False)
-    email = db.Column(db.String(255))  # NEW: for notifications
+    email = db.Column(db.String(255))  # for notifications
 
 class LeaveRequest(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -159,19 +158,16 @@ def _column_exists(table_name: str, column_name: str) -> bool:
 
 def ensure_db():
     db.create_all()
-
     # Add email column if missing (SQLite) – simple migration helper
     try:
         if not _column_exists("user", "email"):
             if db.engine.dialect.name == "sqlite":
-                # SQLite ALTER TABLE ADD COLUMN
                 db.session.execute(text("ALTER TABLE user ADD COLUMN email VARCHAR(255)"))
                 db.session.commit()
-            # Postgres path handled via Alembic normally; we skip as most first-time users will be SQLite.
     except Exception:
-        db.session.rollback()  # ignore if already added
+        db.session.rollback()
 
-    # Seed admin
+    # Seed accounts
     if not User.query.filter_by(username="mc-admin").first():
         db.session.add(User(
             username="mc-admin",
@@ -180,7 +176,6 @@ def ensure_db():
             hours_balance=160.0,
             email=ADMIN_FALLBACK or None
         ))
-    # Seed example user
     if not User.query.filter_by(username="jdoe").first():
         db.session.add(User(
             username="jdoe",
@@ -199,6 +194,35 @@ def admin_emails():
     if not emails and ADMIN_FALLBACK:
         emails = [ADMIN_FALLBACK]
     return emails
+
+# Shared filter logic for list + exports
+def _filtered_requests_for(current_user_is_admin: bool):
+    status = request.args.get("status", "all").strip().lower()
+    start_s = request.args.get("start", "").strip()
+    end_s = request.args.get("end", "").strip()
+
+    q = LeaveRequest.query
+    if not current_user_is_admin:
+        q = q.filter_by(user_id=current_user.id)
+
+    if status and status != "all":
+        q = q.filter_by(status=status.capitalize())
+
+    def parse_date(s):
+        try:
+            return datetime.strptime(s, "%Y-%m-%d").date()
+        except Exception:
+            return None
+
+    sd = parse_date(start_s)
+    ed = parse_date(end_s)
+
+    if sd:
+        q = q.filter(LeaveRequest.start_date >= sd)
+    if ed:
+        q = q.filter(LeaveRequest.end_date <= ed)
+
+    return q.order_by(LeaveRequest.created_at.desc())
 
 # ------------------------------
 # Routes
@@ -314,18 +338,16 @@ def new_request():
 @app.get("/requests")
 @login_required
 def my_requests():
-    filt = request.args.get("status", "all")
-    q = LeaveRequest.query
-    if current_user.role != Role.admin:
-        q = q.filter_by(user_id=current_user.id)
-    if filt != "all":
-        q = q.filter_by(status=filt.capitalize())
-    reqs = q.order_by(LeaveRequest.created_at.desc()).all()
+    q = _filtered_requests_for(current_user.role == Role.admin)
+    reqs = q.all()
     return render_template(
         "requests.html",
         title="Requests",
         reqs=reqs,
         is_admin=(current_user.role == Role.admin),
+        status=request.args.get("status", "all"),
+        start=request.args.get("start", ""),
+        end=request.args.get("end", "")
     )
 
 @app.post("/requests/<int:req_id>/approve")
@@ -348,7 +370,6 @@ def approve(req_id):
     r.decided_at = datetime.utcnow()
     db.session.commit()
 
-    # Notify user + admins
     subj = "Leave Request Approved"
     body = (
         f"Hello {u.username},\n\n"
@@ -377,15 +398,13 @@ def disapprove(req_id):
     r.decided_at = datetime.utcnow()
     db.session.commit()
 
-    # Notify user + admins
     u = User.query.get(r.user_id)
     subj = "Leave Request Disapproved"
     body = (
         f"Hello {u.username},\n\n"
         f"Your leave request has been DISAPPROVED.\n"
         f"Kind: {r.kind}\nMode: {r.mode}\nHours: {r.hours}\n"
-        f"Dates: {r.start_date} to {r.end_date}\n\n"
-        f"If you have questions, please contact your administrator.\n"
+        f"Dates: {r.start_date} to {r.end_date}\n"
     )
     send_email([u.email] + admin_emails(), subj, body)
 
@@ -406,7 +425,6 @@ def cancel(req_id):
     r.decided_at = datetime.utcnow()
     db.session.commit()
 
-    # Notify user + admins
     subj = "Leave Request Cancelled"
     body = (
         f"User {u.username} cancelled a leave request.\n"
@@ -414,7 +432,6 @@ def cancel(req_id):
         f"Dates: {r.start_date} to {r.end_date}\n"
         f"Balance is now: {u.hours_balance:.1f} hours\n"
     )
-    # If user cancelled their own request, notify admins; if admin cancelled, notify user too.
     recipients = admin_emails()
     if u.email:
         recipients = [u.email] + recipients
@@ -430,12 +447,12 @@ def manage_users():
     if current_user.role != Role.admin:
         flash("Admins only.", "warning")
         return redirect(url_for("dashboard"))
-    q = request.args.get("q", "").strip()
+    qtxt = request.args.get("q", "").strip()
     query = User.query
-    if q:
-        query = query.filter(User.username.ilike(f"%{q}%"))
+    if qtxt:
+        query = query.filter(User.username.ilike(f"%{qtxt}%"))
     users = query.order_by(User.username.asc()).all()
-    return render_template("manage_users.html", title="Manage Users", users=users, q=q)
+    return render_template("manage_users.html", title="Manage Users", users=users, q=qtxt)
 
 @app.post("/admin/users/<int:user_id>/update")
 @login_required
@@ -502,6 +519,94 @@ def calendar_data():
             "end": (r.end_date + timedelta(days=1)).isoformat()  # exclusive end for FullCalendar
         })
     return jsonify(events)
+
+# ---------- Exports (admin only) ----------
+@app.get("/admin/export/requests.csv")
+@login_required
+def export_requests_csv():
+    if current_user.role != Role.admin:
+        abort(403)
+    rows = _filtered_requests_for(True).all()
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["ID","Username","Kind","Mode","Hours","Status","Start","End","Created","Decided"])
+    for r in rows:
+        writer.writerow([
+            r.id, r.user.username, r.kind, r.mode, f"{r.hours:.2f}", r.status,
+            r.start_date.isoformat(), r.end_date.isoformat(),
+            r.created_at.isoformat() if r.created_at else "",
+            r.decided_at.isoformat() if r.decided_at else ""
+        ])
+    resp = make_response(output.getvalue())
+    resp.headers["Content-Type"] = "text/csv"
+    resp.headers["Content-Disposition"] = "attachment; filename=leave_requests.csv"
+    return resp
+
+@app.get("/admin/export/requests.xlsx")
+@login_required
+def export_requests_xlsx():
+    if current_user.role != Role.admin:
+        abort(403)
+    rows = _filtered_requests_for(True).all()
+
+    buf = io.BytesIO()
+    wb = xlsxwriter.Workbook(buf, {"in_memory": True})
+    ws = wb.add_worksheet("Requests")
+
+    headers = ["ID","Username","Kind","Mode","Hours","Status","Start","End","Created","Decided"]
+    hdr_fmt = wb.add_format({"bold": True, "bg_color": "#F1F5F9", "border": 1})
+    cell_fmt = wb.add_format({"border": 1})
+    date_fmt = wb.add_format({"num_format": "yyyy-mm-dd", "border": 1})
+    dt_fmt = wb.add_format({"num_format": "yyyy-mm-dd hh:mm", "border": 1})
+
+    for c, h in enumerate(headers):
+        ws.write(0, c, h, hdr_fmt)
+
+    def to_excel_date(d):
+        # xlsxwriter uses Python datetime/date directly if you use write_datetime
+        return d
+
+    rix = 1
+    for r in rows:
+        ws.write(rix, 0, r.id, cell_fmt)
+        ws.write(rix, 1, r.user.username, cell_fmt)
+        ws.write(rix, 2, r.kind, cell_fmt)
+        ws.write(rix, 3, r.mode, cell_fmt)
+        ws.write_number(rix, 4, float(r.hours or 0.0), cell_fmt)
+        ws.write(rix, 5, r.status, cell_fmt)
+
+        ws.write_datetime(rix, 6, datetime.combine(r.start_date, datetime.min.time()), date_fmt)
+        ws.write_datetime(rix, 7, datetime.combine(r.end_date, datetime.min.time()), date_fmt)
+        if r.created_at:
+            ws.write_datetime(rix, 8, r.created_at, dt_fmt)
+        else:
+            ws.write(rix, 8, "", cell_fmt)
+        if r.decided_at:
+            ws.write_datetime(rix, 9, r.decided_at, dt_fmt)
+        else:
+            ws.write(rix, 9, "", cell_fmt)
+
+        rix += 1
+
+    # autosize columns
+    widths = [len(h) for h in headers]
+    for row in rows:
+        widths[1] = max(widths[1], len(row.user.username or ""))
+        widths[2] = max(widths[2], len(row.kind or ""))
+        widths[3] = max(widths[3], len(row.mode or ""))
+        widths[5] = max(widths[5], len(row.status or ""))
+
+    for c, w in enumerate(widths):
+        ws.set_column(c, c, min(max(w + 2, 10), 32))
+
+    wb.close()
+    buf.seek(0)
+    return send_file(
+        buf,
+        as_attachment=True,
+        download_name="leave_requests.xlsx",
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
 
 # ---------- Errors ----------
 @app.errorhandler(404)
