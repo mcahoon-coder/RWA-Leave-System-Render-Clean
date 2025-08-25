@@ -4,3 +4,4 @@ Flask-Login==0.6.3
 SQLAlchemy==2.0.36
 Werkzeug==3.0.3
 gunicorn==21.2.0
+XlsxWriter==3.2.0
