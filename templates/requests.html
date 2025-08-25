@@ -1,33 +1,85 @@
 {% extends "base.html" %}
 {% block content %}
 <div class="card">
-  <h2>Requests</h2>
-  <table>
-    <tr><th>User</th><th>Kind</th><th>Dates</th><th>Mode</th><th>Hours</th><th>Status</th><th>Actions</th></tr>
-    {% for r in reqs %}
-      <tr>
-        <td>{{ r.user.username }}</td>
-        <td>{{ r.kind }}</td>
-        <td>{{ r.start_date }} → {{ r.end_date }}</td>
-        <td>{{ r.mode }}</td>
-        <td>{{ r.hours }}</td>
-        <td>{{ r.status }}</td>
-<td>
-  {% if is_admin %}
-    {% if r.status == 'Pending' %}
-      <form action="{{ url_for('approve', req_id=r.id) }}" method="post" style="display:inline"><button>Approve</button></form>
-      <form action="{{ url_for('disapprove', req_id=r.id) }}" method="post" style="display:inline"><button>Disapprove</button></form>
-    {% else %} — {% endif %}
-  {% else %}
-    {% if r.status in ['Pending','Approved'] %}
-      <form action="{{ url_for('cancel', req_id=r.id) }}" method="post" style="display:inline"><button>Cancel</button></form>
-    {% else %} — {% endif %}
-  {% endif %}
-</td>
-      </tr>
-    {% else %}
-      <tr><td colspan="7">No requests.</td></tr>
-    {% endfor %}
-  </table>
+  <div class="card-header">
+    <h2>Requests</h2>
+    {% if is_admin %}
+      {% set qs = request.query_string.decode() %}
+      <div class="actions">
+        <a class="btn" href="{{ url_for('export_requests_csv') }}{% if qs %}?{{ qs }}{% endif %}">Export CSV</a>
+        <a class="btn btn-primary" href="{{ url_for('export_requests_xlsx') }}{% if qs %}?{{ qs }}{% endif %}">Export Excel</a>
+      </div>
+    {% endif %}
+  </div>
+
+  <form method="get" class="filter-bar">
+    <label>
+      Status
+      <select name="status">
+        {% set st = status or 'all' %}
+        <option value="all" {{ 'selected' if st=='all' else '' }}>All</option>
+        <option value="pending" {{ 'selected' if st=='pending' else '' }}>Pending</option>
+        <option value="approved" {{ 'selected' if st=='approved' else '' }}>Approved</option>
+        <option value="disapproved" {{ 'selected' if st=='disapproved' else '' }}>Disapproved</option>
+        <option value="cancelled" {{ 'selected' if st=='cancelled' else '' }}>Cancelled</option>
+      </select>
+    </label>
+    <label>
+      Start date
+      <input type="date" name="start" value="{{ start or '' }}">
+    </label>
+    <label>
+      End date
+      <input type="date" name="end" value="{{ end or '' }}">
+    </label>
+    <button class="btn" type="submit">Filter</button>
+    <a class="btn btn-ghost" href="{{ url_for('my_requests') }}">Clear</a>
+  </form>
+
+  <div class="table-wrap">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>User</th><th>Kind</th><th>Dates</th><th>Mode</th><th>Hours</th><th>Status</th><th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in reqs %}
+          <tr>
+            <td>{{ r.user.username }}</td>
+            <td>{{ r.kind }}</td>
+            <td>{{ r.start_date }} → {{ r.end_date }}</td>
+            <td>{{ r.mode }}</td>
+            <td>{{ '%.2f'|format(r.hours) }}</td>
+            <td><span class="status {{ r.status|lower }}">{{ r.status }}</span></td>
+            <td>
+              {% if is_admin %}
+                {% if r.status == 'Pending' %}
+                  <form action="{{ url_for('approve', req_id=r.id) }}" method="post" class="inline">
+                    <button class="btn btn-success">Approve</button>
+                  </form>
+                  <form action="{{ url_for('disapprove', req_id=r.id) }}" method="post" class="inline">
+                    <button class="btn btn-danger">Disapprove</button>
+                  </form>
+                {% else %}
+                  <span class="muted">—</span>
+                {% endif %}
+              {% else %}
+                {% if r.status in ['Pending','Approved'] %}
+                  <form action="{{ url_for('cancel', req_id=r.id) }}" method="post" class="inline">
+                    <button class="btn btn-warning">Cancel</button>
+                  </form>
+                {% else %}
+                  <span class="muted">—</span>
+                {% endif %}
+              {% endif %}
+            </td>
+          </tr>
+        {% else %}
+          <tr><td colspan="7" class="muted">No requests found.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
 </div>
 {% endblock %}
