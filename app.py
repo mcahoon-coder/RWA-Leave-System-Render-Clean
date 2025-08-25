@@ -9,7 +9,9 @@ from flask_login import (
 )
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime, date, timedelta
-import os
+import os, smtplib, ssl
+from email.message import EmailMessage
+from sqlalchemy import text
 
 # ------------------------------
 # App & DB config
@@ -19,10 +21,8 @@ app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "ChangeThisSecret123!")
 
 # Prefer Render DATABASE_URL; default to SQLite
 db_url = os.environ.get("DATABASE_URL", "sqlite:///leave_system.db")
-# Render sometimes gives "postgres://" which SQLAlchemy dislikes
 if db_url.startswith("postgres://"):
     db_url = db_url.replace("postgres://", "postgresql://", 1)
-
 app.config["SQLALCHEMY_DATABASE_URI"] = db_url
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
@@ -30,6 +30,52 @@ db = SQLAlchemy(app)
 
 login_manager = LoginManager(app)
 login_manager.login_view = "login"
+
+# ------------------------------
+# Email settings (env vars)
+# ------------------------------
+MAIL_HOST = os.environ.get("MAIL_HOST", "")
+MAIL_PORT = int(os.environ.get("MAIL_PORT", "587"))
+MAIL_USER = os.environ.get("MAIL_USER", "")
+MAIL_PASSWORD = os.environ.get("MAIL_PASSWORD", "")
+MAIL_USE_TLS = os.environ.get("MAIL_USE_TLS", "true").lower() == "true"
+MAIL_FROM = os.environ.get("MAIL_FROM", MAIL_USER or "no-reply@example.com")
+ADMIN_FALLBACK = os.environ.get("ADMIN_EMAIL", "")
+
+def send_email(to_addrs, subject, body):
+    """Send a simple text email to one or many recipients. Safe no-op if not configured."""
+    if not to_addrs:
+        return
+    if isinstance(to_addrs, str):
+        to_addrs = [to_addrs]
+
+    # If SMTP not configured, skip quietly.
+    if not MAIL_HOST or not MAIL_FROM:
+        return
+
+    msg = EmailMessage()
+    msg["From"] = MAIL_FROM
+    msg["To"] = ", ".join([a for a in to_addrs if a])
+    msg["Subject"] = subject
+    msg.set_content(body)
+
+    if not msg["To"]:
+        return
+
+    if MAIL_USE_TLS:
+        context = ssl.create_default_context()
+        with smtplib.SMTP(MAIL_HOST, MAIL_PORT) as server:
+            server.ehlo()
+            server.starttls(context=context)
+            server.ehlo()
+            if MAIL_USER:
+                server.login(MAIL_USER, MAIL_PASSWORD)
+            server.send_message(msg)
+    else:
+        with smtplib.SMTP(MAIL_HOST, MAIL_PORT) as server:
+            if MAIL_USER:
+                server.login(MAIL_USER, MAIL_PASSWORD)
+            server.send_message(msg)
 
 # ------------------------------
 # Models & constants
@@ -54,6 +100,7 @@ class User(UserMixin, db.Model):
     password_hash = db.Column(db.String(255), nullable=False)
     role = db.Column(db.String(20), default=Role.user, nullable=False)
     hours_balance = db.Column(db.Float, default=160.0, nullable=False)
+    email = db.Column(db.String(255))  # NEW: for notifications
 
 class LeaveRequest(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -79,9 +126,7 @@ def load_user(user_id):
 # Helpers
 # ------------------------------
 WORKDAY_HOURS = float(os.environ.get("WORKDAY_HOURS", "8"))
-
-# Add holiday dates here if desired: HOLIDAYS = {date(2025, 1, 1), ...}
-HOLIDAYS: set[date] = set()
+HOLIDAYS: set[date] = set()  # add date(...) here if you want static holidays
 
 def is_workday(d: date) -> bool:
     return d.weekday() < 5 and d not in HOLIDAYS  # Mon–Fri & not holiday
@@ -97,15 +142,43 @@ def workdays_between(start: date, end: date) -> int:
         cur = cur + timedelta(days=1)
     return n
 
+def _column_exists(table_name: str, column_name: str) -> bool:
+    """Check column existence (SQLite + Postgres)."""
+    bind = db.engine
+    dialect = bind.dialect.name
+    if dialect == "sqlite":
+        res = db.session.execute(text(f"PRAGMA table_info({table_name})")).fetchall()
+        return any(row[1] == column_name for row in res)
+    else:
+        q = text("""
+            SELECT 1 FROM information_schema.columns
+            WHERE table_name = :t AND column_name = :c
+            LIMIT 1
+        """)
+        return db.session.execute(q, {"t": table_name, "c": column_name}).first() is not None
+
 def ensure_db():
     db.create_all()
+
+    # Add email column if missing (SQLite) – simple migration helper
+    try:
+        if not _column_exists("user", "email"):
+            if db.engine.dialect.name == "sqlite":
+                # SQLite ALTER TABLE ADD COLUMN
+                db.session.execute(text("ALTER TABLE user ADD COLUMN email VARCHAR(255)"))
+                db.session.commit()
+            # Postgres path handled via Alembic normally; we skip as most first-time users will be SQLite.
+    except Exception:
+        db.session.rollback()  # ignore if already added
+
     # Seed admin
     if not User.query.filter_by(username="mc-admin").first():
         db.session.add(User(
             username="mc-admin",
             password_hash=generate_password_hash("RWAadmin2"),
             role=Role.admin,
-            hours_balance=160.0
+            hours_balance=160.0,
+            email=ADMIN_FALLBACK or None
         ))
     # Seed example user
     if not User.query.filter_by(username="jdoe").first():
@@ -113,12 +186,19 @@ def ensure_db():
             username="jdoe",
             password_hash=generate_password_hash("password123"),
             role=Role.user,
-            hours_balance=120.0
+            hours_balance=120.0,
+            email=None
         ))
     db.session.commit()
 
 with app.app_context():
     ensure_db()
+
+def admin_emails():
+    emails = [u.email for u in User.query.filter_by(role=Role.admin).all() if u.email]
+    if not emails and ADMIN_FALLBACK:
+        emails = [ADMIN_FALLBACK]
+    return emails
 
 # ------------------------------
 # Routes
@@ -215,6 +295,17 @@ def new_request():
         )
         db.session.add(req)
         db.session.commit()
+
+        # Notify admins
+        subj = "New Leave Request Submitted"
+        body = (
+            f"User: {current_user.username}\n"
+            f"Kind: {kind}\nMode: {mode}\nHours: {hours}\n"
+            f"Dates: {sd} to {ed}\nReason: {reason or '(none)'}\n"
+            f"Status: {req.status}\n"
+        )
+        send_email(admin_emails(), subj, body)
+
         flash("Request submitted.", "success")
         return redirect(url_for("my_requests"))
 
@@ -251,10 +342,23 @@ def approve(req_id):
     if u.hours_balance < r.hours:
         flash("Insufficient balance.", "danger")
         return redirect(url_for("my_requests"))
+
     u.hours_balance -= r.hours
     r.status = RequestStatus.approved
     r.decided_at = datetime.utcnow()
     db.session.commit()
+
+    # Notify user + admins
+    subj = "Leave Request Approved"
+    body = (
+        f"Hello {u.username},\n\n"
+        f"Your leave request has been APPROVED.\n"
+        f"Kind: {r.kind}\nMode: {r.mode}\nHours: {r.hours}\n"
+        f"Dates: {r.start_date} to {r.end_date}\n\n"
+        f"Remaining balance: {u.hours_balance:.1f} hours\n"
+    )
+    send_email([u.email] + admin_emails(), subj, body)
+
     flash("Approved.", "success")
     return redirect(url_for("my_requests"))
 
@@ -268,9 +372,23 @@ def disapprove(req_id):
     if r.status != RequestStatus.pending:
         flash("Request not pending.", "warning")
         return redirect(url_for("my_requests"))
+
     r.status = RequestStatus.disapproved
     r.decided_at = datetime.utcnow()
     db.session.commit()
+
+    # Notify user + admins
+    u = User.query.get(r.user_id)
+    subj = "Leave Request Disapproved"
+    body = (
+        f"Hello {u.username},\n\n"
+        f"Your leave request has been DISAPPROVED.\n"
+        f"Kind: {r.kind}\nMode: {r.mode}\nHours: {r.hours}\n"
+        f"Dates: {r.start_date} to {r.end_date}\n\n"
+        f"If you have questions, please contact your administrator.\n"
+    )
+    send_email([u.email] + admin_emails(), subj, body)
+
     flash("Disapproved.", "info")
     return redirect(url_for("my_requests"))
 
@@ -281,12 +399,27 @@ def cancel(req_id):
     if r.user_id != current_user.id and current_user.role != Role.admin:
         flash("Not allowed.", "danger")
         return redirect(url_for("my_requests"))
+    u = User.query.get(r.user_id)
     if r.status == RequestStatus.approved:
-        u = User.query.get(r.user_id)
         u.hours_balance += r.hours
     r.status = RequestStatus.cancelled
     r.decided_at = datetime.utcnow()
     db.session.commit()
+
+    # Notify user + admins
+    subj = "Leave Request Cancelled"
+    body = (
+        f"User {u.username} cancelled a leave request.\n"
+        f"Kind: {r.kind}\nMode: {r.mode}\nHours: {r.hours}\n"
+        f"Dates: {r.start_date} to {r.end_date}\n"
+        f"Balance is now: {u.hours_balance:.1f} hours\n"
+    )
+    # If user cancelled their own request, notify admins; if admin cancelled, notify user too.
+    recipients = admin_emails()
+    if u.email:
+        recipients = [u.email] + recipients
+    send_email(recipients, subj, body)
+
     flash("Cancelled.", "secondary")
     return redirect(url_for("my_requests"))
 
@@ -303,6 +436,19 @@ def manage_users():
         query = query.filter(User.username.ilike(f"%{q}%"))
     users = query.order_by(User.username.asc()).all()
     return render_template("manage_users.html", title="Manage Users", users=users, q=q)
+
+@app.post("/admin/users/<int:user_id>/update")
+@login_required
+def admin_update_user(user_id):
+    if current_user.role != Role.admin:
+        flash("Admins only.", "warning")
+        return redirect(url_for("manage_users"))
+    u = User.query.get_or_404(user_id)
+    email = request.form.get("email", "").strip()
+    u.email = email or None
+    db.session.commit()
+    flash(f"Updated email for {u.username}.", "success")
+    return redirect(url_for("manage_users"))
 
 @app.post("/admin/users/<int:user_id>/reset")
 @login_required
@@ -353,7 +499,7 @@ def calendar_data():
         events.append({
             "title": f"{r.user.username} - {r.kind} ({r.hours:.1f}h)",
             "start": r.start_date.isoformat(),
-            "end": (r.end_date + timedelta(days=1)).isoformat()  # FullCalendar expects exclusive end
+            "end": (r.end_date + timedelta(days=1)).isoformat()  # exclusive end for FullCalendar
         })
     return jsonify(events)
 
