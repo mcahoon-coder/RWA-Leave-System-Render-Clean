@@ -18,7 +18,7 @@ html, body { height: 100%; }
 body {
   margin: 0;
   font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
-    background: #87a8ff;
+    background: #6a8dff;
   color: var(--text);
 }
 
