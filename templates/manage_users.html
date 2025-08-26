@@ -1,43 +1,78 @@
 {% extends "base.html" %}
+{% block title %}Manage Users{% endblock %}
+
 {% block content %}
 <div class="card">
-  <h2>Manage Users</h2>
-  <form method="get" style="margin-bottom:12px;">
-    <input name="q" placeholder="Search username" value="{{ q or '' }}">
-    <button type="submit">Search</button>
-  </form>
+  <div style="display:flex; align-items:center; justify-content:space-between; gap:12px;">
+    <h2 style="margin:0;">Manage Users</h2>
 
-  <table>
-    <tr>
-      <th>Username</th>
-      <th>Role</th>
-      <th>Email</th>
-      <th>Balance (h)</th>
-      <th>Update Email</th>
-      <th>Reset Password</th>
-    </tr>
-    {% for u in users %}
-      <tr>
-        <td>{{ u.username }}</td>
-        <td>{{ u.role }}</td>
-        <td>{{ u.email or '—' }}</td>
-        <td>{{ "%.2f"|format(u.hours_balance) }}</td>
-        <td>
-          <form method="post" action="{{ url_for('admin_update_user', user_id=u.id) }}">
-            <input type="email" name="email" placeholder="user@domain.com" value="{{ u.email or '' }}" required>
-            <button>Save</button>
-          </form>
-        </td>
-        <td>
-          <form method="post" action="{{ url_for('admin_reset_password', user_id=u.id) }}">
-            <input type="text" name="new_password" placeholder="New password" required>
-            <button>Update</button>
-          </form>
-        </td>
-      </tr>
-    {% else %}
-      <tr><td colspan="6">No users found.</td></tr>
-    {% endfor %}
-  </table>
+    <!-- Search by username (partial matches) -->
+    <form method="get" action="{{ url_for('manage_users') }}" style="display:flex; gap:8px; align-items:center;">
+      <input
+        type="text"
+        name="q"
+        placeholder="Search username…"
+        value="{{ q or '' }}"
+        style="min-width:220px;"
+      />
+      <button class="btn" type="submit">Search</button>
+      <a class="btn btn-ghost" href="{{ url_for('manage_users') }}">Clear</a>
+    </form>
+  </div>
+</div>
+
+<div class="card">
+  <div class="table-wrap">
+    <table class="table">
+      <thead>
+        <tr>
+          <th style="width:18%;">Username</th>
+          <th style="width:10%;">Role</th>
+          <th style="width:14%;">Hours Balance</th>
+          <th style="width:22%;">Email</th>
+          <th style="width:36%;">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for u in users %}
+        <tr>
+          <td><strong>{{ u.username }}</strong></td>
+          <td>{{ u.role }}</td>
+          <td>{{ '%.2f'|format(u.hours_balance or 0) }}</td>
+          <td>
+            <!-- Update email -->
+            <form class="inline" method="post" action="{{ url_for('admin_update_user', user_id=u.id) }}">
+              <input
+                type="email"
+                name="email"
+                value="{{ u.email or '' }}"
+                placeholder="user@example.com"
+                style="max-width:260px;"
+              />
+              <button class="btn" type="submit">Save Email</button>
+            </form>
+          </td>
+          <td>
+            <!-- Reset password -->
+            <form class="inline" method="post" action="{{ url_for('admin_reset_password', user_id=u.id) }}" style="display:flex; gap:8px; align-items:center;">
+              <input
+                type="password"
+                name="new_password"
+                placeholder="New password"
+                required
+                style="max-width:220px;"
+              />
+              <button class="btn btn-warning" type="submit" title="Set a new password for this user">Reset Password</button>
+            </form>
+          </td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="5" class="muted">No users found.</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
 </div>
 {% endblock %}
