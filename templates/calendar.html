@@ -1,37 +1,21 @@
 {% extends "base.html" %}
 {% block content %}
-<div class="card">
-  <h2>Team Calendar (Approved Leave)</h2>
-  <div id="calendar"></div>
-</div>
+<h1>Calendar</h1>
+<p>This view shows approved leave.</p>
 
-<!-- FullCalendar via CDN -->
-<link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.14/index.global.min.css" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.14/index.global.min.js"></script>
+<div id="cal" style="background:#fff;border:1px solid #cbd5e1;border-radius:10px;padding:8px;"></div>
 
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.css">
+<script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.js"></script>
 <script>
-  document.addEventListener('DOMContentLoaded', async function() {
-    const el = document.getElementById('calendar');
-    const resp = await fetch('{{ url_for("calendar_data") }}', {credentials: 'same-origin'});
-    const events = await resp.json();
-
-    const calendar = new FullCalendar.Calendar(el, {
-      initialView: 'dayGridMonth',
-      height: 'auto',
-      headerToolbar: {
-        left: 'prev,next today',
-        center: 'title',
-        right: 'dayGridMonth,timeGridWeek,listWeek'
-      },
-      events: events
-    });
-
-    calendar.render();
+document.addEventListener('DOMContentLoaded', function() {
+  var el = document.getElementById('cal');
+  var cal = new FullCalendar.Calendar(el, {
+    initialView: 'dayGridMonth',
+    height: 'auto',
+    events: '/calendar-data'
   });
+  cal.render();
+});
 </script>
-
-<style>
-  #calendar .fc-event { font-size: 0.9rem; }
-  #calendar { margin-top: 10px; }
-</style>
 {% endblock %}
