@@ -6,7 +6,7 @@
 
   <h1>Manage Users</h1>
 
-  <!-- Create User Card -->
+  <!-- Create User -->
   <div class="card" style="margin-bottom: 24px;">
     <h2 style="margin-top:0;">Create User</h2>
     <form action="{{ url_for('admin_create_user') }}" method="POST" class="stack-gap">
@@ -24,8 +24,9 @@
       <div class="grid-3">
         <div class="form-group">
           <label for="role">Role</label>
+          <!-- UI shows Faculty/Staff; backend maps 'faculty' -> Role.user -->
           <select id="role" name="role">
-            <option value="user">User</option>
+            <option value="faculty">Faculty/Staff</option>
             <option value="admin">Admin</option>
           </select>
         </div>
@@ -45,7 +46,7 @@
     </form>
   </div>
 
-  <!-- Search Card -->
+  <!-- Search -->
   <div class="card" style="margin-bottom: 24px;">
     <h2 style="margin-top:0;">Find Users</h2>
     <form method="GET" action="{{ url_for('manage_users') }}" class="stack-gap">
@@ -70,29 +71,44 @@
         <div class="users-header">
           <div>Username</div>
           <div>Role</div>
-          <div>Hours</div>
           <div>Email</div>
           <div style="text-align:right;">Actions</div>
         </div>
+
         {% for u in users %}
           <div class="users-row">
-            <div><strong>{{ u.username }}</strong></div>
-            <div>{{ u.role|capitalize }}</div>
-            <div>{{ "%.1f"|format(u.hours_balance or 0) }}</div>
+            <!-- Inline edit form -->
+            <form action="{{ url_for('admin_update_user', user_id=u.id) }}" method="POST" class="row-form">
+              <div>
+                <input type="text" name="username" value="{{ u.username }}" required>
+              </div>
 
-            <div>
-              <form action="{{ url_for('admin_update_user', user_id=u.id) }}" method="POST" class="inline-form">
+              <div>
+                <select name="role">
+                  <option value="faculty" {% if u.role != 'admin' %}selected{% endif %}>Faculty/Staff</option>
+                  <option value="admin" {% if u.role == 'admin' %}selected{% endif %}>Admin</option>
+                </select>
+              </div>
+
+              <div>
                 <input type="email" name="email" value="{{ u.email or '' }}" placeholder="name@domain.com">
-                <button type="submit" class="btn-small">Save Email</button>
-              </form>
-            </div>
+              </div>
 
-            <div style="text-align:right;">
-              <form action="{{ url_for('admin_reset_password', user_id=u.id) }}" method="POST" class="inline-form">
-                <input type="text" name="new_password" placeholder="New password">
-                <button type="submit" class="btn-small btn-warning">Reset Password</button>
-              </form>
-            </div>
+              <div class="row-actions">
+                <button type="submit" class="btn-small">Save</button>
+                <!-- Reset password is separate to keep intent clear -->
+                <form action="{{ url_for('admin_reset_password', user_id=u.id) }}" method="POST" class="inline-form">
+                  <input type="text" name="new_password" placeholder="New password">
+                  <button type="submit" class="btn-small btn-warning">Reset</button>
+                </form>
+
+                <!-- Delete with confirm -->
+                <form action="{{ url_for('admin_delete_user', user_id=u.id) }}" method="POST" class="inline-form"
+                      onsubmit="return confirm('Delete user {{ u.username }}? This cannot be undone.');">
+                  <button type="submit" class="btn-small btn-danger">Delete</button>
+                </form>
+              </div>
+            </form>
           </div>
         {% endfor %}
       </div>
@@ -104,8 +120,6 @@
 </div>
 
 <style>
-  /* Light, scoped helpers to ensure spacing even if style.css is minimal */
-
   .stack-gap > * + * { margin-top: 12px; }
 
   .grid-2, .grid-3 {
@@ -136,11 +150,11 @@
 
   .users-table {
     display: grid;
-    gap: 8px;
+    gap: 10px;
   }
   .users-header, .users-row {
     display: grid;
-    grid-template-columns: 1.2fr 0.7fr 0.6fr 1.6fr 1.2fr;
+    grid-template-columns: 1.2fr 0.8fr 1.6fr 1.4fr;
     gap: 12px;
     align-items: center;
   }
@@ -156,15 +170,24 @@
     background: #ffffffcc;
   }
 
-  .inline-form { display: inline-flex; gap: 8px; align-items: center; }
-  .inline-form input {
-    padding: 8px 10px;
-    border: 1px solid #cbd5e1;
-    border-radius: 8px;
-    min-width: 220px;
+  .row-form {
+    display: contents; /* let inputs align with grid columns neatly */
   }
 
-  .btn-primary, .btn-secondary, .btn-warning, .btn-small, .btn-link {
+  .row-actions {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+    align-items: center;
+  }
+
+  .inline-form {
+    display: inline-flex;
+    gap: 6px;
+    align-items: center;
+  }
+
+  .btn-primary, .btn-secondary, .btn-warning, .btn-danger, .btn-small, .btn-link {
     border: none;
     border-radius: 10px;
     padding: 10px 14px;
@@ -174,11 +197,8 @@
   .btn-primary { background:#2563eb; color:#fff; }
   .btn-secondary { background:#0ea5e9; color:#fff; }
   .btn-warning { background:#f59e0b; color:#1f2937; }
-  .btn-small { padding: 6px 10px; background:#334155; color:#fff; }
-  .btn-link { background: transparent; color:#2563eb; padding: 0 6px; }
-
-  /* Ensure card spacing looks nice even without extra CSS */
-  .card h2 { margin-bottom: 12px; }
-  .card { padding: 16px; }
+  .btn-danger  { background:#dc2626; color:#fff; }
+  .btn-small   { padding: 6px 10px; background:#334155; color:#fff; }
+  .btn-link    { background: transparent; color:#2563eb; padding: 0 6px; }
 </style>
 {% endblock %}
