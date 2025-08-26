@@ -1,43 +1,184 @@
 {% extends "base.html" %}
+{% block title %}Manage Users{% endblock %}
+
 {% block content %}
-<h1>Manage Users</h1>
+<div class="content-wrapper">
 
-<form method="get" action="/admin/users" style="margin-bottom:12px;">
-  <input type="text" name="q" value="{{ q }}" placeholder="Search username…">
-  <button class="btn" type="submit">Search</button>
-</form>
+  <h1>Manage Users</h1>
 
-{% if users %}
-  <table>
-    <thead>
-      <tr>
-        <th>Username</th><th>Role</th><th>Email</th><th>Hours</th><th>Update Email</th><th>Reset Password</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for u in users %}
-      <tr>
-        <td>{{ u.username }}</td>
-        <td>{{ u.role }}</td>
-        <td>{{ u.email or '—' }}</td>
-        <td>{{ "%.1f"|format(u.hours_balance) }}</td>
-        <td>
-          <form method="post" action="/admin/users/{{ u.id }}/update">
-            <input type="email" name="email" placeholder="new email" value="{{ u.email or '' }}">
-            <button class="btn" type="submit">Save</button>
-          </form>
-        </td>
-        <td>
-          <form method="post" action="/admin/users/{{ u.id }}/reset">
-            <input type="text" name="new_password" placeholder="new password">
-            <button class="btn danger" type="submit">Reset</button>
-          </form>
-        </td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-{% else %}
-  <p>No users found.</p>
-{% endif %}
+  <!-- Create User Card -->
+  <div class="card" style="margin-bottom: 24px;">
+    <h2 style="margin-top:0;">Create User</h2>
+    <form action="{{ url_for('admin_create_user') }}" method="POST" class="stack-gap">
+      <div class="grid-2">
+        <div class="form-group">
+          <label for="username">Username<span style="color:#b91c1c;"> *</span></label>
+          <input type="text" id="username" name="username" required placeholder="e.g. jsmith">
+        </div>
+        <div class="form-group">
+          <label for="password">Password<span style="color:#b91c1c;"> *</span></label>
+          <input type="password" id="password" name="password" required placeholder="Temporary password">
+        </div>
+      </div>
+
+      <div class="grid-3">
+        <div class="form-group">
+          <label for="role">Role</label>
+          <select id="role" name="role">
+            <option value="user">User</option>
+            <option value="admin">Admin</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="hours_balance">Starting Hours Balance</label>
+          <input type="number" step="0.1" min="0" id="hours_balance" name="hours_balance" value="160">
+        </div>
+        <div class="form-group">
+          <label for="email">Email (optional)</label>
+          <input type="email" id="email" name="email" placeholder="name@domain.com">
+        </div>
+      </div>
+
+      <div class="actions">
+        <button type="submit" class="btn-primary">Create User</button>
+      </div>
+    </form>
+  </div>
+
+  <!-- Search Card -->
+  <div class="card" style="margin-bottom: 24px;">
+    <h2 style="margin-top:0;">Find Users</h2>
+    <form method="GET" action="{{ url_for('manage_users') }}" class="stack-gap">
+      <div class="grid-3">
+        <div class="form-group">
+          <label for="q">Search by username</label>
+          <input type="text" id="q" name="q" value="{{ q or '' }}" placeholder="e.g. jane">
+        </div>
+      </div>
+      <div class="actions">
+        <button class="btn-secondary" type="submit">Search</button>
+        <a class="btn-link" href="{{ url_for('manage_users') }}">Clear</a>
+      </div>
+    </form>
+  </div>
+
+  <!-- Users List -->
+  <div class="card">
+    <h2 style="margin-top:0;">Users</h2>
+    {% if users %}
+      <div class="users-table">
+        <div class="users-header">
+          <div>Username</div>
+          <div>Role</div>
+          <div>Hours</div>
+          <div>Email</div>
+          <div style="text-align:right;">Actions</div>
+        </div>
+        {% for u in users %}
+          <div class="users-row">
+            <div><strong>{{ u.username }}</strong></div>
+            <div>{{ u.role|capitalize }}</div>
+            <div>{{ "%.1f"|format(u.hours_balance or 0) }}</div>
+
+            <div>
+              <form action="{{ url_for('admin_update_user', user_id=u.id) }}" method="POST" class="inline-form">
+                <input type="email" name="email" value="{{ u.email or '' }}" placeholder="name@domain.com">
+                <button type="submit" class="btn-small">Save Email</button>
+              </form>
+            </div>
+
+            <div style="text-align:right;">
+              <form action="{{ url_for('admin_reset_password', user_id=u.id) }}" method="POST" class="inline-form">
+                <input type="text" name="new_password" placeholder="New password">
+                <button type="submit" class="btn-small btn-warning">Reset Password</button>
+              </form>
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <p>No users found.</p>
+    {% endif %}
+  </div>
+
+</div>
+
+<style>
+  /* Light, scoped helpers to ensure spacing even if style.css is minimal */
+
+  .stack-gap > * + * { margin-top: 12px; }
+
+  .grid-2, .grid-3 {
+    display: grid;
+    gap: 16px;
+  }
+  .grid-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .grid-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+
+  .form-group label {
+    display: inline-block;
+    margin-bottom: 6px;
+    font-weight: 600;
+  }
+  .form-group input, .form-group select {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    background: #ffffff;
+  }
+
+  .actions {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+  }
+
+  .users-table {
+    display: grid;
+    gap: 8px;
+  }
+  .users-header, .users-row {
+    display: grid;
+    grid-template-columns: 1.2fr 0.7fr 0.6fr 1.6fr 1.2fr;
+    gap: 12px;
+    align-items: center;
+  }
+  .users-header {
+    font-weight: 700;
+    padding: 10px 12px;
+    border-bottom: 2px solid #e2e8f0;
+  }
+  .users-row {
+    padding: 10px 12px;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    background: #ffffffcc;
+  }
+
+  .inline-form { display: inline-flex; gap: 8px; align-items: center; }
+  .inline-form input {
+    padding: 8px 10px;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    min-width: 220px;
+  }
+
+  .btn-primary, .btn-secondary, .btn-warning, .btn-small, .btn-link {
+    border: none;
+    border-radius: 10px;
+    padding: 10px 14px;
+    cursor: pointer;
+    font-weight: 600;
+  }
+  .btn-primary { background:#2563eb; color:#fff; }
+  .btn-secondary { background:#0ea5e9; color:#fff; }
+  .btn-warning { background:#f59e0b; color:#1f2937; }
+  .btn-small { padding: 6px 10px; background:#334155; color:#fff; }
+  .btn-link { background: transparent; color:#2563eb; padding: 0 6px; }
+
+  /* Ensure card spacing looks nice even without extra CSS */
+  .card h2 { margin-bottom: 12px; }
+  .card { padding: 16px; }
+</style>
 {% endblock %}
