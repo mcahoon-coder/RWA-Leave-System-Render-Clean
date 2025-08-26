@@ -1,217 +1,123 @@
-/* --- Color-only refresh (no layout changes) -------------------- */
-/* Royal blue page background + pale-yellow → white content look   */
-
-:root{
-  --royal-blue: #4169e1;        /* royal blue page bg */
-  --royal-blue-dark: #2f54c7;   /* navbar/header bar */
-  --royal-blue-darker: #2747aa; /* hover/focus states */
-  --pale-yellow: #fff7b0;       /* very light yellow for panels */
-  --white: #ffffff;
-  --ink: #102a43;               /* readable body text */
-  --muted-ink: #334e68;         /* secondary text */
-  --line: #e6edf5;              /* subtle borders */
-  --success: #16a34a;
-  --danger: #dc2626;
-  --warning: #d97706;
-  --info: #2563eb;
-}
-
-/* Page background only (royal blue) */
-html, body{
-  height: 100%;
-}
-body{
+/* ========= GLOBAL BACKGROUND ========= */
+body {
   margin: 0;
-  color: var(--ink);
-  background: var(--royal-blue);
-  font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
-
-/* Keep your existing structure — this just paints the main area
-   in a pale-yellow → white vertical gradient if a common container exists.
-   It matches typical Flask templates that use .container, main, or .content. */
-main,
-.container,
-.content,
-.page-content,
-.wrapper,
-.content-wrapper{
-  background: linear-gradient(180deg, var(--pale-yellow) 0%, var(--white) 60%);
-  /* color-only change: no padding/radius added so layout stays the same */
-}
-
-/* Navbar/header: solid deeper royal blue */
-.navbar,
-.header,
-.topbar{
-  background: var(--royal-blue-dark);
-  color: var(--white);
-  border-bottom: 1px solid rgba(255,255,255,0.08);
-}
-.navbar a,
-.header a,
-.topbar a{
-  color: var(--white);
-  text-decoration: none;
-}
-.navbar a:hover,
-.header a:hover,
-.topbar a:hover{
-  color: #f1f5ff;
-}
-
-/* Cards/tables/forms keep their structure; just ensure clean contrast */
-.card{
-  background: var(--white);
-  border: 1px solid var(--line);
-}
-.card-header{
-  background: rgba(255,255,255,0.6);
-  border-bottom: 1px solid var(--line);
-}
-
-/* Tables */
-table{
-  border-collapse: collapse;
-  width: 100%;
-  background: var(--white);
-}
-th, td{
-  border: 1px solid var(--line);
-  padding: 0.5rem 0.75rem;
-  text-align: left;
-}
-th{
-  background: #f7fbff;
-  color: var(--muted-ink);
-}
-
-/* Forms */
-input, select, textarea{
-  background: var(--white);
-  border: 1px solid var(--line);
-  color: var(--ink);
-}
-input:focus, select:focus, textarea:focus{
-  outline: none;
-  border-color: var(--royal-blue-dark);
-  box-shadow: 0 0 0 3px rgba(65,105,225,0.15);
-}
-
-/* Buttons keep shape; just align colors with the palette */
-.btn-primary{
-  background: var(--royal-blue-dark);
-  border: 1px solid var(--royal-blue-darker);
-  color: var(--white);
-}
-.btn-primary:hover{
-  background: var(--royal-blue-darker);
-  border-color: var(--royal-blue-darker);
-  color: var(--white);
-}
-
-.btn-success{ background: var(--success); color: var(--white); border: 1px solid #12893d; }
-.btn-success:hover{ background: #12893d; }
-
-.btn-danger{ background: var(--danger); color: var(--white); border: 1px solid #b91c1c; }
-.btn-danger:hover{ background: #b91c1c; }
-
-.btn-warning{ background: var(--warning); color: #111827; border: 1px solid #b45309; }
-.btn-warning:hover{ background: #b45309
-/* ===== LAYOUT RESTORE (add at end of file) ===================== */
-
-/* 1) Top navigation links in a row */
-.navbar nav ul,
-.header nav ul,
-.topbar nav ul,
-.navbar ul,
-.header ul,
-.topbar ul {
+  font-family: Arial, sans-serif;
+  min-height: 100vh;
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.75rem;
-  align-items: center;
+  flex-direction: column;
+
+  /* Main page background: Royal blue → white */
+  background: linear-gradient(to top, #6a8dff, #ffffff);
+}
+
+/* ========= NAVIGATION BAR ========= */
+nav {
+  background: #003399; /* solid royal/navy bar */
+  padding: 0.75rem 1rem;
+}
+
+nav ul {
+  display: flex;
   list-style: none;
   margin: 0;
   padding: 0;
+  gap: 1rem;
 }
-.navbar li,
-.header li,
-.topbar li {
+
+nav li {
   margin: 0;
 }
-.navbar a,
-.header a,
-.topbar a {
-  display: inline-block;
+
+nav a {
+  color: white;
+  text-decoration: none;
+  font-weight: bold;
   padding: 0.4rem 0.6rem;
   border-radius: 4px;
 }
 
-/* 2) Main content width and centering (keeps things from spanning edge-to-edge) */
-.content-wrapper,
-.container,
-main {
-  max-width: 1100px;
-  margin: 1rem auto;
-  box-sizing: border-box;
+nav a:hover {
+  background: rgba(255, 255, 255, 0.2);
 }
 
-/* 3) Card grids (dashboard blocks, quick stats, etc.) */
-.cards,
-.card-grid,
-.grid,
-.dashboard-cards {
+/* ========= MAIN CONTENT WRAPPER ========= */
+.content-wrapper {
+  flex: 1;
+  max-width: 1100px;
+  margin: 1rem auto;
+  padding: 1rem;
+  box-sizing: border-box;
+
+  /* Pale yellow → white gradient under all content */
+  background: linear-gradient(to bottom, #fff59d, #ffffff);
+  border-radius: 8px;
+}
+
+/* ========= DASHBOARD CARDS ========= */
+.cards {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
   gap: 1rem;
 }
 
-/* 4) Individual card look stays soft and consistent */
 .card {
+  background: white;
   border-radius: 8px;
   padding: 1rem;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.1);
 }
 
-/* 5) Action button rows (approve/deny groups) in a row, not stacked */
-.actions,
-.button-row,
-.btn-row,
-.form-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  align-items: center;
-}
-
-/* 6) Forms don’t stretch too wide; fields align nicely */
+/* ========= FORMS & BUTTONS ========= */
 form {
-  max-width: 800px;
+  max-width: 700px;
 }
+
 form .row {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 0.75rem 1rem;
 }
 
-/* 7) Tables: allow horizontal scroll on small screens without breaking layout */
+button, input[type=submit] {
+  background: #003399;
+  color: white;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+button:hover, input[type=submit]:hover {
+  background: #0055cc;
+}
+
+/* ========= TABLES ========= */
 .table-wrap {
   overflow-x: auto;
 }
-.table-wrap table {
-  min-width: 700px; /* keeps columns from squishing */
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+  background: white;
 }
 
-/* 8) Header/title spacing */
-.page-title, h1 {
-  margin: 0 0 0.75rem 0;
+th, td {
+  border: 1px solid #ddd;
+  padding: 0.5rem;
 }
 
-/* 9) Keep footer (if any) tidy */
+th {
+  background: #003399;
+  color: white;
+  text-align: left;
+}
+
+/* ========= FOOTER ========= */
 footer {
-  margin-top: 1.5rem;
   text-align: center;
-  opacity: 0.85;
+  padding: 0.75rem;
+  font-size: 0.9rem;
+  background: #003399;
+  color: white;
 }
