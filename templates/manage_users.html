@@ -1,83 +1,43 @@
 {% extends "base.html" %}
-{% block title %}Manage Users · RWA Leave System{% endblock %}
 {% block content %}
+<h1>Manage Users</h1>
 
-<!-- Create User -->
-<div class="card">
-  <h2 style="margin-top:0;">Create New User</h2>
+<form method="get" action="/admin/users" style="margin-bottom:12px;">
+  <input type="text" name="q" value="{{ q }}" placeholder="Search username…">
+  <button class="btn" type="submit">Search</button>
+</form>
 
-  <form method="post" action="{{ url_for('admin_create_user') }}" class="form-grid">
-    <div class="field">
-      <label for="username">Username *</label>
-      <input id="username" name="username" type="text" required placeholder="e.g. jdoe">
-    </div>
-
-    <div class="field">
-      <label for="email">Email</label>
-      <input id="email" name="email" type="email" placeholder="user@example.com">
-    </div>
-
-    <div class="field">
-      <label for="role">Role *</label>
-      <select id="role" name="role" required>
-        <option value="user">user</option>
-        <option value="admin">admin</option>
-      </select>
-    </div>
-
-    <div class="field">
-      <label for="hours_balance">Initial Hours Balance</label>
-      <input id="hours_balance" name="hours_balance" type="number" step="0.25" min="0" placeholder="e.g. 80">
-    </div>
-
-    <div class="field">
-      <label for="password">Password *</label>
-      <input id="password" name="password" type="password" required placeholder="Set a password">
-    </div>
-
-    <div class="actions">
-      <button class="btn" type="submit">Create User</button>
-    </div>
-  </form>
-</div>
-
-<!-- Search & List -->
-<div class="card">
-  <div class="row between center" style="margin-bottom: 12px;">
-    <h2 style="margin: 0;">All Users</h2>
-    <form method="get" action="{{ url_for('manage_users') }}" class="row" style="gap:8px;">
-      <input type="text" name="q" placeholder="Search username…" value="{{ q or '' }}">
-      <button class="btn" type="submit">Search</button>
-      <a class="btn btn-ghost" href="{{ url_for('manage_users') }}">Clear</a>
-    </form>
-  </div>
-
-  <div class="table-wrap">
-    <table class="table">
-      <thead>
-        <tr>
-          <th>Username</th>
-          <th>Role</th>
-          <th>Hours Balance</th>
-          <th>Email</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for u in users %}
-        <tr>
-          <td style="font-weight:600;">{{ u.username }}</td>
-          <td>{{ u.role }}</td>
-          <td>{{ '%.2f'|format(u.hours_balance or 0) }}</td>
-          <td>{{ u.email or '—' }}</td>
-        </tr>
-        {% else %}
-        <tr>
-          <td colspan="4" class="muted">No users found.</td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
-</div>
-
+{% if users %}
+  <table>
+    <thead>
+      <tr>
+        <th>Username</th><th>Role</th><th>Email</th><th>Hours</th><th>Update Email</th><th>Reset Password</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for u in users %}
+      <tr>
+        <td>{{ u.username }}</td>
+        <td>{{ u.role }}</td>
+        <td>{{ u.email or '—' }}</td>
+        <td>{{ "%.1f"|format(u.hours_balance) }}</td>
+        <td>
+          <form method="post" action="/admin/users/{{ u.id }}/update">
+            <input type="email" name="email" placeholder="new email" value="{{ u.email or '' }}">
+            <button class="btn" type="submit">Save</button>
+          </form>
+        </td>
+        <td>
+          <form method="post" action="/admin/users/{{ u.id }}/reset">
+            <input type="text" name="new_password" placeholder="new password">
+            <button class="btn danger" type="submit">Reset</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+{% else %}
+  <p>No users found.</p>
+{% endif %}
 {% endblock %}
