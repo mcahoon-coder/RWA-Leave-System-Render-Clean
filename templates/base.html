@@ -2,181 +2,49 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>{{ title or "RWA Leave System" }}</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <link href="{{ url_for('static', filename='style.css') }}" rel="stylesheet">
-  <style>
-    /* Page gradient (light royal blue -> white, from bottom to top) */
-    body {
-      margin: 0;
-      min-height: 100vh;
-      background: linear-gradient(to top, #6a8dff, #ffffff);
-      font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", sans-serif;
-      color: #0f172a;
-      display: flex;
-      flex-direction: column;
-    }
-
-    /* Header / nav */
-    header {
-      background: rgba(255,255,255,0.9);
-      border-bottom: 1px solid #e2e8f0;
-      backdrop-filter: blur(6px);
-    }
-    .nav {
-      max-width: 1100px;
-      margin: 0 auto;
-      padding: 12px 16px;
-      display: flex;
-      align-items: center;
-      gap: 16px;
-    }
-    .brand {
-      font-weight: 700;
-      letter-spacing: .2px;
-      margin-right: 8px;
-      white-space: nowrap;
-    }
-    .nav ul {
-      list-style: none;
-      margin: 0;
-      padding: 0;
-      display: flex;
-      gap: 14px;
-      flex-wrap: wrap;
-    }
-    .nav a {
-      text-decoration: none;
-      color: #0f172a;
-      padding: 8px 10px;
-      border-radius: 10px;
-    }
-    .nav a:hover {
-      background: #eef2ff; /* subtle hover */
-    }
-    .nav-right {
-      margin-left: auto;
-      display: flex;
-      gap: 10px;
-      align-items: center;
-      flex-wrap: wrap;
-    }
-
-    /* Content wrapper (pale yellow -> white, top to bottom) */
-    .content-wrapper {
-      max-width: 1100px;
-      width: 100%;
-      margin: 18px auto 24px auto;
-      padding: 20px;
-      background: linear-gradient(to bottom, #fff59d, #ffffff);
-      border: 1px solid rgba(15, 23, 42, 0.08);
-      border-radius: 16px;
-      box-shadow:
-        0 10px 24px rgba(15, 23, 42, 0.10),
-        0 2px 6px rgba(15, 23, 42, 0.06);
-    }
-
-    /* Flash messages */
-    .flash {
-      padding: 10px 12px;
-      border-radius: 10px;
-      margin-bottom: 12px;
-      border: 1px solid rgba(15,23,42,0.08);
-      background: #ffffff;
-    }
-    .flash.success { border-left: 4px solid #16a34a; }
-    .flash.warning { border-left: 4px solid #f59e0b; }
-    .flash.danger  { border-left: 4px solid #dc2626; }
-    .flash.info    { border-left: 4px solid #0ea5e9; }
-    .flash.secondary { border-left: 4px solid #64748b; }
-
-    /* Footer */
-    footer {
-      margin-top: auto;
-      padding: 16px;
-      text-align: center;
-      color: #334155;
-      font-size: 14px;
-    }
-
-    /* Make forms/tables look nice by default inside the wrapper */
-    .content-wrapper form input,
-    .content-wrapper form select,
-    .content-wrapper form textarea {
-      width: 100%;
-      max-width: 520px;
-      padding: 8px 10px;
-      border: 1px solid #cbd5e1;
-      border-radius: 8px;
-      margin: 6px 0 12px 0;
-    }
-    .btn {
-      display: inline-block;
-      padding: 8px 12px;
-      border-radius: 10px;
-      border: 1px solid rgba(15,23,42,0.12);
-      background: #ffffff;
-      text-decoration: none;
-      color: #0f172a;
-      cursor: pointer;
-    }
-    .btn:hover { background: #f8fafc; }
-    .btn.primary {
-      background: #1d4ed8;
-      color: #ffffff;
-      border-color: #1d4ed8;
-    }
-    .btn.primary:hover { background: #1e40af; }
-    .btn.danger {
-      background: #dc2626;
-      color: #ffffff;
-      border-color: #dc2626;
-    }
-    .btn.danger:hover { background: #b91c1c; }
-  </style>
+  <title>{{ title or "RWA Leave Management" }}</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
-  <header>
-    <nav class="nav">
-      <div class="brand">RWA Leave</div>
-      <ul>
-        <!-- Use direct paths to avoid url_for build errors -->
-        <li><a href="/dashboard">Dashboard</a></li>
-        <li><a href="/request/new">Request Leave</a></li>
-        <li><a href="/requests">My Requests</a></li>
-        <li><a href="/calendar">Calendar</a></li>
-        {% if current_user.is_authenticated and current_user.role == 'admin' %}
-          <li><a href="/admin/users">Manage Users</a></li>
-          <li><a href="/admin/export/requests.csv">Export CSV</a></li>
-          <li><a href="/admin/export/requests.xlsx">Export Excel</a></li>
+  <header class="site-header">
+    <div class="brand">RWA Leave Management</div>
+    <nav class="topnav">
+      {% if current_user.is_authenticated %}
+        <a href="{{ url_for('dashboard') }}">Dashboard</a>
+        <a href="{{ url_for('new_request') }}">Request Leave</a>
+        <a href="{{ url_for('my_requests') }}">My Requests</a>
+        <a href="{{ url_for('calendar') }}">Calendar</a>
+        {% if current_user.role == 'admin' %}
+          <a href="{{ url_for('manage_users') }}">Manage Users</a>
+          <a href="{{ url_for('export_requests_csv') }}">Export CSV</a>
+          <a href="{{ url_for('export_requests_xlsx') }}">Export Excel</a>
         {% endif %}
-      </ul>
-
-      <div class="nav-right">
-        {% if current_user.is_authenticated %}
-          <span>Hi, {{ current_user.username }}</span>
-          <a class="btn" href="/account/password">Change Password</a>
-          <a class="btn" href="/logout">Logout</a>
-        {% else %}
-          <a class="btn primary" href="/login">Login</a>
-        {% endif %}
-      </div>
+        <a href="{{ url_for('update_password') }}">Change Password</a>
+        <a href="{{ url_for('logout') }}">Logout</a>
+      {% else %}
+        <a href="{{ url_for('login') }}">Login</a>
+      {% endif %}
     </nav>
   </header>
 
   <main class="content-wrapper">
-    {% with messages = get_flashed_messages(with_categories=true) %}
-      {% if messages %}
-        {% for category, message in messages %}
-          <div class="flash {{ category }}">{{ message }}</div>
-        {% endfor %}
+    {% with msgs = get_flashed_messages(with_categories=true) %}
+      {% if msgs %}
+        <div class="flash-area">
+          {% for cat, msg in msgs %}
+            <div class="flash {{ cat }}">{{ msg }}</div>
+          {% endfor %}
+        </div>
       {% endif %}
     {% endwith %}
 
-    {% block content %}{% endblock %}
+    <div class="card">
+      {% block content %}{% endblock %}
+    </div>
   </main>
 
-  <footer>
+  <footer class="site-footer">
     &copy; {{ current_year }} RWA Leave Management System
   </footer>
 </body>
