@@ -480,6 +480,53 @@ def admin_reset_password(user_id):
     flash(f"Password updated for {u.username}.", "success")
     return redirect(url_for("manage_users"))
 
+@app.post("/admin/users/create")
+@login_required
+def admin_create_user():
+    if current_user.role != Role.admin:
+        flash("Admins only.", "warning")
+        return redirect(url_for("dashboard"))
+
+    username = (request.form.get("username") or "").strip()
+    password = (request.form.get("password") or "").strip()
+    role = (request.form.get("role") or Role.user).strip().lower()
+    email = (request.form.get("email") or "").strip() or None
+    hours_raw = (request.form.get("hours_balance") or "").strip()
+
+    # Basic validation
+    if not username or not password:
+        flash("Username and password are required.", "warning")
+        return redirect(url_for("manage_users"))
+
+    if role not in (Role.user, Role.admin):
+        role = Role.user
+
+    try:
+        hours_balance = float(hours_raw) if hours_raw else 160.0
+        if hours_balance < 0:
+            raise ValueError()
+    except Exception:
+        flash("Hours balance must be a non-negative number.", "warning")
+        return redirect(url_for("manage_users"))
+
+    # Uniqueness check
+    if User.query.filter(User.username.ilike(username)).first():
+        flash(f"Username '{username}' already exists.", "danger")
+        return redirect(url_for("manage_users"))
+
+    # Create user
+    u = User(
+        username=username,
+        password_hash=generate_password_hash(password),
+        role=role,
+        hours_balance=hours_balance,
+        email=email
+    )
+    db.session.add(u)
+    db.session.commit()
+
+    flash(f"User '{username}' created.", "success")
+    return redirect(url_for("manage_users"))
 # ---------- Self-service password change ----------
 @app.route("/account/password", methods=["GET", "POST"])
 @login_required
