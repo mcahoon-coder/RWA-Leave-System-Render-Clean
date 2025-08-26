@@ -114,7 +114,6 @@ class LeaveRequest(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     decided_at = db.Column(db.DateTime)
 
-    # Eager-load user to avoid DetachedInstanceError in templates
     user = db.relationship("User", backref="leave_requests", lazy="joined")
 
 @login_manager.user_loader
@@ -142,7 +141,6 @@ def workdays_between(start: date, end: date) -> int:
     return n
 
 def _column_exists(table_name: str, column_name: str) -> bool:
-    """Check column existence (SQLite + Postgres)."""
     bind = db.engine
     dialect = bind.dialect.name
     if dialect == "sqlite":
@@ -158,7 +156,6 @@ def _column_exists(table_name: str, column_name: str) -> bool:
 
 def ensure_db():
     db.create_all()
-    # Add email column if missing (SQLite) – simple migration helper
     try:
         if not _column_exists("user", "email"):
             if db.engine.dialect.name == "sqlite":
@@ -167,7 +164,6 @@ def ensure_db():
     except Exception:
         db.session.rollback()
 
-    # Seed accounts
     if not User.query.filter_by(username="mc-admin").first():
         db.session.add(User(
             username="mc-admin",
@@ -195,7 +191,6 @@ def admin_emails():
         emails = [ADMIN_FALLBACK]
     return emails
 
-# Shared filter logic for list + exports
 def _filtered_requests_for(current_user_is_admin: bool):
     status = request.args.get("status", "all").strip().lower()
     start_s = request.args.get("start", "").strip()
@@ -320,7 +315,6 @@ def new_request():
         db.session.add(req)
         db.session.commit()
 
-        # Notify admins
         subj = "New Leave Request Submitted"
         body = (
             f"User: {current_user.username}\n"
@@ -457,7 +451,6 @@ def manage_users():
 @app.post("/admin/users/create")
 @login_required
 def admin_create_user():
-    """Create a new user from the Create User form."""
     if current_user.role != Role.admin:
         flash("Admins only.", "warning")
         return redirect(url_for("manage_users"))
@@ -472,11 +465,9 @@ def admin_create_user():
         flash("Username and password are required.", "danger")
         return redirect(url_for("manage_users"))
 
-    # Map UI role to internal role
     role_map = {"admin": Role.admin, "faculty": Role.user, "user": Role.user}
     role = role_map.get(role_label, Role.user)
 
-    # Ensure unique username (case-insensitive)
     if User.query.filter(User.username.ilike(username)).first():
         flash(f"Username '{username}' already exists.", "danger")
         return redirect(url_for("manage_users"))
@@ -506,8 +497,7 @@ def admin_create_user():
 @login_required
 def admin_update_user(user_id):
     """
-    Updates username, role, and/or email for a user.
-    Also used by the inline edit form on the Manage Users page.
+    Updates username, role, email, and hours_balance for a user.
     """
     if current_user.role != Role.admin:
         flash("Admins only.", "warning")
@@ -518,9 +508,8 @@ def admin_update_user(user_id):
     new_username = (request.form.get("username") or u.username).strip()
     new_role_label = (request.form.get("role") or u.role).strip().lower()
     new_email = (request.form.get("email") or "").strip() or None
+    hb_raw = (request.form.get("hours_balance") or str(u.hours_balance)).strip()
 
-    # Map role label coming from UI to internal values
-    # UI sends: "admin" or "faculty" (Faculty/Staff)
     role_map = {"admin": Role.admin, "faculty": Role.user, "user": Role.user}
     new_role = role_map.get(new_role_label, Role.user)
 
@@ -538,10 +527,20 @@ def admin_update_user(user_id):
             flash("You cannot remove the last Admin.", "danger")
             return redirect(url_for("manage_users"))
 
+    # Validate hours balance
+    try:
+        new_hb = float(hb_raw)
+        if new_hb < 0:
+            raise ValueError()
+    except Exception:
+        flash("Hours Balance must be a non-negative number.", "danger")
+        return redirect(url_for("manage_users"))
+
     # Apply updates
     u.username = new_username
     u.role = new_role
     u.email = new_email
+    u.hours_balance = new_hb
     db.session.commit()
 
     flash(f"Updated user '{u.username}'.", "success")
@@ -566,29 +565,22 @@ def admin_reset_password(user_id):
 @app.post("/admin/users/<int:user_id>/delete")
 @login_required
 def admin_delete_user(user_id):
-    """
-    Deletes a user after confirmation in the UI.
-    Safety: cannot delete self; cannot delete the last admin.
-    """
     if current_user.role != Role.admin:
         flash("Admins only.", "warning")
         return redirect(url_for("manage_users"))
 
     u = User.query.get_or_404(user_id)
 
-    # Prevent deleting yourself
     if u.id == current_user.id:
         flash("You cannot delete your own account while logged in.", "danger")
         return redirect(url_for("manage_users"))
 
-    # Prevent removing last admin
     if u.role == Role.admin:
         admin_count = User.query.filter_by(role=Role.admin).count()
         if admin_count <= 1:
             flash("You cannot delete the last Admin.", "danger")
             return redirect(url_for("manage_users"))
 
-    # Delete their leave requests first to avoid FK issues
     LeaveRequest.query.filter_by(user_id=u.id).delete()
     db.session.delete(u)
     db.session.commit()
@@ -629,7 +621,7 @@ def calendar_data():
         events.append({
             "title": f"{r.user.username} - {r.kind} ({r.hours:.1f}h)",
             "start": r.start_date.isoformat(),
-            "end": (r.end_date + timedelta(days=1)).isoformat()  # exclusive end for FullCalendar
+            "end": (r.end_date + timedelta(days=1)).isoformat()
         })
     return jsonify(events)
 
@@ -697,7 +689,6 @@ def export_requests_xlsx():
 
         rix += 1
 
-    # autosize columns
     widths = [len(h) for h in headers]
     for row in rows:
         widths[1] = max(widths[1], len(row.user.username or ""))
@@ -729,6 +720,5 @@ def internal_error(e):
     except Exception:
         return "Internal Server Error", 500
 
-# Dev server entry (ignored by gunicorn)
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
