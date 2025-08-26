@@ -1,21 +1,29 @@
 {% extends "base.html" %}
 {% block content %}
 <div class="card">
-  <h2>Dashboard</h2>
-  <p><b>Hours balance:</b> {{ "%.2f"|format(me.hours_balance) }}h</p>
-  <h3>Recent requests</h3>
+  <h2>Welcome, {{ current_user.username }}!</h2>
+  <p>Your current leave balance: <strong>{{ current_user.hours_balance }}</strong> hours</p>
+</div>
+
+<div class="card">
+  <h3>Your Leave Requests</h3>
   <table>
-    <tr><th>Dates</th><th>Mode</th><th>Hours</th><th>Status</th></tr>
-    {% for r in recent %}
+    <thead>
       <tr>
-        <td>{{ r.start_date }} → {{ r.end_date }}</td>
-        <td>{{ r.mode }}</td>
-        <td>{{ r.hours }}</td>
-        <td>{{ r.status }}</td>
+        <th>Date</th>
+        <th>Hours</th>
+        <th>Status</th>
       </tr>
-    {% else %}
-      <tr><td colspan="4">No requests yet.</td></tr>
-    {% endfor %}
+    </thead>
+    <tbody>
+      {% for req in leave_requests %}
+      <tr>
+        <td>{{ req.date }}</td>
+        <td>{{ req.hours }}</td>
+        <td>{{ req.status }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
   </table>
 </div>
 {% endblock %}
