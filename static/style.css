@@ -132,3 +132,29 @@ select, textarea {
   border-radius: 10px; padding: 10px;
 }
 form .btn { margin-top: 8px; }
+/* Content wrapper to hold all main page content */
+.content-wrapper {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 20px;
+  background: linear-gradient(to bottom, #4169e1 0%, #fff 100%); /* light royal blue → white */
+  border-radius: 12px;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+}
+
+/* Card styling inside wrapper */
+.card {
+  background: #fff; /* keeps cards white */
+  border-radius: 10px;
+  padding: 20px;
+  margin-bottom: 20px;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+}
+
+/* Headings and text inside wrapper */
+.content-wrapper h1,
+.content-wrapper h2,
+.content-wrapper h3,
+.content-wrapper p {
+  color: #333; /* darker text over pale gradient */
+}
