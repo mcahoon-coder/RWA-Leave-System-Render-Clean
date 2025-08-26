@@ -1,85 +1,84 @@
-/* ==== GLOBAL ==== */
-body {
-  margin: 0;
-  font-family: Arial, Helvetica, sans-serif;
-  background-color: #f5f5f5;
+/* ------- Form & layout helpers ------- */
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 14px 16px;
+  align-items: end;
 }
 
-/* ==== NAVIGATION ==== */
-.nav {
-  background-color: royalblue;
-  color: white;
-  padding: 0.8rem 1.2rem;
+.field {
   display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.field label {
+  font-weight: 600;
+}
+
+.actions {
+  grid-column: 1 / -1;
+  margin-top: 4px;
+}
+
+/* Row helpers */
+.row {
+  display: flex;
+  gap: 10px;
+}
+
+.row.center {
   align-items: center;
+}
+
+.row.between {
   justify-content: space-between;
 }
 
-.nav .brand {
-  font-weight: bold;
-  font-size: 1.3rem;
-  color: white;
-  text-decoration: none;
+/* Buttons */
+.btn {
+  background: royalblue;
+  color: #fff;
+  border: 0;
+  padding: 10px 14px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 600;
 }
 
-.nav-links {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  gap: 1rem;
+.btn:hover { opacity: 0.95; }
+
+.btn-ghost {
+  background: transparent;
+  color: royalblue;
+  border: 2px solid royalblue;
 }
 
-.nav-links li a {
-  color: white;
-  text-decoration: none;
-  font-weight: 500;
-}
-
-.nav-links li a:hover {
-  text-decoration: underline;
-}
-
-/* ==== CONTENT WRAPPER ==== */
-.content-wrapper {
-  min-height: 100vh;
-  padding: 2rem;
-  background: linear-gradient(to bottom, royalblue 0%, #ffffff 100%);
-  display: flex;
-  justify-content: center;
-}
-
-/* ==== CONTAINER ==== */
-.container {
-  max-width: 1000px;
+/* Table spacing */
+.table {
   width: 100%;
-  background: linear-gradient(to bottom, #fff9d9 0%, #ffffff 100%); /* pale yellow → white */
-  border-radius: 8px;
-  box-shadow: 0 4px 8px rgba(0,0,0,0.1);
-  padding: 2rem;
+  border-collapse: separate;
+  border-spacing: 0 10px; /* <-- space between rows */
 }
 
-/* ==== FLASH MESSAGES ==== */
-.flash-stack {
-  margin-bottom: 1rem;
+.table thead th {
+  text-align: left;
+  padding: 10px 12px;
+  border-bottom: 2px solid #e6e6e6;
 }
 
-.flash {
-  padding: 0.8rem;
-  margin-bottom: 0.5rem;
-  border-radius: 4px;
-  font-weight: bold;
+.table tbody tr {
+  background: #fff;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.06);
 }
 
-.flash-success { background-color: #d4edda; color: #155724; }
-.flash-warning { background-color: #fff3cd; color: #856404; }
-.flash-danger  { background-color: #f8d7da; color: #721c24; }
+.table tbody td {
+  padding: 14px 12px;         /* <-- taller cells */
+  border-top: 1px solid #eee; /* soft top border */
+  border-bottom: 1px solid #eee;
+}
 
-/* ==== CARDS ==== */
-.card {
-  background: white;
-  border-radius: 8px;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-  padding: 1.5rem;
-  margin-bottom: 1.5rem;
+/* Make the whole manage users page breathe more */
+.card + .card {
+  margin-top: 18px;
 }
