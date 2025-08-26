@@ -120,3 +120,98 @@ input:focus, select:focus, textarea:focus{
 
 .btn-warning{ background: var(--warning); color: #111827; border: 1px solid #b45309; }
 .btn-warning:hover{ background: #b45309
+/* ===== LAYOUT RESTORE (add at end of file) ===================== */
+
+/* 1) Top navigation links in a row */
+.navbar nav ul,
+.header nav ul,
+.topbar nav ul,
+.navbar ul,
+.header ul,
+.topbar ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.navbar li,
+.header li,
+.topbar li {
+  margin: 0;
+}
+.navbar a,
+.header a,
+.topbar a {
+  display: inline-block;
+  padding: 0.4rem 0.6rem;
+  border-radius: 4px;
+}
+
+/* 2) Main content width and centering (keeps things from spanning edge-to-edge) */
+.content-wrapper,
+.container,
+main {
+  max-width: 1100px;
+  margin: 1rem auto;
+  box-sizing: border-box;
+}
+
+/* 3) Card grids (dashboard blocks, quick stats, etc.) */
+.cards,
+.card-grid,
+.grid,
+.dashboard-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 1rem;
+}
+
+/* 4) Individual card look stays soft and consistent */
+.card {
+  border-radius: 8px;
+  padding: 1rem;
+}
+
+/* 5) Action button rows (approve/deny groups) in a row, not stacked */
+.actions,
+.button-row,
+.btn-row,
+.form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+/* 6) Forms don’t stretch too wide; fields align nicely */
+form {
+  max-width: 800px;
+}
+form .row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0.75rem 1rem;
+}
+
+/* 7) Tables: allow horizontal scroll on small screens without breaking layout */
+.table-wrap {
+  overflow-x: auto;
+}
+.table-wrap table {
+  min-width: 700px; /* keeps columns from squishing */
+}
+
+/* 8) Header/title spacing */
+.page-title, h1 {
+  margin: 0 0 0.75rem 0;
+}
+
+/* 9) Keep footer (if any) tidy */
+footer {
+  margin-top: 1.5rem;
+  text-align: center;
+  opacity: 0.85;
+}
