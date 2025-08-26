@@ -1,204 +1,91 @@
 {% extends "base.html" %}
-{% block title %}Manage Users{% endblock %}
-
 {% block content %}
-<div class="content-wrapper">
+<h1>Manage Users</h1>
 
-  <h1>Manage Users</h1>
-
-  <!-- Create User -->
-  <div class="card" style="margin-bottom: 24px;">
-    <h2 style="margin-top:0;">Create User</h2>
-    <form action="{{ url_for('admin_create_user') }}" method="POST" class="stack-gap">
-      <div class="grid-2">
-        <div class="form-group">
-          <label for="username">Username<span style="color:#b91c1c;"> *</span></label>
-          <input type="text" id="username" name="username" required placeholder="e.g. jsmith">
-        </div>
-        <div class="form-group">
-          <label for="password">Password<span style="color:#b91c1c;"> *</span></label>
-          <input type="password" id="password" name="password" required placeholder="Temporary password">
-        </div>
-      </div>
-
-      <div class="grid-3">
-        <div class="form-group">
-          <label for="role">Role</label>
-          <!-- UI shows Faculty/Staff; backend maps 'faculty' -> Role.user -->
-          <select id="role" name="role">
-            <option value="faculty">Faculty/Staff</option>
-            <option value="admin">Admin</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label for="hours_balance">Starting Hours Balance</label>
-          <input type="number" step="0.1" min="0" id="hours_balance" name="hours_balance" value="160">
-        </div>
-        <div class="form-group">
-          <label for="email">Email (optional)</label>
-          <input type="email" id="email" name="email" placeholder="name@domain.com">
-        </div>
-      </div>
-
-      <div class="actions">
-        <button type="submit" class="btn-primary">Create User</button>
-      </div>
-    </form>
-  </div>
-
-  <!-- Search -->
-  <div class="card" style="margin-bottom: 24px;">
-    <h2 style="margin-top:0;">Find Users</h2>
-    <form method="GET" action="{{ url_for('manage_users') }}" class="stack-gap">
-      <div class="grid-3">
-        <div class="form-group">
-          <label for="q">Search by username</label>
-          <input type="text" id="q" name="q" value="{{ q or '' }}" placeholder="e.g. jane">
-        </div>
-      </div>
-      <div class="actions">
-        <button class="btn-secondary" type="submit">Search</button>
-        <a class="btn-link" href="{{ url_for('manage_users') }}">Clear</a>
-      </div>
-    </form>
-  </div>
-
-  <!-- Users List -->
-  <div class="card">
-    <h2 style="margin-top:0;">Users</h2>
-    {% if users %}
-      <div class="users-table">
-        <div class="users-header">
-          <div>Username</div>
-          <div>Role</div>
-          <div>Email</div>
-          <div style="text-align:right;">Actions</div>
-        </div>
-
-        {% for u in users %}
-          <div class="users-row">
-            <!-- Inline edit form -->
-            <form action="{{ url_for('admin_update_user', user_id=u.id) }}" method="POST" class="row-form">
-              <div>
-                <input type="text" name="username" value="{{ u.username }}" required>
-              </div>
-
-              <div>
-                <select name="role">
-                  <option value="faculty" {% if u.role != 'admin' %}selected{% endif %}>Faculty/Staff</option>
-                  <option value="admin" {% if u.role == 'admin' %}selected{% endif %}>Admin</option>
-                </select>
-              </div>
-
-              <div>
-                <input type="email" name="email" value="{{ u.email or '' }}" placeholder="name@domain.com">
-              </div>
-
-              <div class="row-actions">
-                <button type="submit" class="btn-small">Save</button>
-                <!-- Reset password is separate to keep intent clear -->
-                <form action="{{ url_for('admin_reset_password', user_id=u.id) }}" method="POST" class="inline-form">
-                  <input type="text" name="new_password" placeholder="New password">
-                  <button type="submit" class="btn-small btn-warning">Reset</button>
-                </form>
-
-                <!-- Delete with confirm -->
-                <form action="{{ url_for('admin_delete_user', user_id=u.id) }}" method="POST" class="inline-form"
-                      onsubmit="return confirm('Delete user {{ u.username }}? This cannot be undone.');">
-                  <button type="submit" class="btn-small btn-danger">Delete</button>
-                </form>
-              </div>
-            </form>
-          </div>
-        {% endfor %}
-      </div>
-    {% else %}
-      <p>No users found.</p>
-    {% endif %}
-  </div>
-
+<div class="card">
+  <h2>Create User</h2>
+  <form method="post" action="{{ url_for('admin_create_user') }}" class="grid-2">
+    <div>
+      <label>Username</label>
+      <input type="text" name="username" required>
+    </div>
+    <div>
+      <label>Password</label>
+      <input type="text" name="password" required>
+    </div>
+    <div>
+      <label>Role</label>
+      <select name="role">
+        <option value="faculty">Faculty/Staff</option>
+        <option value="admin">Admin</option>
+      </select>
+    </div>
+    <div>
+      <label>Email (optional)</label>
+      <input type="email" name="email" placeholder="name@example.com">
+    </div>
+    <div>
+      <label>Starting Hours Balance</label>
+      <input type="number" name="hours_balance" step="0.1" min="0" value="160">
+    </div>
+    <div class="row">
+      <button type="submit" class="btn primary">Create</button>
+    </div>
+  </form>
 </div>
 
-<style>
-  .stack-gap > * + * { margin-top: 12px; }
+<div class="card">
+  <h2>All Users</h2>
+  <form method="get" action="{{ url_for('manage_users') }}" class="row" style="gap:.5rem;">
+    <input type="text" name="q" value="{{ q or '' }}" placeholder="Search by username">
+    <button class="btn">Search</button>
+    {% if q %}<a class="btn" href="{{ url_for('manage_users') }}">Clear</a>{% endif %}
+  </form>
 
-  .grid-2, .grid-3 {
-    display: grid;
-    gap: 16px;
-  }
-  .grid-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .grid-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  <div class="table">
+    <div class="table-row table-header">
+      <div>Username</div>
+      <div>Role</div>
+      <div>Email</div>
+      <div>Hours Balance</div>
+      <div>Actions</div>
+    </div>
 
-  .form-group label {
-    display: inline-block;
-    margin-bottom: 6px;
-    font-weight: 600;
-  }
-  .form-group input, .form-group select {
-    width: 100%;
-    padding: 10px 12px;
-    border: 1px solid #cbd5e1;
-    border-radius: 8px;
-    background: #ffffff;
-  }
+    {% for u in users %}
+    <div class="table-row">
+      <form method="post" action="{{ url_for('admin_update_user', user_id=u.id) }}" class="row stretch">
+        <div>
+          <input type="text" name="username" value="{{ u.username }}" required>
+        </div>
+        <div>
+          <select name="role">
+            <option value="faculty" {% if u.role != 'admin' %}selected{% endif %}>Faculty/Staff</option>
+            <option value="admin" {% if u.role == 'admin' %}selected{% endif %}>Admin</option>
+          </select>
+        </div>
+        <div>
+          <input type="email" name="email" value="{{ u.email or '' }}" placeholder="name@example.com">
+        </div>
+        <div>
+          <input type="number" name="hours_balance" step="0.1" min="0" value="{{ '%.1f'|format(u.hours_balance or 0) }}">
+        </div>
+        <div class="row" style="gap:.4rem;">
+          <button class="btn small primary" type="submit">Save</button>
+        </div>
+      </form>
 
-  .actions {
-    display: flex;
-    gap: 12px;
-    align-items: center;
-  }
+      <form method="post" action="{{ url_for('admin_reset_password', user_id=u.id) }}" class="row" style="gap:.4rem; margin-top:.25rem;">
+        <input type="text" name="new_password" placeholder="New password">
+        <button class="btn small" type="submit">Reset PW</button>
+      </form>
 
-  .users-table {
-    display: grid;
-    gap: 10px;
-  }
-  .users-header, .users-row {
-    display: grid;
-    grid-template-columns: 1.2fr 0.8fr 1.6fr 1.4fr;
-    gap: 12px;
-    align-items: center;
-  }
-  .users-header {
-    font-weight: 700;
-    padding: 10px 12px;
-    border-bottom: 2px solid #e2e8f0;
-  }
-  .users-row {
-    padding: 10px 12px;
-    border: 1px solid #e2e8f0;
-    border-radius: 10px;
-    background: #ffffffcc;
-  }
-
-  .row-form {
-    display: contents; /* let inputs align with grid columns neatly */
-  }
-
-  .row-actions {
-    display: flex;
-    gap: 8px;
-    justify-content: flex-end;
-    align-items: center;
-  }
-
-  .inline-form {
-    display: inline-flex;
-    gap: 6px;
-    align-items: center;
-  }
-
-  .btn-primary, .btn-secondary, .btn-warning, .btn-danger, .btn-small, .btn-link {
-    border: none;
-    border-radius: 10px;
-    padding: 10px 14px;
-    cursor: pointer;
-    font-weight: 600;
-  }
-  .btn-primary { background:#2563eb; color:#fff; }
-  .btn-secondary { background:#0ea5e9; color:#fff; }
-  .btn-warning { background:#f59e0b; color:#1f2937; }
-  .btn-danger  { background:#dc2626; color:#fff; }
-  .btn-small   { padding: 6px 10px; background:#334155; color:#fff; }
-  .btn-link    { background: transparent; color:#2563eb; padding: 0 6px; }
-</style>
+      <form method="post" action="{{ url_for('admin_delete_user', user_id=u.id) }}"
+            onsubmit="return confirm('Delete {{ u.username }}? This cannot be undone.');"
+            class="row" style="gap:.4rem; margin-top:.25rem;">
+        <button class="btn small danger" type="submit">Delete</button>
+      </form>
+    </div>
+    {% endfor %}
+  </div>
+</div>
 {% endblock %}
