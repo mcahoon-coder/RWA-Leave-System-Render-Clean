@@ -12,7 +12,7 @@ from datetime import datetime, date, timedelta
 import os, smtplib, ssl, io, csv
 from email.message import EmailMessage
 from sqlalchemy import text
-import xlsxwriter  # for Excel export
+import xlsxwriter  # for Excel export (uses memory, safe on Render)
 
 # ------------------------------
 # App & DB config
@@ -32,15 +32,10 @@ db = SQLAlchemy(app)
 login_manager = LoginManager(app)
 login_manager.login_view = "login"
 
-# Footer year for templates
-@app.context_processor
-def inject_current_year():
-    return {"current_year": datetime.utcnow().year}
-
 # ------------------------------
 # Email settings (env vars)
 # ------------------------------
-MAIL_HOST = os.environ.get("MAIL_HOST", "")          # e.g. smtp.gmail.com
+MAIL_HOST = os.environ.get("MAIL_HOST", "")          # e.g. smtp.gmail.com or your org SMTP
 MAIL_PORT = int(os.environ.get("MAIL_PORT", "587"))
 MAIL_USER = os.environ.get("MAIL_USER", "")
 MAIL_PASSWORD = os.environ.get("MAIL_PASSWORD", "")
@@ -54,6 +49,7 @@ def send_email(to_addrs, subject, body):
         return
     if isinstance(to_addrs, str):
         to_addrs = [to_addrs]
+
     if not MAIL_HOST or not MAIL_FROM:
         return  # SMTP not configured
 
@@ -109,7 +105,7 @@ class LeaveRequest(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
     kind = db.Column(db.String(20), default="annual", nullable=False)   # 'annual' or 'sick'
-    mode = db.Column(db.String(10), default=RequestMode.hourly, nullable=False)
+    mode = db.Column(db.String(10), default=RequestMode.hourly, nullable=False)  # hourly/daily
     start_date = db.Column(db.Date, nullable=False)
     end_date = db.Column(db.Date, nullable=False)
     hours = db.Column(db.Float, nullable=False)
@@ -117,6 +113,8 @@ class LeaveRequest(db.Model):
     status = db.Column(db.String(20), default=RequestStatus.pending, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     decided_at = db.Column(db.DateTime)
+
+    # Eager-load user to avoid DetachedInstanceError in templates
     user = db.relationship("User", backref="leave_requests", lazy="joined")
 
 @login_manager.user_loader
@@ -127,13 +125,13 @@ def load_user(user_id):
 # Helpers
 # ------------------------------
 WORKDAY_HOURS = float(os.environ.get("WORKDAY_HOURS", "8"))
-HOLIDAYS: set[date] = set()
+HOLIDAYS: set[date] = set()  # add date(...) here if you want static holidays
 
 def is_workday(d: date) -> bool:
     return d.weekday() < 5 and d not in HOLIDAYS  # Mon–Fri & not holiday
 
 def workdays_between(start: date, end: date) -> int:
-    """Inclusive; counts only Mon–Fri not in HOLIDAYS."""
+    """Inclusive range, counts only Mon–Fri not in HOLIDAYS."""
     if end < start:
         start, end = end, start
     n, cur = 0, start
@@ -144,6 +142,7 @@ def workdays_between(start: date, end: date) -> int:
     return n
 
 def _column_exists(table_name: str, column_name: str) -> bool:
+    """Check column existence (SQLite + Postgres)."""
     bind = db.engine
     dialect = bind.dialect.name
     if dialect == "sqlite":
@@ -168,7 +167,7 @@ def ensure_db():
     except Exception:
         db.session.rollback()
 
-    # Seed accounts (idempotent)
+    # Seed accounts
     if not User.query.filter_by(username="mc-admin").first():
         db.session.add(User(
             username="mc-admin",
@@ -196,6 +195,7 @@ def admin_emails():
         emails = [ADMIN_FALLBACK]
     return emails
 
+# Shared filter logic for list + exports
 def _filtered_requests_for(current_user_is_admin: bool):
     status = request.args.get("status", "all").strip().lower()
     start_s = request.args.get("start", "").strip()
@@ -216,10 +216,12 @@ def _filtered_requests_for(current_user_is_admin: bool):
 
     sd = parse_date(start_s)
     ed = parse_date(end_s)
+
     if sd:
         q = q.filter(LeaveRequest.start_date >= sd)
     if ed:
         q = q.filter(LeaveRequest.end_date <= ed)
+
     return q.order_by(LeaveRequest.created_at.desc())
 
 # ------------------------------
@@ -336,7 +338,8 @@ def new_request():
 @app.get("/requests")
 @login_required
 def my_requests():
-    reqs = _filtered_requests_for(current_user.role == Role.admin).all()
+    q = _filtered_requests_for(current_user.role == Role.admin)
+    reqs = q.all()
     return render_template(
         "requests.html",
         title="Requests",
@@ -451,17 +454,97 @@ def manage_users():
     users = query.order_by(User.username.asc()).all()
     return render_template("manage_users.html", title="Manage Users", users=users, q=qtxt)
 
-@app.post("/admin/users/<int:user_id>/update")
+@app.post("/admin/users/create")
 @login_required
-def admin_update_user(user_id):
+def admin_create_user():
+    """Create a new user from the Create User form."""
     if current_user.role != Role.admin:
         flash("Admins only.", "warning")
         return redirect(url_for("manage_users"))
-    u = User.query.get_or_404(user_id)
-    email = request.form.get("email", "").strip()
-    u.email = email or None
+
+    username = (request.form.get("username") or "").strip()
+    password = (request.form.get("password") or "").strip()
+    role_label = (request.form.get("role") or "faculty").strip().lower()  # 'admin' or 'faculty'
+    email = (request.form.get("email") or "").strip() or None
+    hours_balance = request.form.get("hours_balance", "160").strip()
+
+    if not username or not password:
+        flash("Username and password are required.", "danger")
+        return redirect(url_for("manage_users"))
+
+    # Map UI role to internal role
+    role_map = {"admin": Role.admin, "faculty": Role.user, "user": Role.user}
+    role = role_map.get(role_label, Role.user)
+
+    # Ensure unique username (case-insensitive)
+    if User.query.filter(User.username.ilike(username)).first():
+        flash(f"Username '{username}' already exists.", "danger")
+        return redirect(url_for("manage_users"))
+
+    try:
+        hb = float(hours_balance)
+        if hb < 0:
+            raise ValueError()
+    except Exception:
+        flash("Starting Hours Balance must be a non-negative number.", "danger")
+        return redirect(url_for("manage_users"))
+
+    u = User(
+        username=username,
+        password_hash=generate_password_hash(password),
+        role=role,
+        hours_balance=hb,
+        email=email
+    )
+    db.session.add(u)
     db.session.commit()
-    flash(f"Updated email for {u.username}.", "success")
+
+    flash(f"User '{username}' created.", "success")
+    return redirect(url_for("manage_users"))
+
+@app.post("/admin/users/<int:user_id>/update")
+@login_required
+def admin_update_user(user_id):
+    """
+    Updates username, role, and/or email for a user.
+    Also used by the inline edit form on the Manage Users page.
+    """
+    if current_user.role != Role.admin:
+        flash("Admins only.", "warning")
+        return redirect(url_for("manage_users"))
+
+    u = User.query.get_or_404(user_id)
+
+    new_username = (request.form.get("username") or u.username).strip()
+    new_role_label = (request.form.get("role") or u.role).strip().lower()
+    new_email = (request.form.get("email") or "").strip() or None
+
+    # Map role label coming from UI to internal values
+    # UI sends: "admin" or "faculty" (Faculty/Staff)
+    role_map = {"admin": Role.admin, "faculty": Role.user, "user": Role.user}
+    new_role = role_map.get(new_role_label, Role.user)
+
+    # Username uniqueness check (case-insensitive)
+    if new_username.lower() != u.username.lower():
+        if User.query.filter(User.username.ilike(new_username)).first():
+            flash(f"Username '{new_username}' already exists.", "danger")
+            return redirect(url_for("manage_users"))
+
+    # Prevent removing last admin
+    is_demoting_admin = (u.role == Role.admin and new_role != Role.admin)
+    if is_demoting_admin:
+        admin_count = User.query.filter_by(role=Role.admin).count()
+        if admin_count <= 1:
+            flash("You cannot remove the last Admin.", "danger")
+            return redirect(url_for("manage_users"))
+
+    # Apply updates
+    u.username = new_username
+    u.role = new_role
+    u.email = new_email
+    db.session.commit()
+
+    flash(f"Updated user '{u.username}'.", "success")
     return redirect(url_for("manage_users"))
 
 @app.post("/admin/users/<int:user_id>/reset")
@@ -480,53 +563,39 @@ def admin_reset_password(user_id):
     flash(f"Password updated for {u.username}.", "success")
     return redirect(url_for("manage_users"))
 
-@app.post("/admin/users/create")
+@app.post("/admin/users/<int:user_id>/delete")
 @login_required
-def admin_create_user():
+def admin_delete_user(user_id):
+    """
+    Deletes a user after confirmation in the UI.
+    Safety: cannot delete self; cannot delete the last admin.
+    """
     if current_user.role != Role.admin:
         flash("Admins only.", "warning")
-        return redirect(url_for("dashboard"))
-
-    username = (request.form.get("username") or "").strip()
-    password = (request.form.get("password") or "").strip()
-    role = (request.form.get("role") or Role.user).strip().lower()
-    email = (request.form.get("email") or "").strip() or None
-    hours_raw = (request.form.get("hours_balance") or "").strip()
-
-    # Basic validation
-    if not username or not password:
-        flash("Username and password are required.", "warning")
         return redirect(url_for("manage_users"))
 
-    if role not in (Role.user, Role.admin):
-        role = Role.user
+    u = User.query.get_or_404(user_id)
 
-    try:
-        hours_balance = float(hours_raw) if hours_raw else 160.0
-        if hours_balance < 0:
-            raise ValueError()
-    except Exception:
-        flash("Hours balance must be a non-negative number.", "warning")
+    # Prevent deleting yourself
+    if u.id == current_user.id:
+        flash("You cannot delete your own account while logged in.", "danger")
         return redirect(url_for("manage_users"))
 
-    # Uniqueness check
-    if User.query.filter(User.username.ilike(username)).first():
-        flash(f"Username '{username}' already exists.", "danger")
-        return redirect(url_for("manage_users"))
+    # Prevent removing last admin
+    if u.role == Role.admin:
+        admin_count = User.query.filter_by(role=Role.admin).count()
+        if admin_count <= 1:
+            flash("You cannot delete the last Admin.", "danger")
+            return redirect(url_for("manage_users"))
 
-    # Create user
-    u = User(
-        username=username,
-        password_hash=generate_password_hash(password),
-        role=role,
-        hours_balance=hours_balance,
-        email=email
-    )
-    db.session.add(u)
+    # Delete their leave requests first to avoid FK issues
+    LeaveRequest.query.filter_by(user_id=u.id).delete()
+    db.session.delete(u)
     db.session.commit()
 
-    flash(f"User '{username}' created.", "success")
+    flash("User deleted.", "success")
     return redirect(url_for("manage_users"))
+
 # ---------- Self-service password change ----------
 @app.route("/account/password", methods=["GET", "POST"])
 @login_required
@@ -614,6 +683,7 @@ def export_requests_xlsx():
         ws.write(rix, 3, r.mode, cell_fmt)
         ws.write_number(rix, 4, float(r.hours or 0.0), cell_fmt)
         ws.write(rix, 5, r.status, cell_fmt)
+
         ws.write_datetime(rix, 6, datetime.combine(r.start_date, datetime.min.time()), date_fmt)
         ws.write_datetime(rix, 7, datetime.combine(r.end_date, datetime.min.time()), date_fmt)
         if r.created_at:
@@ -624,11 +694,19 @@ def export_requests_xlsx():
             ws.write_datetime(rix, 9, r.decided_at, dt_fmt)
         else:
             ws.write(rix, 9, "", cell_fmt)
+
         rix += 1
 
-    # autosize some columns
-    for c, w in enumerate([4,14,8,8,6,10,10,16,18]):
-        ws.set_column(c, c, w)
+    # autosize columns
+    widths = [len(h) for h in headers]
+    for row in rows:
+        widths[1] = max(widths[1], len(row.user.username or ""))
+        widths[2] = max(widths[2], len(row.kind or ""))
+        widths[3] = max(widths[3], len(row.mode or ""))
+        widths[5] = max(widths[5], len(row.status or ""))
+
+    for c, w in enumerate(widths):
+        ws.set_column(c, c, min(max(w + 2, 10), 32))
 
     wb.close()
     buf.seek(0)
