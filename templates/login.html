@@ -1,11 +1,21 @@
 {% extends "base.html" %}
+{% block title %}Login · RWA Leave System{% endblock %}
 {% block content %}
-<div class="card" style="max-width:480px;margin:40px auto;">
+<div class="card">
   <h2>Login</h2>
-  <form method="POST">
-    <label>Username</label><input name="username" required>
-    <label>Password</label><input type="password" name="password" required>
-    <button type="submit">Log In</button>
+
+  <form method="post" action="{{ url_for('login') }}" style="display:grid; gap:12px; max-width:420px;">
+    <label for="username">Username</label>
+    <input id="username" name="username" type="text" required placeholder="e.g. mc-admin" />
+
+    <label for="password">Password</label>
+    <input id="password" name="password" type="password" required placeholder="••••••••" />
+
+    <button type="submit" class="btn">Sign in</button>
   </form>
+
+  {% if error %}
+    <p style="color:#b00020; margin-top:12px;">{{ error }}</p>
+  {% endif %}
 </div>
 {% endblock %}
