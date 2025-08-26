@@ -1,34 +1,68 @@
 {% extends "base.html" %}
 {% block content %}
-<h1>New Leave Request</h1>
+<h1>My Requests{% if is_admin %} (All Users){% endif %}</h1>
 
-<form method="post" action="/request/new">
-  <label>Mode</label>
-  <select name="mode">
-    <option value="hourly">Hourly</option>
-    <option value="daily">Daily</option>
+<form method="get" action="/requests" style="margin-bottom:12px;">
+  <label>Status</label>
+  <select name="status">
+    <option value="all" {% if status=='all' %}selected{% endif %}>All</option>
+    <option value="Pending" {% if status=='Pending' %}selected{% endif %}>Pending</option>
+    <option value="Approved" {% if status=='Approved' %}selected{% endif %}>Approved</option>
+    <option value="Disapproved" {% if status=='Disapproved' %}selected{% endif %}>Disapproved</option>
+    <option value="Cancelled" {% if status=='Cancelled' %}selected{% endif %}>Cancelled</option>
   </select>
 
-  <label>Kind</label>
-  <select name="kind">
-    <option value="annual">Annual</option>
-    <option value="sick">Sick</option>
-  </select>
+  <label>Start</label>
+  <input type="date" name="start" value="{{ start }}">
 
-  <label>Start date</label>
-  <input type="date" name="start_date" required>
+  <label>End</label>
+  <input type="date" name="end" value="{{ end }}">
 
-  <label>End date</label>
-  <input type="date" name="end_date" required>
-
-  <label>Hours (if hourly)</label>
-  <input type="number" step="0.1" name="hours" placeholder="e.g. 2.5">
-
-  <label>Reason</label>
-  <textarea name="reason" rows="3" placeholder="Optional"></textarea>
-
-  <button class="btn primary" type="submit">Submit Request</button>
+  <button class="btn" type="submit">Filter</button>
 </form>
 
-<p style="margin-top:10px;color:#334155;">Workday hours configured: {{ workday }}h</p>
+{% if reqs %}
+  <table>
+    <thead>
+      <tr>
+        <th>ID</th>
+        {% if is_admin %}<th>User</th>{% endif %}
+        <th>Kind</th><th>Mode</th><th>Hours</th><th>Status</th><th>Start</th><th>End</th><th>Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in reqs %}
+      <tr>
+        <td>{{ r.id }}</td>
+        {% if is_admin %}<td>{{ r.user.username }}</td>{% endif %}
+        <td>{{ r.kind }}</td>
+        <td>{{ r.mode }}</td>
+        <td>{{ "%.1f"|format(r.hours) }}</td>
+        <td>{{ r.status }}</td>
+        <td>{{ r.start_date }}</td>
+        <td>{{ r.end_date }}</td>
+        <td>
+          {% if is_admin and r.status == 'Pending' %}
+            <form method="post" action="/requests/{{ r.id }}/approve" style="display:inline;">
+              <button class="btn primary" type="submit">Approve</button>
+            </form>
+            <form method="post" action="/requests/{{ r.id }}/disapprove" style="display:inline;">
+              <button class="btn danger" type="submit">Disapprove</button>
+            </form>
+          {% endif %}
+          {% if (current_user.is_authenticated and r.user_id == current_user.id) or is_admin %}
+            {% if r.status in ['Pending','Approved'] %}
+              <form method="post" action="/requests/{{ r.id }}/cancel" style="display:inline;">
+                <button class="btn" type="submit">Cancel</button>
+              </form>
+            {% endif %}
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+{% else %}
+  <p>No requests match your filters.</p>
+{% endif %}
 {% endblock %}
