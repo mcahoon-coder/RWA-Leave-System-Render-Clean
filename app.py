@@ -504,7 +504,7 @@ def update_password():
 # ---------- Calendar ----------
 @app.get("/calendar")
 @login_required
-def calendar_view():
+def calendar():
     return render_template("calendar.html", title="Calendar")
 
 @app.get("/calendar-data")
