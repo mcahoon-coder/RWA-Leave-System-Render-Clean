@@ -483,6 +483,47 @@ def admin_reset_password(user_id):
     flash(f"Password updated for {u.username}.", "success")
     return redirect(url_for("manage_users"))
 
+# NEW: Admin create user (username, email, role, starting hours, password)
+@app.post("/admin/users/create")
+@login_required
+def admin_create_user():
+    if current_user.role != Role.admin:
+        flash("Admins only.", "warning")
+        return redirect(url_for("manage_users"))
+
+    username = (request.form.get("username", "") or "").strip()
+    email = (request.form.get("email", "") or "").strip()
+    role = request.form.get("role", Role.user).strip().lower()
+    try:
+        hours_balance = float(request.form.get("hours_balance", "0") or 0)
+    except Exception:
+        hours_balance = 0.0
+    password = request.form.get("password", "")
+
+    if not username or not password:
+        flash("Username and password are required.", "warning")
+        return redirect(url_for("manage_users"))
+
+    if role not in (Role.user, Role.admin):
+        role = Role.user
+
+    if User.query.filter(User.username.ilike(username)).first():
+        flash("That username already exists.", "danger")
+        return redirect(url_for("manage_users"))
+
+    u = User(
+        username=username,
+        password_hash=generate_password_hash(password),
+        role=role,
+        hours_balance=hours_balance,
+        email=email or None
+    )
+    db.session.add(u)
+    db.session.commit()
+
+    flash(f"User '{username}' created.", "success")
+    return redirect(url_for("manage_users"))
+
 # ---------- Self-service password change ----------
 @app.route("/account/password", methods=["GET", "POST"])
 @login_required
@@ -561,10 +602,6 @@ def export_requests_xlsx():
 
     for c, h in enumerate(headers):
         ws.write(0, c, h, hdr_fmt)
-
-    def to_excel_date(d):
-        # xlsxwriter uses Python datetime/date directly if you use write_datetime
-        return d
 
     rix = 1
     for r in rows:
