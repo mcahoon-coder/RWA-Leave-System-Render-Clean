@@ -1,49 +1,51 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8">
-    <title>{{ title or "RWA Leave System" }}</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-  </head>
-  <body>
+<head>
+  <meta charset="utf-8">
+  <title>{{ title or "RWA Leave System" }}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body>
 
-    <!-- NAV -->
-    <nav class="nav">
-      <a class="brand" href="{{ url_for('dashboard') }}">RWA Leave</a>
-      <ul class="nav-links">
-        {% if current_user.is_authenticated %}
-          <li><a href="{{ url_for('dashboard') }}">Dashboard</a></li>
-          <li><a href="{{ url_for('new_request') }}">Request Leave</a></li>
-          <li><a href="{{ url_for('my_requests') }}">My Requests</a></li>
-          <li><a href="{{ url_for('calendar') }}">Calendar</a></li>
-          {% if current_user.role == 'admin' %}
-            <li><a href="{{ url_for('manage_users') }}">Manage Users</a></li>
-          {% endif %}
-          <li><a href="{{ url_for('logout') }}">Logout</a></li>
-        {% else %}
-          <li><a href="{{ url_for('login') }}">Login</a></li>
+  <!-- NAVIGATION BAR -->
+  <nav>
+    <ul>
+      {% if current_user.is_authenticated %}
+        <li><a href="{{ url_for('dashboard') }}">Dashboard</a></li>
+        <li><a href="{{ url_for('new_request') }}">Request Leave</a></li>
+        <li><a href="{{ url_for('my_requests') }}">My Requests</a></li>
+        <li><a href="{{ url_for('calendar') }}">Calendar</a></li>
+        {% if current_user.role == 'admin' %}
+          <li><a href="{{ url_for('manage_users') }}">Manage Users</a></li>
+          <li><a href="{{ url_for('export_requests_csv') }}">Export CSV</a></li>
+          <li><a href="{{ url_for('export_requests_xlsx') }}">Export Excel</a></li>
         {% endif %}
-      </ul>
-    </nav>
+        <li><a href="{{ url_for('update_password') }}">Change Password</a></li>
+        <li><a href="{{ url_for('logout') }}">Logout</a></li>
+      {% else %}
+        <li><a href="{{ url_for('login') }}">Login</a></li>
+      {% endif %}
+    </ul>
+  </nav>
 
-    <!-- CONTENT WRAPPER -->
-    <div class="content-wrapper">
-      <div class="container">
-        <!-- Flash messages -->
-        <div class="flash-stack">
-          {% with messages = get_flashed_messages(with_categories=true) %}
-            {% if messages %}
-              {% for category, message in messages %}
-                <div class="flash flash-{{ category }}">{{ message }}</div>
-              {% endfor %}
-            {% endif %}
-          {% endwith %}
-        </div>
+  <!-- MAIN CONTENT -->
+  <div class="content-wrapper">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for category, message in messages %}
+          <div class="flash flash-{{ category }}">{{ message }}</div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
 
-        {% block content %}{% endblock %}
-      </div>
-    </div>
+    {% block content %}{% endblock %}
+  </div>
 
-  </body>
+  <!-- FOOTER -->
+  <footer>
+    &copy; {{ datetime.utcnow().year }} RWA Leave Management System
+  </footer>
+
+</body>
 </html>
