@@ -1,84 +1,122 @@
-/* ------- Form & layout helpers ------- */
-.form-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 14px 16px;
-  align-items: end;
+/* --- Color-only refresh (no layout changes) -------------------- */
+/* Royal blue page background + pale-yellow → white content look   */
+
+:root{
+  --royal-blue: #4169e1;        /* royal blue page bg */
+  --royal-blue-dark: #2f54c7;   /* navbar/header bar */
+  --royal-blue-darker: #2747aa; /* hover/focus states */
+  --pale-yellow: #fff7b0;       /* very light yellow for panels */
+  --white: #ffffff;
+  --ink: #102a43;               /* readable body text */
+  --muted-ink: #334e68;         /* secondary text */
+  --line: #e6edf5;              /* subtle borders */
+  --success: #16a34a;
+  --danger: #dc2626;
+  --warning: #d97706;
+  --info: #2563eb;
 }
 
-.field {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
+/* Page background only (royal blue) */
+html, body{
+  height: 100%;
+}
+body{
+  margin: 0;
+  color: var(--ink);
+  background: var(--royal-blue);
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-.field label {
-  font-weight: 600;
+/* Keep your existing structure — this just paints the main area
+   in a pale-yellow → white vertical gradient if a common container exists.
+   It matches typical Flask templates that use .container, main, or .content. */
+main,
+.container,
+.content,
+.page-content,
+.wrapper,
+.content-wrapper{
+  background: linear-gradient(180deg, var(--pale-yellow) 0%, var(--white) 60%);
+  /* color-only change: no padding/radius added so layout stays the same */
 }
 
-.actions {
-  grid-column: 1 / -1;
-  margin-top: 4px;
+/* Navbar/header: solid deeper royal blue */
+.navbar,
+.header,
+.topbar{
+  background: var(--royal-blue-dark);
+  color: var(--white);
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+}
+.navbar a,
+.header a,
+.topbar a{
+  color: var(--white);
+  text-decoration: none;
+}
+.navbar a:hover,
+.header a:hover,
+.topbar a:hover{
+  color: #f1f5ff;
 }
 
-/* Row helpers */
-.row {
-  display: flex;
-  gap: 10px;
+/* Cards/tables/forms keep their structure; just ensure clean contrast */
+.card{
+  background: var(--white);
+  border: 1px solid var(--line);
+}
+.card-header{
+  background: rgba(255,255,255,0.6);
+  border-bottom: 1px solid var(--line);
 }
 
-.row.center {
-  align-items: center;
-}
-
-.row.between {
-  justify-content: space-between;
-}
-
-/* Buttons */
-.btn {
-  background: royalblue;
-  color: #fff;
-  border: 0;
-  padding: 10px 14px;
-  border-radius: 6px;
-  cursor: pointer;
-  font-weight: 600;
-}
-
-.btn:hover { opacity: 0.95; }
-
-.btn-ghost {
-  background: transparent;
-  color: royalblue;
-  border: 2px solid royalblue;
-}
-
-/* Table spacing */
-.table {
+/* Tables */
+table{
+  border-collapse: collapse;
   width: 100%;
-  border-collapse: separate;
-  border-spacing: 0 10px; /* <-- space between rows */
+  background: var(--white);
 }
-
-.table thead th {
+th, td{
+  border: 1px solid var(--line);
+  padding: 0.5rem 0.75rem;
   text-align: left;
-  padding: 10px 12px;
-  border-bottom: 2px solid #e6e6e6;
+}
+th{
+  background: #f7fbff;
+  color: var(--muted-ink);
 }
 
-.table tbody tr {
-  background: #fff;
-  box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+/* Forms */
+input, select, textarea{
+  background: var(--white);
+  border: 1px solid var(--line);
+  color: var(--ink);
+}
+input:focus, select:focus, textarea:focus{
+  outline: none;
+  border-color: var(--royal-blue-dark);
+  box-shadow: 0 0 0 3px rgba(65,105,225,0.15);
 }
 
-.table tbody td {
-  padding: 14px 12px;         /* <-- taller cells */
-  border-top: 1px solid #eee; /* soft top border */
-  border-bottom: 1px solid #eee;
+/* Buttons keep shape; just align colors with the palette */
+.btn-primary{
+  background: var(--royal-blue-dark);
+  border: 1px solid var(--royal-blue-darker);
+  color: var(--white);
+}
+.btn-primary:hover{
+  background: var(--royal-blue-darker);
+  border-color: var(--royal-blue-darker);
+  color: var(--white);
 }
 
-/* Make the whole manage users page breathe more */
-.card + .card {
-  margin-top: 18px;
-}
+.btn-success{ background: var(--success); color: var(--white); border: 1px solid #12893d; }
+.btn-success:hover{ background: #12893d; }
+
+.btn-danger{ background: var(--danger); color: var(--white); border: 1px solid #b91c1c; }
+.btn-danger:hover{ background: #b91c1c; }
+
+.btn-warning{ background: var(--warning); color: #111827; border: 1px solid #b45309; }
+.btn-warning:hover{ background: #b45309
