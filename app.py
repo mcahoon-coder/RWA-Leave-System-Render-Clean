@@ -350,16 +350,16 @@ def approve(req_id):
     if current_user.role != Role.admin:
         flash("Admins only.", "warning")
         return redirect(url_for("my_requests"))
+
     r = LeaveRequest.query.get_or_404(req_id)
     if r.status != RequestStatus.pending:
         flash("Request not pending.", "warning")
         return redirect(url_for("my_requests"))
-    u = User.query.get(r.user_id)
-    if u.hours_balance < r.hours:
-        flash("Insufficient balance.", "danger")
-        return redirect(url_for("my_requests"))
 
-    u.hours_balance -= r.hours
+    # Allow negative balances: remove the "Insufficient balance" guard
+    u = User.query.get(r.user_id)
+    u.hours_balance = float(u.hours_balance or 0.0) - float(r.hours or 0.0)
+
     r.status = RequestStatus.approved
     r.decided_at = datetime.utcnow()
     db.session.commit()
@@ -374,7 +374,7 @@ def approve(req_id):
     )
     send_email([u.email] + admin_emails(), subj, body)
 
-    flash("Approved.", "success")
+    flash("Approved. (Negative balances allowed)", "success")
     return redirect(url_for("my_requests"))
 
 @app.post("/requests/<int:req_id>/disapprove")
