@@ -94,3 +94,11 @@ button.danger { background: #ef4444; color: #fff; border-color: #dc2626; }
   color: #334155;
   padding: 20px 0 40px;
 }
+.balance-negative {
+    color: red;
+    font-weight: bold;
+}
+.balance-positive {
+    color: green;
+    font-weight: bold;
+}
