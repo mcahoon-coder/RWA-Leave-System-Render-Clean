@@ -1,91 +1,128 @@
 {% extends "base.html" %}
+{% block title %}Manage Users{% endblock %}
+
 {% block content %}
-<h1>Manage Users</h1>
+<div class="content-wrapper">
+  <h1 class="page-title">Manage Users</h1>
 
-<div class="card">
-  <h2>Create User</h2>
-  <form method="post" action="{{ url_for('admin_create_user') }}" class="grid-2">
-    <div>
-      <label>Username</label>
-      <input type="text" name="username" required>
-    </div>
-    <div>
-      <label>Password</label>
-      <input type="text" name="password" required>
-    </div>
-    <div>
-      <label>Role</label>
-      <select name="role">
-        <option value="faculty">Faculty/Staff</option>
-        <option value="admin">Admin</option>
-      </select>
-    </div>
-    <div>
-      <label>Email (optional)</label>
-      <input type="email" name="email" placeholder="name@example.com">
-    </div>
-    <div>
-      <label>Starting Hours Balance</label>
-      <input type="number" name="hours_balance" step="0.1" min="0" value="160">
-    </div>
-    <div class="row">
-      <button type="submit" class="btn primary">Create</button>
-    </div>
-  </form>
-</div>
+  <!-- Create User -->
+  <div class="card">
+    <h2>Create User</h2>
+    <form method="post" action="{{ url_for('admin_create_user') }}" class="grid-2 gap">
+      <div>
+        <label>Username</label>
+        <input type="text" name="username" required placeholder="e.g. jdoe" />
+      </div>
+      <div>
+        <label>Initial Password</label>
+        <input type="text" name="password" required placeholder="e.g. TempPass123" />
+      </div>
+      <div>
+        <label>Email (optional)</label>
+        <input type="email" name="email" placeholder="name@example.com" />
+      </div>
+      <div>
+        <label>Role</label>
+        <select name="role">
+          <option value="admin">Admin</option>
+          <option value="faculty_staff">Faculty/Staff</option>
+        </select>
+      </div>
+      <div>
+        <label>Starting Balance (hours)</label>
+        <input type="number" name="hours_balance" step="0.1" value="160.0" />
+      </div>
+      <div class="align-end">
+        <button class="btn" type="submit">Create User</button>
+      </div>
+    </form>
+  </div>
 
-<div class="card">
-  <h2>All Users</h2>
-  <form method="get" action="{{ url_for('manage_users') }}" class="row" style="gap:.5rem;">
-    <input type="text" name="q" value="{{ q or '' }}" placeholder="Search by username">
-    <button class="btn">Search</button>
-    {% if q %}<a class="btn" href="{{ url_for('manage_users') }}">Clear</a>{% endif %}
-  </form>
+  <!-- Search -->
+  <div class="card">
+    <h2>Search</h2>
+    <form method="get" action="{{ url_for('manage_users') }}" class="grid-2 gap">
+      <div>
+        <label>Find by username</label>
+        <input type="text" name="q" value="{{ q or '' }}" placeholder="type to filter..." />
+      </div>
+      <div class="align-end">
+        <button class="btn secondary" type="submit">Search</button>
+        <a class="btn ghost" href="{{ url_for('manage_users') }}">Clear</a>
+      </div>
+    </form>
+  </div>
 
-  <div class="table">
-    <div class="table-row table-header">
-      <div>Username</div>
-      <div>Role</div>
-      <div>Email</div>
-      <div>Hours Balance</div>
-      <div>Actions</div>
-    </div>
+  <!-- Users Table -->
+  <div class="card">
+    <h2>Users</h2>
+    {% if users %}
+      <div class="table-wrap">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Username</th>
+              <th>Email</th>
+              <th>Role</th>
+              <th>Balance (h)</th>
+              <th>Update</th>
+              <th>Reset Password</th>
+              <th>Delete</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for u in users %}
+            <tr>
+              <form method="post" action="{{ url_for('admin_update_user_all', user_id=u.id) }}">
+                <td>
+                  <input type="text" name="username" value="{{ u.username }}" required />
+                </td>
+                <td>
+                  <input type="email" name="email" value="{{ u.email or '' }}" placeholder="name@example.com" />
+                </td>
+                <td>
+                  <select name="role">
+                    <option value="admin" {{ 'selected' if u.role == 'admin' else '' }}>Admin</option>
+                    <option value="faculty_staff" {{ 'selected' if u.role == 'faculty_staff' else '' }}>Faculty/Staff</option>
+                  </select>
+                </td>
+                <td>
+                  <input type="number" step="0.1" name="hours_balance" value="{{ '%.1f'|format(u.hours_balance or 0) }}" style="width: 7rem;" />
+                  <div>
+                    <span class="{{ 'balance-negative' if u.hours_balance < 0 else 'balance-positive' }}">
+                      {{ "%.1f"|format(u.hours_balance or 0) }}
+                    </span>
+                  </div>
+                </td>
+                <td>
+                  <button class="btn" type="submit">Save</button>
+                </td>
+              </form>
 
-    {% for u in users %}
-    <div class="table-row">
-      <form method="post" action="{{ url_for('admin_update_user', user_id=u.id) }}" class="row stretch">
-        <div>
-          <input type="text" name="username" value="{{ u.username }}" required>
-        </div>
-        <div>
-          <select name="role">
-            <option value="faculty" {% if u.role != 'admin' %}selected{% endif %}>Faculty/Staff</option>
-            <option value="admin" {% if u.role == 'admin' %}selected{% endif %}>Admin</option>
-          </select>
-        </div>
-        <div>
-          <input type="email" name="email" value="{{ u.email or '' }}" placeholder="name@example.com">
-        </div>
-        <div>
-          <input type="number" name="hours_balance" step="0.1" min="0" value="{{ '%.1f'|format(u.hours_balance or 0) }}">
-        </div>
-        <div class="row" style="gap:.4rem;">
-          <button class="btn small primary" type="submit">Save</button>
-        </div>
-      </form>
-
-      <form method="post" action="{{ url_for('admin_reset_password', user_id=u.id) }}" class="row" style="gap:.4rem; margin-top:.25rem;">
-        <input type="text" name="new_password" placeholder="New password">
-        <button class="btn small" type="submit">Reset PW</button>
-      </form>
-
-      <form method="post" action="{{ url_for('admin_delete_user', user_id=u.id) }}"
-            onsubmit="return confirm('Delete {{ u.username }}? This cannot be undone.');"
-            class="row" style="gap:.4rem; margin-top:.25rem;">
-        <button class="btn small danger" type="submit">Delete</button>
-      </form>
-    </div>
-    {% endfor %}
+              <td>
+                <form method="post" action="{{ url_for('admin_reset_password', user_id=u.id) }}" class="inline-form">
+                  <input type="text" name="new_password" placeholder="New password" required />
+                  <button class="btn secondary" type="submit">Reset</button>
+                </form>
+              </td>
+              <td>
+                {% if u.id != current_user.id %}
+                <form method="post" action="{{ url_for('admin_delete_user', user_id=u.id) }}" onsubmit="return confirm('Delete user {{ u.username }}? This cannot be undone.');">
+                  <button class="btn danger" type="submit">Delete</button>
+                </form>
+                {% else %}
+                  <span class="muted">You</span>
+                {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <p>No users found.</p>
+    {% endif %}
   </div>
 </div>
+
 {% endblock %}
