@@ -1,34 +1,133 @@
 {% extends "base.html" %}
 {% block content %}
-<h1>New Leave Request</h1>
+<div class="card">
+  <h2>New Leave Request</h2>
 
-<form method="post" action="/request/new">
-  <label>Mode</label>
-  <select name="mode">
-    <option value="hourly">Hourly</option>
-    <option value="daily">Daily</option>
-  </select>
+  <form method="post">
+    <div class="grid-2">
+      <div>
+        <label for="kind">Type</label>
+        <select id="kind" name="kind" required>
+          <option value="annual">Annual</option>
+          <option value="sick">Sick</option>
+        </select>
+      </div>
+      <div>
+        <label for="mode">Mode</label>
+        <select id="mode" name="mode">
+          <option value="hourly" selected>Hourly</option>
+          <option value="daily">Daily</option>
+        </select>
+      </div>
 
-  <label>Kind</label>
-  <select name="kind">
-    <option value="annual">Annual</option>
-    <option value="sick">Sick</option>
-  </select>
+      <div>
+        <label for="start_date">Start Date</label>
+        <input type="date" id="start_date" name="start_date" required />
+      </div>
+      <div>
+        <label for="end_date">End Date</label>
+        <input type="date" id="end_date" name="end_date" required />
+      </div>
+    </div>
 
-  <label>Start date</label>
-  <input type="date" name="start_date" required>
+    <div id="hourlyOptions" class="mt">
+      <fieldset class="fieldset">
+        <legend>Hourly Options</legend>
 
-  <label>End date</label>
-  <input type="date" name="end_date" required>
+        <div class="radio-row">
+          <label>
+            <input type="radio" name="times_mode" value="total" checked />
+            Enter a total number of hours
+          </label>
+          <label>
+            <input type="radio" name="times_mode" value="window" />
+            Pick a start & end time (15-minute steps)
+          </label>
+        </div>
 
-  <label>Hours (if hourly)</label>
-  <input type="number" step="0.1" name="hours" placeholder="e.g. 2.5">
+        <div id="totalHoursRow" class="grid-1 mt">
+          <div>
+            <label for="hours">Total Hours</label>
+            <input type="number" step="0.25" min="0.25" id="hours" name="hours" placeholder="e.g., 2.5" />
+            <div class="hint">Workday is {{ workday }} hours.</div>
+          </div>
+        </div>
 
-  <label>Reason</label>
-  <textarea name="reason" rows="3" placeholder="Optional"></textarea>
+        <div id="timeWindowRow" class="grid-2 mt" style="display:none;">
+          <div>
+            <label for="start_time">Start Time</label>
+            <select id="start_time" name="start_time">
+              {% for t in time_slots %}
+                <option value="{{ t }}">{{ t }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div>
+            <label for="end_time">End Time</label>
+            <select id="end_time" name="end_time">
+              {% for t in time_slots %}
+                <option value="{{ t }}">{{ t }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <input type="hidden" name="use_times" id="use_times" value="no" />
+          <div class="hint col-span-2">Tip: Start and end date must be the same day when using times.</div>
+        </div>
+      </fieldset>
+    </div>
 
-  <button class="btn primary" type="submit">Submit Request</button>
-</form>
+    <div class="mt">
+      <label for="reason">Reason (optional)</label>
+      <textarea id="reason" name="reason" rows="3" placeholder="Optional notes..."></textarea>
+    </div>
 
-<p style="margin-top:10px;color:#334155;">Workday hours configured: {{ workday }}h</p>
+    <div class="actions mt">
+      <button type="submit" class="btn primary">Submit Request</button>
+      <a href="{{ url_for('my_requests') }}" class="btn">Cancel</a>
+    </div>
+  </form>
+</div>
+
+<script>
+  const modeSel = document.getElementById('mode');
+  const hourlyOptions = document.getElementById('hourlyOptions');
+  const radios = document.querySelectorAll('input[name="times_mode"]');
+  const totalRow = document.getElementById('totalHoursRow');
+  const windowRow = document.getElementById('timeWindowRow');
+  const useTimes = document.getElementById('use_times');
+  const hoursInput = document.getElementById('hours');
+  const startTime = document.getElementById('start_time');
+  const endTime = document.getElementById('end_time');
+
+  function updateModeUI() {
+    const hourly = modeSel.value === 'hourly';
+    hourlyOptions.style.display = hourly ? '' : 'none';
+  }
+
+  function updateTimesUI() {
+    const v = document.querySelector('input[name="times_mode"]:checked').value;
+    if (v === 'total') {
+      totalRow.style.display = '';
+      windowRow.style.display = 'none';
+      useTimes.value = 'no';
+      startTime.disabled = true;
+      endTime.disabled = true;
+      hoursInput.disabled = false;
+    } else {
+      totalRow.style.display = 'none';
+      windowRow.style.display = '';
+      useTimes.value = 'yes';
+      startTime.disabled = false;
+      endTime.disabled = false;
+      hoursInput.disabled = true;
+    }
+  }
+
+  modeSel.addEventListener('change', updateModeUI);
+  radios.forEach(r => r.addEventListener('change', updateTimesUI));
+
+  // init
+  updateModeUI();
+  updateTimesUI();
+</script>
 {% endblock %}
