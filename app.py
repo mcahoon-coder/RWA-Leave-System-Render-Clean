@@ -81,7 +81,7 @@ def send_email(to_addrs, subject, body):
 # ------------------------------
 class Role:
     admin = "admin"
-    user = "user"
+    faculty_staff = "faculty_staff"  # renamed from "user"
 
 class RequestStatus:
     pending = "Pending"
@@ -97,7 +97,7 @@ class User(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(150), unique=True, nullable=False)
     password_hash = db.Column(db.String(255), nullable=False)
-    role = db.Column(db.String(20), default=Role.user, nullable=False)
+    role = db.Column(db.String(20), default=Role.faculty_staff, nullable=False)
     hours_balance = db.Column(db.Float, default=160.0, nullable=False)
     email = db.Column(db.String(255))  # for notifications
 
@@ -114,6 +114,7 @@ class LeaveRequest(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     decided_at = db.Column(db.DateTime)
 
+    # Eager-load user to avoid DetachedInstanceError in templates
     user = db.relationship("User", backref="leave_requests", lazy="joined")
 
 @login_manager.user_loader
@@ -141,6 +142,7 @@ def workdays_between(start: date, end: date) -> int:
     return n
 
 def _column_exists(table_name: str, column_name: str) -> bool:
+    """Check column existence (SQLite + Postgres)."""
     bind = db.engine
     dialect = bind.dialect.name
     if dialect == "sqlite":
@@ -156,6 +158,7 @@ def _column_exists(table_name: str, column_name: str) -> bool:
 
 def ensure_db():
     db.create_all()
+    # Add email column if missing (SQLite) – simple migration helper
     try:
         if not _column_exists("user", "email"):
             if db.engine.dialect.name == "sqlite":
@@ -164,6 +167,7 @@ def ensure_db():
     except Exception:
         db.session.rollback()
 
+    # Seed accounts
     if not User.query.filter_by(username="mc-admin").first():
         db.session.add(User(
             username="mc-admin",
@@ -176,7 +180,7 @@ def ensure_db():
         db.session.add(User(
             username="jdoe",
             password_hash=generate_password_hash("password123"),
-            role=Role.user,
+            role=Role.faculty_staff,
             hours_balance=120.0,
             email=None
         ))
@@ -191,6 +195,7 @@ def admin_emails():
         emails = [ADMIN_FALLBACK]
     return emails
 
+# Shared filter logic for list + exports
 def _filtered_requests_for(current_user_is_admin: bool):
     status = request.args.get("status", "all").strip().lower()
     start_s = request.args.get("start", "").strip()
@@ -315,6 +320,7 @@ def new_request():
         db.session.add(req)
         db.session.commit()
 
+        # Notify admins
         subj = "New Leave Request Submitted"
         body = (
             f"User: {current_user.username}\n"
@@ -350,16 +356,14 @@ def approve(req_id):
     if current_user.role != Role.admin:
         flash("Admins only.", "warning")
         return redirect(url_for("my_requests"))
-
     r = LeaveRequest.query.get_or_404(req_id)
     if r.status != RequestStatus.pending:
         flash("Request not pending.", "warning")
         return redirect(url_for("my_requests"))
 
-    # Allow negative balances: remove the "Insufficient balance" guard
     u = User.query.get(r.user_id)
+    # Allow negative balances
     u.hours_balance = float(u.hours_balance or 0.0) - float(r.hours or 0.0)
-
     r.status = RequestStatus.approved
     r.decided_at = datetime.utcnow()
     db.session.commit()
@@ -374,7 +378,7 @@ def approve(req_id):
     )
     send_email([u.email] + admin_emails(), subj, body)
 
-    flash("Approved. (Negative balances allowed)", "success")
+    flash("Approved.", "success")
     return redirect(url_for("my_requests"))
 
 @app.post("/requests/<int:req_id>/disapprove")
@@ -414,7 +418,8 @@ def cancel(req_id):
         return redirect(url_for("my_requests"))
     u = User.query.get(r.user_id)
     if r.status == RequestStatus.approved:
-        u.hours_balance += r.hours
+        # If previously approved, add back hours (can pull out of negative)
+        u.hours_balance = float(u.hours_balance or 0.0) + float(r.hours or 0.0)
     r.status = RequestStatus.cancelled
     r.decided_at = datetime.utcnow()
     db.session.commit()
@@ -455,94 +460,68 @@ def admin_create_user():
         flash("Admins only.", "warning")
         return redirect(url_for("manage_users"))
 
-    username = (request.form.get("username") or "").strip()
-    password = (request.form.get("password") or "").strip()
-    role_label = (request.form.get("role") or "faculty").strip().lower()  # 'admin' or 'faculty'
-    email = (request.form.get("email") or "").strip() or None
-    hours_balance = request.form.get("hours_balance", "160").strip()
+    username = request.form.get("username", "").strip()
+    password = request.form.get("password", "").strip()
+    email = request.form.get("email", "").strip() or None
+    role = request.form.get("role", Role.faculty_staff)
+    hours_balance = request.form.get("hours_balance", "160.0").strip()
 
     if not username or not password:
-        flash("Username and password are required.", "danger")
+        flash("Username and password are required.", "warning")
         return redirect(url_for("manage_users"))
 
-    role_map = {"admin": Role.admin, "faculty": Role.user, "user": Role.user}
-    role = role_map.get(role_label, Role.user)
-
-    if User.query.filter(User.username.ilike(username)).first():
-        flash(f"Username '{username}' already exists.", "danger")
+    if User.query.filter_by(username=username).first():
+        flash("Username already exists.", "danger")
         return redirect(url_for("manage_users"))
 
     try:
         hb = float(hours_balance)
-        if hb < 0:
-            raise ValueError()
     except Exception:
-        flash("Starting Hours Balance must be a non-negative number.", "danger")
-        return redirect(url_for("manage_users"))
+        hb = 160.0
 
     u = User(
         username=username,
         password_hash=generate_password_hash(password),
-        role=role,
+        role=role if role in (Role.admin, Role.faculty_staff) else Role.faculty_staff,
         hours_balance=hb,
         email=email
     )
     db.session.add(u)
     db.session.commit()
-
     flash(f"User '{username}' created.", "success")
     return redirect(url_for("manage_users"))
 
-@app.post("/admin/users/<int:user_id>/update")
+@app.post("/admin/users/<int:user_id>/update-all")
 @login_required
-def admin_update_user(user_id):
-    """
-    Updates username, role, email, and hours_balance for a user.
-    """
+def admin_update_user_all(user_id):
     if current_user.role != Role.admin:
         flash("Admins only.", "warning")
         return redirect(url_for("manage_users"))
 
     u = User.query.get_or_404(user_id)
+    new_username = request.form.get("username", "").strip()
+    email = request.form.get("email", "").strip() or None
+    role = request.form.get("role", Role.faculty_staff)
+    hours_balance_s = request.form.get("hours_balance", "").strip()
 
-    new_username = (request.form.get("username") or u.username).strip()
-    new_role_label = (request.form.get("role") or u.role).strip().lower()
-    new_email = (request.form.get("email") or "").strip() or None
-    hb_raw = (request.form.get("hours_balance") or str(u.hours_balance)).strip()
-
-    role_map = {"admin": Role.admin, "faculty": Role.user, "user": Role.user}
-    new_role = role_map.get(new_role_label, Role.user)
-
-    # Username uniqueness check (case-insensitive)
-    if new_username.lower() != u.username.lower():
-        if User.query.filter(User.username.ilike(new_username)).first():
-            flash(f"Username '{new_username}' already exists.", "danger")
+    if new_username:
+        # Prevent duplicate username if changed
+        if new_username != u.username and User.query.filter_by(username=new_username).first():
+            flash("That username is already taken.", "danger")
             return redirect(url_for("manage_users"))
+        u.username = new_username
 
-    # Prevent removing last admin
-    is_demoting_admin = (u.role == Role.admin and new_role != Role.admin)
-    if is_demoting_admin:
-        admin_count = User.query.filter_by(role=Role.admin).count()
-        if admin_count <= 1:
-            flash("You cannot remove the last Admin.", "danger")
-            return redirect(url_for("manage_users"))
+    u.email = email
+    if role in (Role.admin, Role.faculty_staff):
+        u.role = role
 
-    # Validate hours balance
     try:
-        new_hb = float(hb_raw)
-        if new_hb < 0:
-            raise ValueError()
+        if hours_balance_s != "":
+            u.hours_balance = float(hours_balance_s)
     except Exception:
-        flash("Hours Balance must be a non-negative number.", "danger")
-        return redirect(url_for("manage_users"))
+        flash("Invalid hours balance value.", "warning")
 
-    # Apply updates
-    u.username = new_username
-    u.role = new_role
-    u.email = new_email
-    u.hours_balance = new_hb
     db.session.commit()
-
     flash(f"Updated user '{u.username}'.", "success")
     return redirect(url_for("manage_users"))
 
@@ -570,21 +549,14 @@ def admin_delete_user(user_id):
         return redirect(url_for("manage_users"))
 
     u = User.query.get_or_404(user_id)
-
     if u.id == current_user.id:
-        flash("You cannot delete your own account while logged in.", "danger")
+        flash("You cannot delete your own account.", "warning")
         return redirect(url_for("manage_users"))
 
-    if u.role == Role.admin:
-        admin_count = User.query.filter_by(role=Role.admin).count()
-        if admin_count <= 1:
-            flash("You cannot delete the last Admin.", "danger")
-            return redirect(url_for("manage_users"))
-
+    # Optional: also delete their requests
     LeaveRequest.query.filter_by(user_id=u.id).delete()
     db.session.delete(u)
     db.session.commit()
-
     flash("User deleted.", "success")
     return redirect(url_for("manage_users"))
 
@@ -621,7 +593,7 @@ def calendar_data():
         events.append({
             "title": f"{r.user.username} - {r.kind} ({r.hours:.1f}h)",
             "start": r.start_date.isoformat(),
-            "end": (r.end_date + timedelta(days=1)).isoformat()
+            "end": (r.end_date + timedelta(days=1)).isoformat()  # exclusive end for FullCalendar
         })
     return jsonify(events)
 
@@ -689,6 +661,7 @@ def export_requests_xlsx():
 
         rix += 1
 
+    # autosize columns (simple best-effort)
     widths = [len(h) for h in headers]
     for row in rows:
         widths[1] = max(widths[1], len(row.user.username or ""))
@@ -720,5 +693,6 @@ def internal_error(e):
     except Exception:
         return "Internal Server Error", 500
 
+# Dev server entry (ignored by gunicorn)
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
