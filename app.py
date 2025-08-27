@@ -155,36 +155,18 @@ def _column_exists(table_name: str, column_name: str) -> bool:
         return db.session.execute(q, {"t": table_name, "c": column_name}).first() is not None
 
 def ensure_db():
-    db.create_all()
-    # Add email to users if missing
-    try:
-        if not _column_exists("user", "email"):
-            if db.engine.dialect.name == "sqlite":
-                db.session.execute(text("ALTER TABLE user ADD COLUMN email VARCHAR(255)"))
-            else:
-                db.session.execute(text("ALTER TABLE \"user\" ADD COLUMN email VARCHAR(255)"))
+     db.create_all()
+
+     # Add email column if missing (SQLite quick helper only)
+     try:
+         if db.engine.dialect.name == "sqlite" and not _column_exists("user", "email"):
+             db.session.execute(text("ALTER TABLE user ADD COLUMN email VARCHAR(255)"))
             db.session.commit()
     except Exception:
         db.session.rollback()
 
-    # Add start_time / end_time to leave_request if missing
-    try:
-        if not _column_exists("leave_request", "start_time"):
-            if db.engine.dialect.name == "sqlite":
-                db.session.execute(text("ALTER TABLE leave_request ADD COLUMN start_time TIME"))
-            else:
-                db.session.execute(text("ALTER TABLE leave_request ADD COLUMN start_time TIME"))
-        if not _column_exists("leave_request", "end_time"):
-            if db.engine.dialect.name == "sqlite":
-                db.session.execute(text("ALTER TABLE leave_request ADD COLUMN end_time TIME"))
-            else:
-                db.session.execute(text("ALTER TABLE leave_request ADD COLUMN end_time TIME"))
-        db.session.commit()
-    except Exception:
-        db.session.rollback()
-
-    # Seed accounts
-    if not User.query.filter_by(username="mc-admin").first():
+    # Seed ONCE only if DB is empty
+    if User.query.count() == 0:
         db.session.add(User(
             username="mc-admin",
             password_hash=generate_password_hash("RWAadmin2"),
@@ -192,15 +174,7 @@ def ensure_db():
             hours_balance=160.0,
             email=ADMIN_FALLBACK or None
         ))
-    if not User.query.filter_by(username="jdoe").first():
-        db.session.add(User(
-            username="jdoe",
-            password_hash=generate_password_hash("password123"),
-            role=Role.faculty_staff,
-            hours_balance=120.0,
-            email=None
-        ))
-    db.session.commit()
+        db.session.commit()
 
 with app.app_context():
     ensure_db()
