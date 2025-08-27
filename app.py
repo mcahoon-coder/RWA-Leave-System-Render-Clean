@@ -8,7 +8,7 @@ from flask_login import (
     login_required, current_user
 )
 from werkzeug.security import generate_password_hash, check_password_hash
-from datetime import datetime, date, timedelta
+from datetime import datetime, date, timedelta, time as dtime
 import os, smtplib, ssl, io, csv
 from email.message import EmailMessage
 from sqlalchemy import text
@@ -35,7 +35,7 @@ login_manager.login_view = "login"
 # ------------------------------
 # Email settings (env vars)
 # ------------------------------
-MAIL_HOST = os.environ.get("MAIL_HOST", "")          # e.g. smtp.gmail.com or your org SMTP
+MAIL_HOST = os.environ.get("MAIL_HOST", "")
 MAIL_PORT = int(os.environ.get("MAIL_PORT", "587"))
 MAIL_USER = os.environ.get("MAIL_USER", "")
 MAIL_PASSWORD = os.environ.get("MAIL_PASSWORD", "")
@@ -44,12 +44,10 @@ MAIL_FROM = os.environ.get("MAIL_FROM", MAIL_USER or "no-reply@example.com")
 ADMIN_FALLBACK = os.environ.get("ADMIN_EMAIL", "")
 
 def send_email(to_addrs, subject, body):
-    """Send a simple text email to one or many recipients. Safe no-op if not configured."""
     if not to_addrs:
         return
     if isinstance(to_addrs, str):
         to_addrs = [to_addrs]
-
     if not MAIL_HOST or not MAIL_FROM:
         return  # SMTP not configured
 
@@ -81,7 +79,7 @@ def send_email(to_addrs, subject, body):
 # ------------------------------
 class Role:
     admin = "admin"
-    faculty_staff = "faculty_staff"  # renamed from "user"
+    faculty_staff = "faculty_staff"  # standard user
 
 class RequestStatus:
     pending = "Pending"
@@ -99,7 +97,7 @@ class User(UserMixin, db.Model):
     password_hash = db.Column(db.String(255), nullable=False)
     role = db.Column(db.String(20), default=Role.faculty_staff, nullable=False)
     hours_balance = db.Column(db.Float, default=160.0, nullable=False)
-    email = db.Column(db.String(255))  # for notifications
+    email = db.Column(db.String(255))
 
 class LeaveRequest(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -108,13 +106,15 @@ class LeaveRequest(db.Model):
     mode = db.Column(db.String(10), default=RequestMode.hourly, nullable=False)  # hourly/daily
     start_date = db.Column(db.Date, nullable=False)
     end_date = db.Column(db.Date, nullable=False)
+    # NEW: optional timed leave in 15-min increments (for hourly mode)
+    start_time = db.Column(db.Time)   # nullable
+    end_time = db.Column(db.Time)     # nullable
     hours = db.Column(db.Float, nullable=False)
     reason = db.Column(db.String(500), default="")
     status = db.Column(db.String(20), default=RequestStatus.pending, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     decided_at = db.Column(db.DateTime)
 
-    # Eager-load user to avoid DetachedInstanceError in templates
     user = db.relationship("User", backref="leave_requests", lazy="joined")
 
 @login_manager.user_loader
@@ -131,18 +131,16 @@ def is_workday(d: date) -> bool:
     return d.weekday() < 5 and d not in HOLIDAYS  # Mon–Fri & not holiday
 
 def workdays_between(start: date, end: date) -> int:
-    """Inclusive range, counts only Mon–Fri not in HOLIDAYS."""
     if end < start:
         start, end = end, start
     n, cur = 0, start
     while cur <= end:
         if is_workday(cur):
             n += 1
-        cur = cur + timedelta(days=1)
+        cur += timedelta(days=1)
     return n
 
 def _column_exists(table_name: str, column_name: str) -> bool:
-    """Check column existence (SQLite + Postgres)."""
     bind = db.engine
     dialect = bind.dialect.name
     if dialect == "sqlite":
@@ -158,12 +156,30 @@ def _column_exists(table_name: str, column_name: str) -> bool:
 
 def ensure_db():
     db.create_all()
-    # Add email column if missing (SQLite) – simple migration helper
+    # Add email to users if missing
     try:
         if not _column_exists("user", "email"):
             if db.engine.dialect.name == "sqlite":
                 db.session.execute(text("ALTER TABLE user ADD COLUMN email VARCHAR(255)"))
-                db.session.commit()
+            else:
+                db.session.execute(text("ALTER TABLE \"user\" ADD COLUMN email VARCHAR(255)"))
+            db.session.commit()
+    except Exception:
+        db.session.rollback()
+
+    # Add start_time / end_time to leave_request if missing
+    try:
+        if not _column_exists("leave_request", "start_time"):
+            if db.engine.dialect.name == "sqlite":
+                db.session.execute(text("ALTER TABLE leave_request ADD COLUMN start_time TIME"))
+            else:
+                db.session.execute(text("ALTER TABLE leave_request ADD COLUMN start_time TIME"))
+        if not _column_exists("leave_request", "end_time"):
+            if db.engine.dialect.name == "sqlite":
+                db.session.execute(text("ALTER TABLE leave_request ADD COLUMN end_time TIME"))
+            else:
+                db.session.execute(text("ALTER TABLE leave_request ADD COLUMN end_time TIME"))
+        db.session.commit()
     except Exception:
         db.session.rollback()
 
@@ -194,6 +210,9 @@ def admin_emails():
     if not emails and ADMIN_FALLBACK:
         emails = [ADMIN_FALLBACK]
     return emails
+
+# Build list of 15-minute time options as "HH:MM"
+TIME_SLOTS = [f"{h:02d}:{m:02d}" for h in range(0, 24) for m in (0, 15, 30, 45)]
 
 # Shared filter logic for list + exports
 def _filtered_requests_for(current_user_is_admin: bool):
@@ -279,34 +298,64 @@ def new_request():
         kind = request.form.get("kind", "annual")
         reason = request.form.get("reason", "")
 
+        # Parse dates
         try:
             sd = datetime.strptime(request.form["start_date"], "%Y-%m-%d").date()
             ed = datetime.strptime(request.form["end_date"], "%Y-%m-%d").date()
         except Exception:
             flash("Invalid dates.", "warning")
-            return render_template("new_request.html", title="New Request", workday=WORKDAY_HOURS)
+            return render_template("new_request.html", title="New Request", workday=WORKDAY_HOURS, time_slots=TIME_SLOTS)
 
         capacity_hours = workdays_between(sd, ed) * WORKDAY_HOURS
         if capacity_hours <= 0:
             flash("No working days in that range.", "warning")
-            return render_template("new_request.html", title="New Request", workday=WORKDAY_HOURS)
+            return render_template("new_request.html", title="New Request", workday=WORKDAY_HOURS, time_slots=TIME_SLOTS)
+
+        # Determine hours
+        hours = 0.0
+        start_t_obj = None
+        end_t_obj = None
 
         if mode == RequestMode.hourly:
-            try:
-                hours = float(request.form.get("hours", "0"))
-            except Exception:
-                hours = 0.0
+            use_times = request.form.get("use_times", "no") == "yes"
+            if use_times:
+                st_s = request.form.get("start_time", "").strip()
+                et_s = request.form.get("end_time", "").strip()
+                # Require same day for time-window requests
+                if sd != ed:
+                    flash("For start/end times, start and end date must be the same day.", "warning")
+                    return render_template("new_request.html", title="New Request", workday=WORKDAY_HOURS, time_slots=TIME_SLOTS)
+                try:
+                    start_t_obj = datetime.strptime(st_s, "%H:%M").time()
+                    end_t_obj = datetime.strptime(et_s, "%H:%M").time()
+                except Exception:
+                    flash("Invalid time selection.", "warning")
+                    return render_template("new_request.html", title="New Request", workday=WORKDAY_HOURS, time_slots=TIME_SLOTS)
+                start_dt = datetime.combine(sd, start_t_obj)
+                end_dt = datetime.combine(ed, end_t_obj)
+                delta_h = (end_dt - start_dt).total_seconds() / 3600.0
+                if delta_h <= 0:
+                    flash("End time must be after start time.", "warning")
+                    return render_template("new_request.html", title="New Request", workday=WORKDAY_HOURS, time_slots=TIME_SLOTS)
+                # 15-min increments already enforced by dropdowns; still clamp to 2 decimals
+                hours = round(delta_h, 2)
+            else:
+                # Manual hourly entry
+                try:
+                    hours = float(request.form.get("hours", "0"))
+                except Exception:
+                    hours = 0.0
         else:
             wd = workdays_between(sd, ed)
             hours = wd * WORKDAY_HOURS
 
         if hours <= 0:
             flash("Requested hours must be greater than zero.", "warning")
-            return render_template("new_request.html", title="New Request", workday=WORKDAY_HOURS)
+            return render_template("new_request.html", title="New Request", workday=WORKDAY_HOURS, time_slots=TIME_SLOTS)
 
         if hours > capacity_hours:
             flash(f"Requested {hours:.2f} exceeds capacity {capacity_hours:.2f} for that range.", "warning")
-            return render_template("new_request.html", title="New Request", workday=WORKDAY_HOURS)
+            return render_template("new_request.html", title="New Request", workday=WORKDAY_HOURS, time_slots=TIME_SLOTS)
 
         req = LeaveRequest(
             user_id=current_user.id,
@@ -314,6 +363,8 @@ def new_request():
             mode=mode,
             start_date=sd,
             end_date=ed,
+            start_time=start_t_obj,
+            end_time=end_t_obj,
             hours=hours,
             reason=reason
         )
@@ -322,10 +373,11 @@ def new_request():
 
         # Notify admins
         subj = "New Leave Request Submitted"
+        timed = (f"{req.start_time.strftime('%H:%M')}–{req.end_time.strftime('%H:%M')} on {sd}" if req.start_time and req.end_time else f"{sd} to {ed}")
         body = (
             f"User: {current_user.username}\n"
             f"Kind: {kind}\nMode: {mode}\nHours: {hours}\n"
-            f"Dates: {sd} to {ed}\nReason: {reason or '(none)'}\n"
+            f"When: {timed}\nReason: {reason or '(none)'}\n"
             f"Status: {req.status}\n"
         )
         send_email(admin_emails(), subj, body)
@@ -333,7 +385,7 @@ def new_request():
         flash("Request submitted.", "success")
         return redirect(url_for("my_requests"))
 
-    return render_template("new_request.html", title="New Request", workday=WORKDAY_HOURS)
+    return render_template("new_request.html", title="New Request", workday=WORKDAY_HOURS, time_slots=TIME_SLOTS)
 
 @app.get("/requests")
 @login_required
@@ -373,8 +425,9 @@ def approve(req_id):
         f"Hello {u.username},\n\n"
         f"Your leave request has been APPROVED.\n"
         f"Kind: {r.kind}\nMode: {r.mode}\nHours: {r.hours}\n"
-        f"Dates: {r.start_date} to {r.end_date}\n\n"
-        f"Remaining balance: {u.hours_balance:.1f} hours\n"
+        f"Dates: {r.start_date} to {r.end_date}\n"
+        + (f"Times: {r.start_time.strftime('%H:%M')}–{r.end_time.strftime('%H:%M')}\n" if r.start_time and r.end_time else "")
+        + f"\nRemaining balance: {u.hours_balance:.1f} hours\n"
     )
     send_email([u.email] + admin_emails(), subj, body)
 
@@ -403,6 +456,7 @@ def disapprove(req_id):
         f"Your leave request has been DISAPPROVED.\n"
         f"Kind: {r.kind}\nMode: {r.mode}\nHours: {r.hours}\n"
         f"Dates: {r.start_date} to {r.end_date}\n"
+        + (f"Times: {r.start_time.strftime('%H:%M')}–{r.end_time.strftime('%H:%M')}\n" if r.start_time and r.end_time else "")
     )
     send_email([u.email] + admin_emails(), subj, body)
 
@@ -418,7 +472,6 @@ def cancel(req_id):
         return redirect(url_for("my_requests"))
     u = User.query.get(r.user_id)
     if r.status == RequestStatus.approved:
-        # If previously approved, add back hours (can pull out of negative)
         u.hours_balance = float(u.hours_balance or 0.0) + float(r.hours or 0.0)
     r.status = RequestStatus.cancelled
     r.decided_at = datetime.utcnow()
@@ -429,7 +482,8 @@ def cancel(req_id):
         f"User {u.username} cancelled a leave request.\n"
         f"Kind: {r.kind}\nMode: {r.mode}\nHours: {r.hours}\n"
         f"Dates: {r.start_date} to {r.end_date}\n"
-        f"Balance is now: {u.hours_balance:.1f} hours\n"
+        + (f"Times: {r.start_time.strftime('%H:%M')}–{r.end_time.strftime('%H:%M')}\n" if r.start_time and r.end_time else "")
+        + f"Balance is now: {u.hours_balance:.1f} hours\n"
     )
     recipients = admin_emails()
     if u.email:
@@ -505,7 +559,6 @@ def admin_update_user_all(user_id):
     hours_balance_s = request.form.get("hours_balance", "").strip()
 
     if new_username:
-        # Prevent duplicate username if changed
         if new_username != u.username and User.query.filter_by(username=new_username).first():
             flash("That username is already taken.", "danger")
             return redirect(url_for("manage_users"))
@@ -553,7 +606,6 @@ def admin_delete_user(user_id):
         flash("You cannot delete your own account.", "warning")
         return redirect(url_for("manage_users"))
 
-    # Optional: also delete their requests
     LeaveRequest.query.filter_by(user_id=u.id).delete()
     db.session.delete(u)
     db.session.commit()
@@ -590,11 +642,20 @@ def calendar_data():
     events = []
     approved = LeaveRequest.query.filter_by(status=RequestStatus.approved).all()
     for r in approved:
-        events.append({
-            "title": f"{r.user.username} - {r.kind} ({r.hours:.1f}h)",
-            "start": r.start_date.isoformat(),
-            "end": (r.end_date + timedelta(days=1)).isoformat()  # exclusive end for FullCalendar
-        })
+        if r.start_time and r.end_time and r.start_date == r.end_date:
+            start_dt = datetime.combine(r.start_date, r.start_time)
+            end_dt = datetime.combine(r.end_date, r.end_time)
+            events.append({
+                "title": f"{r.user.username} - {r.kind} ({r.hours:.1f}h)",
+                "start": start_dt.isoformat(),
+                "end": end_dt.isoformat()
+            })
+        else:
+            events.append({
+                "title": f"{r.user.username} - {r.kind} ({r.hours:.1f}h)",
+                "start": r.start_date.isoformat(),
+                "end": (r.end_date + timedelta(days=1)).isoformat()
+            })
     return jsonify(events)
 
 # ---------- Exports (admin only) ----------
@@ -606,11 +667,13 @@ def export_requests_csv():
     rows = _filtered_requests_for(True).all()
     output = io.StringIO()
     writer = csv.writer(output)
-    writer.writerow(["ID","Username","Kind","Mode","Hours","Status","Start","End","Created","Decided"])
+    writer.writerow(["ID","Username","Kind","Mode","Hours","Status","Start","End","Start Time","End Time","Created","Decided"])
     for r in rows:
         writer.writerow([
             r.id, r.user.username, r.kind, r.mode, f"{r.hours:.2f}", r.status,
             r.start_date.isoformat(), r.end_date.isoformat(),
+            r.start_time.strftime("%H:%M") if r.start_time else "",
+            r.end_time.strftime("%H:%M") if r.end_time else "",
             r.created_at.isoformat() if r.created_at else "",
             r.decided_at.isoformat() if r.decided_at else ""
         ])
@@ -630,7 +693,7 @@ def export_requests_xlsx():
     wb = xlsxwriter.Workbook(buf, {"in_memory": True})
     ws = wb.add_worksheet("Requests")
 
-    headers = ["ID","Username","Kind","Mode","Hours","Status","Start","End","Created","Decided"]
+    headers = ["ID","Username","Kind","Mode","Hours","Status","Start","End","Start Time","End Time","Created","Decided"]
     hdr_fmt = wb.add_format({"bold": True, "bg_color": "#F1F5F9", "border": 1})
     cell_fmt = wb.add_format({"border": 1})
     date_fmt = wb.add_format({"num_format": "yyyy-mm-dd", "border": 1})
@@ -647,21 +710,20 @@ def export_requests_xlsx():
         ws.write(rix, 3, r.mode, cell_fmt)
         ws.write_number(rix, 4, float(r.hours or 0.0), cell_fmt)
         ws.write(rix, 5, r.status, cell_fmt)
-
         ws.write_datetime(rix, 6, datetime.combine(r.start_date, datetime.min.time()), date_fmt)
         ws.write_datetime(rix, 7, datetime.combine(r.end_date, datetime.min.time()), date_fmt)
+        ws.write(rix, 8, r.start_time.strftime("%H:%M") if r.start_time else "", cell_fmt)
+        ws.write(rix, 9, r.end_time.strftime("%H:%M") if r.end_time else "", cell_fmt)
         if r.created_at:
-            ws.write_datetime(rix, 8, r.created_at, dt_fmt)
+            ws.write_datetime(rix, 10, r.created_at, dt_fmt)
         else:
-            ws.write(rix, 8, "", cell_fmt)
+            ws.write(rix, 10, "", cell_fmt)
         if r.decided_at:
-            ws.write_datetime(rix, 9, r.decided_at, dt_fmt)
+            ws.write_datetime(rix, 11, r.decided_at, dt_fmt)
         else:
-            ws.write(rix, 9, "", cell_fmt)
-
+            ws.write(rix, 11, "", cell_fmt)
         rix += 1
 
-    # autosize columns (simple best-effort)
     widths = [len(h) for h in headers]
     for row in rows:
         widths[1] = max(widths[1], len(row.user.username or ""))
@@ -693,6 +755,5 @@ def internal_error(e):
     except Exception:
         return "Internal Server Error", 500
 
-# Dev server entry (ignored by gunicorn)
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
