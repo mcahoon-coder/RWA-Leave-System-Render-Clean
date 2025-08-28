@@ -2,127 +2,97 @@
 {% block title %}Manage Users{% endblock %}
 
 {% block content %}
-<div class="content-wrapper">
-  <h1 class="page-title">Manage Users</h1>
+<h2>Manage Users</h2>
 
-  <!-- Create User -->
-  <div class="card">
-    <h2>Create User</h2>
-    <form method="post" action="{{ url_for('admin_create_user') }}" class="grid-2 gap">
+<form method="get" class="toolbar">
+  <input type="text" name="q" value="{{ q or '' }}" placeholder="Search username..." />
+  <button type="submit" class="btn">Search</button>
+  <a href="{{ url_for('manage_users') }}" class="btn btn-secondary">Clear</a>
+</form>
+
+<hr>
+
+<h3>Create User</h3>
+<form method="post" action="{{ url_for('admin_create_user') }}" class="card">
+  <div class="grid grid-2">
+    <div>
+      <label>Username</label>
+      <input name="username" required>
+    </div>
+    <div>
+      <label>Email</label>
+      <input name="email" type="email" placeholder="name@domain.com">
+    </div>
+    <div>
+      <label>Role</label>
+      <select name="role">
+        <option value="faculty_staff">Faculty/Staff</option>
+        <option value="admin">Admin</option>
+      </select>
+    </div>
+    <div>
+      <label>Hours Balance</label>
+      <input name="hours_balance" type="number" step="0.25" value="160">
+    </div>
+    <div>
+      <label>Temporary Password</label>
+      <input name="password" type="text" placeholder="Set an initial password" required>
+    </div>
+  </div>
+  <div class="actions">
+    <button class="btn">Create</button>
+  </div>
+</form>
+
+<hr>
+
+<h3>All Users</h3>
+
+{% if users %}
+  {% for u in users %}
+  <form method="post" action="{{ url_for('admin_update_user', user_id=u.id) }}" class="card user-row">
+    <div class="grid grid-5">
       <div>
         <label>Username</label>
-        <input type="text" name="username" required placeholder="e.g. jdoe" />
+        <input name="username" value="{{ u.username }}" required>
       </div>
       <div>
-        <label>Initial Password</label>
-        <input type="text" name="password" required placeholder="e.g. TempPass123" />
-      </div>
-      <div>
-        <label>Email (optional)</label>
-        <input type="email" name="email" placeholder="name@example.com" />
+        <label>Email</label>
+        <input name="email" type="email" value="{{ u.email or '' }}">
       </div>
       <div>
         <label>Role</label>
         <select name="role">
-          <option value="admin">Admin</option>
-          <option value="faculty_staff">Faculty/Staff</option>
+          <option value="faculty_staff" {{ 'selected' if u.role=='faculty_staff' else '' }}>Faculty/Staff</option>
+          <option value="admin" {{ 'selected' if u.role=='admin' else '' }}>Admin</option>
         </select>
       </div>
       <div>
-        <label>Starting Balance (hours)</label>
-        <input type="number" name="hours_balance" step="0.1" value="160.0" />
+        <label>Hours Balance</label>
+        <input name="hours_balance" type="number" step="0.25" value="{{ '%.2f'|format(u.hours_balance or 0) }}">
       </div>
-      <div class="align-end">
-        <button class="btn" type="submit">Create User</button>
-      </div>
-    </form>
-  </div>
-
-  <!-- Search -->
-  <div class="card">
-    <h2>Search</h2>
-    <form method="get" action="{{ url_for('manage_users') }}" class="grid-2 gap">
       <div>
-        <label>Find by username</label>
-        <input type="text" name="q" value="{{ q or '' }}" placeholder="type to filter..." />
+        <label>New Password</label>
+        <input name="new_password" type="text" placeholder="(leave blank to keep)">
       </div>
-      <div class="align-end">
-        <button class="btn secondary" type="submit">Search</button>
-        <a class="btn ghost" href="{{ url_for('manage_users') }}">Clear</a>
-      </div>
-    </form>
-  </div>
+    </div>
+    <div class="actions spaced">
+      <button class="btn">Save</button>
+      <button class="btn btn-danger" formaction="{{ url_for('admin_delete_user', user_id=u.id) }}"
+              formmethod="post" onclick="return confirm('Delete {{ u.username }}? This cannot be undone.');">
+        Delete
+      </button>
+    </div>
+  </form>
+  {% endfor %}
+{% else %}
+  <p>No users found.</p>
+{% endif %}
 
-  <!-- Users Table -->
-  <div class="card">
-    <h2>Users</h2>
-    {% if users %}
-      <div class="table-wrap">
-        <table class="table">
-          <thead>
-            <tr>
-              <th>Username</th>
-              <th>Email</th>
-              <th>Role</th>
-              <th>Balance (h)</th>
-              <th>Update</th>
-              <th>Reset Password</th>
-              <th>Delete</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for u in users %}
-            <tr>
-              <form method="post" action="{{ url_for('admin_update_user_all', user_id=u.id) }}">
-                <td>
-                  <input type="text" name="username" value="{{ u.username }}" required />
-                </td>
-                <td>
-                  <input type="email" name="email" value="{{ u.email or '' }}" placeholder="name@example.com" />
-                </td>
-                <td>
-                  <select name="role">
-                    <option value="admin" {{ 'selected' if u.role == 'admin' else '' }}>Admin</option>
-                    <option value="faculty_staff" {{ 'selected' if u.role == 'faculty_staff' else '' }}>Faculty/Staff</option>
-                  </select>
-                </td>
-                <td>
-                  <input type="number" step="0.1" name="hours_balance" value="{{ '%.1f'|format(u.hours_balance or 0) }}" style="width: 7rem;" />
-                  <div>
-                    <span class="{{ 'balance-negative' if u.hours_balance < 0 else 'balance-positive' }}">
-                      {{ "%.1f"|format(u.hours_balance or 0) }}
-                    </span>
-                  </div>
-                </td>
-                <td>
-                  <button class="btn" type="submit">Save</button>
-                </td>
-              </form>
+<hr>
 
-              <td>
-                <form method="post" action="{{ url_for('admin_reset_password', user_id=u.id) }}" class="inline-form">
-                  <input type="text" name="new_password" placeholder="New password" required />
-                  <button class="btn secondary" type="submit">Reset</button>
-                </form>
-              </td>
-              <td>
-                {% if u.id != current_user.id %}
-                <form method="post" action="{{ url_for('admin_delete_user', user_id=u.id) }}" onsubmit="return confirm('Delete user {{ u.username }}? This cannot be undone.');">
-                  <button class="btn danger" type="submit">Delete</button>
-                </form>
-                {% else %}
-                  <span class="muted">You</span>
-                {% endif %}
-              </td>
-            </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      </div>
-    {% else %}
-      <p>No users found.</p>
-    {% endif %}
-  </div>
-</div>
+<form method="post" action="{{ url_for('admin_test_email') }}">
+  <button class="btn btn-secondary">Send Test Email to Admins</button>
+</form>
 
 {% endblock %}
