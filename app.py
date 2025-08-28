@@ -23,10 +23,14 @@ app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "ChangeThisSecret123!")
 
 # Prefer Render DATABASE_URL; default to SQLite (not recommended on Render)
 db_url = os.environ.get("DATABASE_URL", "sqlite:///leave_system.db")
+
+# Normalize for SQLAlchemy with psycopg v3 driver
 if db_url.startswith("postgres://"):
-    db_url = db_url.replace("postgres://", "postgresql://", 1)
+    db_url = db_url.replace("postgres://", "postgresql+psycopg://", 1)
+elif db_url.startswith("postgresql://") and "+psycopg" not in db_url:
+    db_url = db_url.replace("postgresql://", "postgresql+psycopg://", 1)
+
 app.config["SQLALCHEMY_DATABASE_URI"] = db_url
-app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
 db = SQLAlchemy(app)
 
