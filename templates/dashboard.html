@@ -2,69 +2,37 @@
 {% block title %}Dashboard{% endblock %}
 
 {% block content %}
-<div class="content-wrapper">
-  <h1 class="page-title">Welcome, {{ me.username }}!</h1>
+<h2>Welcome, {{ me.username }}!</h2>
 
-  <div class="cards">
-    <div class="card">
-      <h2>Your Balance</h2>
-      <p>
-        Leave Balance:
-        <span class="{{ 'balance-negative' if me.hours_balance < 0 else 'balance-positive' }}">
-          {{ "%.1f"|format(me.hours_balance) }} hours
-        </span>
-      </p>
-      <p>Standard workday: {{ "%.1f"|format(workday) }} hours</p>
-    </div>
+<div class="card">
+  <p><strong>Hours Balance:</strong>
+    {% if me.hours_balance < 0 %}
+      <span style="color:red">{{ '%.2f'|format(me.hours_balance) }} hours</span>
+    {% else %}
+      {{ '%.2f'|format(me.hours_balance) }} hours
+    {% endif %}
+  </p>
+</div>
 
-    <div class="card">
-      <h2>Quick Actions</h2>
-      <div class="btn-row">
-        <a class="btn" href="{{ url_for('new_request') }}">Request Leave</a>
-        <a class="btn" href="{{ url_for('my_requests') }}">View My Requests</a>
-        <a class="btn" href="{{ url_for('calendar') }}">Calendar</a>
-      </div>
-      <div class="btn-row">
-        <a class="btn secondary" href="{{ url_for('update_password') }}">Change Password</a>
-        {% if current_user.role == 'admin' %}
-          <a class="btn warn" href="{{ url_for('manage_users') }}">Manage Users</a>
-        {% endif %}
-      </div>
-    </div>
-
-    <div class="card">
-      <h2>Recent Requests</h2>
-      {% if recent %}
-        <div class="table-wrap">
-          <table class="table">
-            <thead>
-              <tr>
-                <th>Date Range</th>
-                <th>Kind</th>
-                <th>Mode</th>
-                <th>Hours</th>
-                <th>Status</th>
-                <th>Submitted</th>
-              </tr>
-            </thead>
-            <tbody>
-              {% for r in recent %}
-              <tr>
-                <td>{{ r.start_date }} → {{ r.end_date }}</td>
-                <td>{{ r.kind|capitalize }}</td>
-                <td>{{ r.mode|capitalize }}</td>
-                <td>{{ "%.1f"|format(r.hours) }}</td>
-                <td>{{ r.status }}</td>
-                <td>{{ r.created_at.strftime("%Y-%m-%d %H:%M") if r.created_at }}</td>
-              </tr>
-              {% endfor %}
-            </tbody>
-          </table>
-        </div>
-      {% else %}
-        <p>No recent requests yet.</p>
-      {% endif %}
-    </div>
-  </div>
+<div class="card">
+  <h3>Recent Requests</h3>
+  {% if recent %}
+  <table class="requests-table">
+    <tr>
+      <th>Kind</th><th>Mode</th><th>Hours</th><th>Status</th><th>Dates</th>
+    </tr>
+    {% for r in recent %}
+    <tr>
+      <td>{{ r.kind }}</td>
+      <td>{{ r.mode }}</td>
+      <td>{{ r.hours }}</td>
+      <td>{{ r.status }}</td>
+      <td>{{ r.start_date }} → {{ r.end_date }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% else %}
+    <p>No recent requests.</p>
+  {% endif %}
 </div>
 {% endblock %}
