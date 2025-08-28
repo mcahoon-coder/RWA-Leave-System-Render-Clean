@@ -1,18 +1,43 @@
 {% extends "base.html" %}
-{% block title %}Calendar{% endblock %}
-
 {% block content %}
-<h2>Approved Leave Calendar</h2>
-<div id="calendar"></div>
+<div class="content-wrapper">
+  <h2>Calendar</h2>
 
-<link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.css" rel="stylesheet"/>
-<script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.js"></script>
+  <div id="calendar" class="card" style="padding: 0.75rem;">
+    <div id="calendar-root"></div>
+  </div>
+
+  <div class="note">
+    Approved requests appear here. We use an exclusive end date so multi-day events render correctly.
+  </div>
+</div>
+
+<!-- FullCalendar (CDN) -->
+<link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.css" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.js"></script>
+
 <script>
-document.addEventListener("DOMContentLoaded", function() {
-  var calendarEl = document.getElementById("calendar");
-  var calendar = new FullCalendar.Calendar(calendarEl, {
-    initialView: "dayGridMonth",
-    events: "{{ url_for('calendar_data') }}"
+document.addEventListener('DOMContentLoaded', function() {
+  const el = document.getElementById('calendar-root');
+  const calendar = new FullCalendar.Calendar(el, {
+    initialView: 'dayGridMonth',
+    height: 'auto',
+    headerToolbar: {
+      left: 'prev,next today',
+      center: 'title',
+      right: 'dayGridMonth,timeGridWeek,listWeek'
+    },
+    eventSources: [
+      {
+        url: "{{ url_for('calendar_data') }}",
+        method: 'GET',
+        failure: function() {
+          alert('Failed to load calendar data.');
+        },
+      }
+    ],
+    eventDisplay: 'block',
+    eventTimeFormat: { hour: '2-digit', minute: '2-digit', hour12: true }
   });
   calendar.render();
 });
