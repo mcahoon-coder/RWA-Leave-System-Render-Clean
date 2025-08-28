@@ -1,12 +1,12 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8">
-  <title>{{ title or "RWA Leave Management" }}</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>{% block title %}RWA Leave System{% endblock %}</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
-<body>
+<body class="page-bg">
   <header class="site-header">
     <div class="brand">RWA Leave Management</div>
     <nav class="topnav">
@@ -29,23 +29,23 @@
   </header>
 
   <main class="content-wrapper">
-    {% with msgs = get_flashed_messages(with_categories=true) %}
-      {% if msgs %}
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
         <div class="flash-area">
-          {% for cat, msg in msgs %}
-            <div class="flash {{ cat }}">{{ msg }}</div>
+          {% for category, message in messages %}
+            <div class="flash flash-{{ category }}">{{ message }}</div>
           {% endfor %}
         </div>
       {% endif %}
     {% endwith %}
 
-    <div class="card">
+    <div class="card pale-panel">
       {% block content %}{% endblock %}
     </div>
   </main>
 
   <footer class="site-footer">
-    &copy; {{ current_year }} RWA Leave Management System
+    &copy; {{ now.year }} RWA Leave Management System
   </footer>
 </body>
 </html>
