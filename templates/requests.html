@@ -1,49 +1,74 @@
 {% extends "base.html" %}
-{% block title %}Requests{% endblock %}
-
 {% block content %}
-<h2>Leave Requests</h2>
+<div class="content-wrapper">
+  <h2>Leave Requests</h2>
 
-{% if reqs %}
-<table class="requests-table">
-  <tr>
-    <th>User</th><th>Kind</th><th>Mode</th><th>Hours</th><th>Status</th><th>Dates</th><th>Actions</th>
-  </tr>
-  {% for r in reqs %}
-  <tr>
-    <td>{{ r.user.username }}</td>
-    <td>{{ r.kind }}</td>
-    <td>{{ r.mode }}</td>
-    <td>{{ r.hours }}</td>
-    <td>
-      {% if r.status == "Approved" %}
-        <span style="color:green">{{ r.status }}</span>
-      {% elif r.status == "Disapproved" %}
-        <span style="color:orange">{{ r.status }}</span>
-      {% else %}
-        {{ r.status }}
-      {% endif %}
-    </td>
-    <td>{{ r.start_date }} → {{ r.end_date }}</td>
-    <td>
-      {% if is_admin and r.status == "Pending" %}
-        <form method="post" action="{{ url_for('approve', req_id=r.id) }}" style="display:inline">
-          <button class="btn">Approve</button>
-        </form>
-        <form method="post" action="{{ url_for('disapprove', req_id=r.id) }}" style="display:inline">
-          <button class="btn btn-danger">Disapprove</button>
-        </form>
-      {% endif %}
-      {% if r.status in ["Pending", "Approved"] %}
-        <form method="post" action="{{ url_for('cancel', req_id=r.id) }}" style="display:inline">
-          <button class="btn btn-secondary">Cancel</button>
-        </form>
-      {% endif %}
-    </td>
-  </tr>
-  {% endfor %}
-</table>
-{% else %}
-<p>No requests found.</p>
-{% endif %}
+  <form method="get" action="{{ url_for('my_requests') }}" class="filter-form">
+    <label>Status:
+      <select name="status">
+        <option value="all" {% if status == "all" %}selected{% endif %}>All</option>
+        <option value="pending" {% if status == "pending" %}selected{% endif %}>Pending</option>
+        <option value="approved" {% if status == "approved" %}selected{% endif %}>Approved</option>
+        <option value="disapproved" {% if status == "disapproved" %}selected{% endif %}>Disapproved</option>
+        <option value="cancelled" {% if status == "cancelled" %}selected{% endif %}>Cancelled</option>
+      </select>
+    </label>
+    <label>Start Date: <input type="date" name="start" value="{{ start }}"></label>
+    <label>End Date: <input type="date" name="end" value="{{ end }}"></label>
+    <button type="submit" class="btn">Filter</button>
+  </form>
+
+  {% if reqs %}
+    <table class="table">
+      <thead>
+        <tr>
+          <th>User</th>
+          <th>Kind</th>
+          <th>Mode</th>
+          <th>Hours</th>
+          <th>Dates</th>
+          <th>Reason</th>
+          <th>Status</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in reqs %}
+          <tr>
+            <td>{{ r.user.username }}</td>
+            <td>{{ r.kind }}</td>
+            <td>{{ r.mode }}</td>
+            <td>
+              {% if r.hours < 0 %}
+                <span style="color: red;">{{ "%.2f"|format(r.hours) }}</span>
+              {% else %}
+                {{ "%.2f"|format(r.hours) }}
+              {% endif %}
+            </td>
+            <td>{{ r.start_date }} → {{ r.end_date }}</td>
+            <td>{{ r.reason or "" }}</td>
+            <td>{{ r.status }}</td>
+            <td>
+              {% if is_admin and r.status == "Pending" %}
+                <form action="{{ url_for('approve', req_id=r.id) }}" method="post" style="display:inline;">
+                  <button type="submit" class="btn btn-approve">Approve</button>
+                </form>
+                <form action="{{ url_for('disapprove', req_id=r.id) }}" method="post" style="display:inline;">
+                  <button type="submit" class="btn btn-disapprove">Disapprove</button>
+                </form>
+              {% endif %}
+              {% if r.user_id == current_user.id and r.status in ["Pending", "Approved"] %}
+                <form action="{{ url_for('cancel', req_id=r.id) }}" method="post" style="display:inline;">
+                  <button type="submit" class="btn btn-cancel">Cancel</button>
+                </form>
+              {% endif %}
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p>No requests found.</p>
+  {% endif %}
+</div>
 {% endblock %}
