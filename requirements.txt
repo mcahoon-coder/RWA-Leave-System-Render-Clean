@@ -5,4 +5,4 @@ SQLAlchemy==2.0.36
 Werkzeug==3.0.3
 gunicorn==21.2.0
 XlsxWriter==3.2.0
-psycopg[binary]==3.2.1
+psycopg[binary]==3.2.9
