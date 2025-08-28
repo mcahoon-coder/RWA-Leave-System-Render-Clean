@@ -1,104 +1,111 @@
-/* Page background: light royal blue -> white (top to bottom reversed per your request) */
-html, body {
-  height: 100%;
-  margin: 0;
-}
-body {
-  font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
-  color: #0f172a;
-  /* you asked for: background: linear-gradient(to top, #6a8dff, #ffffff); */
+/* Global page background */
+.page-bg {
+  min-height: 100vh;
   background: linear-gradient(to top, #6a8dff, #ffffff);
+  font-family: Arial, sans-serif;
+  margin: 0;
+  color: #333;
 }
 
 /* Header */
 .site-header {
+  background: #1a237e;
+  color: white;
+  padding: 0.8rem 1.2rem;
   display: flex;
-  align-items: center;
   justify-content: space-between;
-  padding: 12px 16px;
-  background: #1e293b; /* dark slate/navy */
-  color: #fff;
+  align-items: center;
 }
-.brand {
-  font-weight: 700;
+.site-header .brand {
+  font-size: 1.3rem;
+  font-weight: bold;
 }
 .topnav a {
-  color: #fff;
+  color: white;
   text-decoration: none;
-  margin: 0 8px;
+  margin-left: 1rem;
 }
-.topnav a:hover { text-decoration: underline; }
+.topnav a:hover {
+  text-decoration: underline;
+}
 
-/* Layout */
+/* Main content wrapper */
 .content-wrapper {
-  max-width: 1100px;
-  margin: 24px auto;
-  padding: 0 16px;
+  max-width: 1000px;
+  margin: 1.5rem auto;
+  padding: 1rem;
 }
 
-/* Card (text area) background: pale yellow -> white (top to bottom) */
-.card {
+/* Card panels */
+.card, .pale-panel {
   background: linear-gradient(to bottom, #fff59d, #ffffff);
-  border: 1px solid #cbd5e1;
   border-radius: 12px;
-  padding: 16px 18px;
-  box-shadow: 0 8px 16px rgba(2, 8, 23, 0.06);
+  padding: 1.2rem;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+  margin-bottom: 1rem;
 }
-
-/* Tables & forms */
-table {
-  width: 100%;
-  border-collapse: collapse;
-  margin: 8px 0 4px;
-  background: #ffffffcc;
-}
-th, td {
-  border: 1px solid #cbd5e1;
-  padding: 8px 10px;
-  text-align: left;
-}
-th {
-  background: #f1f5f9;
-}
-label { display: block; margin: 8px 0 4px; }
-input, select, textarea {
-  width: 100%;
-  padding: 8px 10px;
-  border: 1px solid #cbd5e1;
-  border-radius: 8px;
-  background: #fff;
-}
-button.btn {
-  padding: 8px 14px;
-  border-radius: 8px;
-  border: 1px solid #94a3b8;
-  background: #e2e8f0;
-  cursor: pointer;
-  margin-top: 8px;
-}
-button.primary { background: #2563eb; color: #fff; border-color: #1d4ed8; }
-button.danger { background: #ef4444; color: #fff; border-color: #dc2626; }
 
 /* Flash messages */
-.flash-area { margin-bottom: 10px; }
-.flash { padding: 10px 12px; border-radius: 10px; margin-bottom: 6px; }
-.flash.success { background: #d1fae5; }
-.flash.info    { background: #dbeafe; }
-.flash.warning { background: #fef3c7; }
-.flash.danger  { background: #fee2e2; }
-.flash.secondary { background: #e5e7eb; }
+.flash-area {
+  margin-bottom: 1rem;
+}
+.flash {
+  padding: 0.5rem 0.8rem;
+  border-radius: 6px;
+  margin-bottom: 0.5rem;
+}
+.flash-success { background: #c8e6c9; }
+.flash-danger { background: #ffcdd2; }
+.flash-warning { background: #fff9c4; }
+.flash-info { background: #bbdefb; }
+.flash-secondary { background: #e0e0e0; }
+
+/* Buttons */
+.btn {
+  padding: 0.5rem 1rem;
+  border: none;
+  background: #1976d2;
+  color: white;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.btn:hover {
+  background: #0d47a1;
+}
+.btn-danger { background: #d32f2f; }
+.btn-secondary { background: #616161; }
 
 /* Footer */
 .site-footer {
   text-align: center;
-  color: #334155;
-  padding: 20px 0 40px;
+  font-size: 0.9rem;
+  color: #444;
+  padding: 1rem;
+  margin-top: 2rem;
 }
-.balance-negative {
-    color: red;
-    font-weight: bold;
+
+/* Grid helpers */
+.grid { display: grid; gap: 1rem; }
+.grid-2 { grid-template-columns: 1fr 1fr; }
+.grid-3 { grid-template-columns: 1fr 1fr 1fr; }
+.grid-5 { grid-template-columns: repeat(5, 1fr); }
+
+/* Requests list */
+.requests-table {
+  width: 100%;
+  border-collapse: collapse;
 }
-.balance-positive {
-    color: green;
-    font-weight: bold;
+.requests-table th, .requests-table td {
+  border: 1px solid #ccc;
+  padding: 0.5rem;
+  text-align: left;
+}
+.requests-table th {
+  background: #f5f5f5;
+}
+
+/* Calendar container */
+#calendar {
+  max-width: 900px;
+  margin: 1rem auto;
 }
