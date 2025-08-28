@@ -1,75 +1,50 @@
-/* Body background: Royal blue fading to white */
-body {
-  margin: 0;
-  font-family: Arial, sans-serif;
-  background: linear-gradient(to top, #6a8dff, #ffffff);
-  min-height: 100vh;
-  display: flex;
-  flex-direction: column;
-}
-
-/* Navigation bar */
-.navbar {
-  background-color: #1a237e; /* Dark navy-blue strip for nav */
-  padding: 0.5em 1em;
-}
-
-.navbar ul {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;             /* Horizontal layout */
-  justify-content: flex-start;
-  gap: 1.5em;
-}
-
-.navbar ul li {
-  display: inline;
-}
-
-.navbar ul li a {
-  color: #fff;
-  text-decoration: none;
-  font-weight: bold;
-  transition: color 0.3s ease;
-}
-
-.navbar ul li a:hover {
-  color: #ffeb3b; /* Yellow hover highlight */
-}
-
-/* Content wrapper: pale yellow fading to white */
-.content-wrapper {
-  flex: 1;
-  max-width: 1000px;
-  margin: 1.5em auto;
+/* Login form styling */
+.login-container {
+  max-width: 400px;
+  margin: 2em auto;
   padding: 2em;
   border-radius: 10px;
-  background: linear-gradient(to bottom, #fff59d, #ffffff);
+  background: white;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 
-/* Flash messages */
-.flashes {
+.login-container h2 {
+  text-align: center;
+  margin-bottom: 1em;
+  color: #1a237e;
+}
+
+.form-group {
   margin-bottom: 1em;
 }
-.flash {
-  padding: 0.8em;
-  margin-bottom: 0.5em;
-  border-radius: 6px;
+
+.form-group label {
+  display: block;
+  margin-bottom: 0.3em;
   font-weight: bold;
 }
-.flash.success { background: #c8e6c9; color: #256029; }
-.flash.warning { background: #fff3cd; color: #8a6d3b; }
-.flash.danger  { background: #f8d7da; color: #721c24; }
-.flash.info    { background: #d1ecf1; color: #0c5460; }
-.flash.secondary { background: #e2e3e5; color: #383d41; }
 
-/* Footer */
-.footer {
+.form-group input {
+  width: 100%;
+  padding: 0.6em;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+}
+
+.form-actions {
   text-align: center;
-  padding: 1em;
-  background: #1a237e;
+}
+
+.form-actions button {
+  background-color: #1a237e;
   color: white;
-  font-size: 0.9em;
+  padding: 0.6em 1.5em;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.3s ease;
+}
+
+.form-actions button:hover {
+  background-color: #3949ab;
 }
