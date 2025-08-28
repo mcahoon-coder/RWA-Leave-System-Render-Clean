@@ -8,11 +8,12 @@ from flask_login import (
     login_required, current_user
 )
 from werkzeug.security import generate_password_hash, check_password_hash
-from datetime import datetime, date, timedelta, time as dtime
-import os, smtplib, ssl, io, csv
+from datetime import datetime, date, timedelta
+import os, smtplib, ssl, io, csv, sys
 from email.message import EmailMessage
 from sqlalchemy import text
-import xlsxwriter  # for Excel export (uses memory, safe on Render)
+import xlsxwriter  # Excel export (in-memory)
+from typing import List
 
 # ------------------------------
 # App & DB config
@@ -20,7 +21,7 @@ import xlsxwriter  # for Excel export (uses memory, safe on Render)
 app = Flask(__name__)
 app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "ChangeThisSecret123!")
 
-# Prefer Render DATABASE_URL; default to SQLite
+# Prefer Render DATABASE_URL; default to SQLite (not recommended on Render)
 db_url = os.environ.get("DATABASE_URL", "sqlite:///leave_system.db")
 if db_url.startswith("postgres://"):
     db_url = db_url.replace("postgres://", "postgresql://", 1)
@@ -35,21 +36,31 @@ login_manager.login_view = "login"
 # ------------------------------
 # Email settings (env vars)
 # ------------------------------
-MAIL_HOST = os.environ.get("MAIL_HOST", "")
+MAIL_HOST = os.environ.get("MAIL_HOST", "")          # e.g. smtp.gmail.com
 MAIL_PORT = int(os.environ.get("MAIL_PORT", "587"))
 MAIL_USER = os.environ.get("MAIL_USER", "")
 MAIL_PASSWORD = os.environ.get("MAIL_PASSWORD", "")
 MAIL_USE_TLS = os.environ.get("MAIL_USE_TLS", "true").lower() == "true"
 MAIL_FROM = os.environ.get("MAIL_FROM", MAIL_USER or "no-reply@example.com")
-ADMIN_FALLBACK = os.environ.get("ADMIN_EMAIL", "")
+
+# Optional comma-separated list of fallback admin recipients
+ADMIN_EMAILS_RAW = os.environ.get("ADMIN_EMAILS", "")
+ADMIN_EMAILS_LIST: List[str] = [e.strip() for e in ADMIN_EMAILS_RAW.split(",") if e.strip()]
+
+def _log(msg: str):
+    print(msg, file=sys.stdout, flush=True)
 
 def send_email(to_addrs, subject, body):
+    """Send a simple text email to one or many recipients. No-op if not configured."""
     if not to_addrs:
+        _log("[mail] No recipients; skipping.")
         return
     if isinstance(to_addrs, str):
         to_addrs = [to_addrs]
+
     if not MAIL_HOST or not MAIL_FROM:
-        return  # SMTP not configured
+        _log("[mail] MAIL_HOST or MAIL_FROM not set; skipping email.")
+        return
 
     msg = EmailMessage()
     msg["From"] = MAIL_FROM
@@ -57,29 +68,34 @@ def send_email(to_addrs, subject, body):
     msg["Subject"] = subject
     msg.set_content(body)
     if not msg["To"]:
+        _log("[mail] Empty recipient list after filtering; skipping.")
         return
 
-    if MAIL_USE_TLS:
-        context = ssl.create_default_context()
-        with smtplib.SMTP(MAIL_HOST, MAIL_PORT) as server:
-            server.ehlo()
-            server.starttls(context=context)
-            server.ehlo()
-            if MAIL_USER:
-                server.login(MAIL_USER, MAIL_PASSWORD)
-            server.send_message(msg)
-    else:
-        with smtplib.SMTP(MAIL_HOST, MAIL_PORT) as server:
-            if MAIL_USER:
-                server.login(MAIL_USER, MAIL_PASSWORD)
-            server.send_message(msg)
+    try:
+        if MAIL_USE_TLS:
+            context = ssl.create_default_context()
+            with smtplib.SMTP(MAIL_HOST, MAIL_PORT) as server:
+                server.ehlo()
+                server.starttls(context=context)
+                server.ehlo()
+                if MAIL_USER:
+                    server.login(MAIL_USER, MAIL_PASSWORD)
+                server.send_message(msg)
+        else:
+            with smtplib.SMTP(MAIL_HOST, MAIL_PORT) as server:
+                if MAIL_USER:
+                    server.login(MAIL_USER, MAIL_PASSWORD)
+                server.send_message(msg)
+        _log(f"[mail] Sent to {msg['To']} :: {subject}")
+    except Exception as exc:
+        _log(f"[mail] ERROR sending mail: {exc}")
 
 # ------------------------------
 # Models & constants
 # ------------------------------
 class Role:
     admin = "admin"
-    faculty_staff = "faculty_staff"  # standard user
+    faculty_staff = "faculty_staff"  # was "user" before; we keep name consistent in UI
 
 class RequestStatus:
     pending = "Pending"
@@ -97,7 +113,7 @@ class User(UserMixin, db.Model):
     password_hash = db.Column(db.String(255), nullable=False)
     role = db.Column(db.String(20), default=Role.faculty_staff, nullable=False)
     hours_balance = db.Column(db.Float, default=160.0, nullable=False)
-    email = db.Column(db.String(255))
+    email = db.Column(db.String(255))  # for notifications
 
 class LeaveRequest(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -106,9 +122,6 @@ class LeaveRequest(db.Model):
     mode = db.Column(db.String(10), default=RequestMode.hourly, nullable=False)  # hourly/daily
     start_date = db.Column(db.Date, nullable=False)
     end_date = db.Column(db.Date, nullable=False)
-    # NEW: optional timed leave in 15-min increments (for hourly mode)
-    start_time = db.Column(db.Time)   # nullable
-    end_time = db.Column(db.Time)     # nullable
     hours = db.Column(db.Float, nullable=False)
     reason = db.Column(db.String(500), default="")
     status = db.Column(db.String(20), default=RequestStatus.pending, nullable=False)
@@ -125,22 +138,24 @@ def load_user(user_id):
 # Helpers
 # ------------------------------
 WORKDAY_HOURS = float(os.environ.get("WORKDAY_HOURS", "8"))
-HOLIDAYS: set[date] = set()  # add date(...) here if you want static holidays
+HOLIDAYS: set[date] = set()
 
 def is_workday(d: date) -> bool:
     return d.weekday() < 5 and d not in HOLIDAYS  # Mon–Fri & not holiday
 
 def workdays_between(start: date, end: date) -> int:
+    """Inclusive range, counts only Mon–Fri not in HOLIDAYS."""
     if end < start:
         start, end = end, start
     n, cur = 0, start
     while cur <= end:
         if is_workday(cur):
             n += 1
-        cur += timedelta(days=1)
+        cur = cur + timedelta(days=1)
     return n
 
 def _column_exists(table_name: str, column_name: str) -> bool:
+    """Check column existence (SQLite + Postgres)."""
     bind = db.engine
     dialect = bind.dialect.name
     if dialect == "sqlite":
@@ -155,41 +170,47 @@ def _column_exists(table_name: str, column_name: str) -> bool:
         return db.session.execute(q, {"t": table_name, "c": column_name}).first() is not None
 
 def ensure_db():
-     db.create_all()
+    db.create_all()
 
-     # Add email column if missing (SQLite quick helper only)
-     try:
-         if db.engine.dialect.name == "sqlite" and not _column_exists("user", "email"):
-             db.session.execute(text("ALTER TABLE user ADD COLUMN email VARCHAR(255)"))
-            db.session.commit()
+    # Add email column if missing (SQLite simple migration helper)
+    try:
+        if not _column_exists("user", "email"):
+            if db.engine.dialect.name == "sqlite":
+                db.session.execute(text("ALTER TABLE user ADD COLUMN email VARCHAR(255)"))
+                db.session.commit()
     except Exception:
         db.session.rollback()
 
-    # Seed ONCE only if DB is empty
-    if User.query.count() == 0:
+    # ---- IMPORTANT: seed ONLY if there are no admins at all ----
+    if not User.query.filter_by(role=Role.admin).first():
         db.session.add(User(
             username="mc-admin",
             password_hash=generate_password_hash("RWAadmin2"),
             role=Role.admin,
             hours_balance=160.0,
-            email=ADMIN_FALLBACK or None
+            email=None  # you can set from UI later
         ))
         db.session.commit()
+        _log("[seed] Created fallback admin 'mc-admin' (password: RWAadmin2). Change it ASAP.")
 
 with app.app_context():
     ensure_db()
 
-def admin_emails():
+def admin_emails() -> List[str]:
+    """Collect admin emails from DB; if fewer than 3, add from ADMIN_EMAILS env to reach up to 3."""
     emails = [u.email for u in User.query.filter_by(role=Role.admin).all() if u.email]
-    if not emails and ADMIN_FALLBACK:
-        emails = [ADMIN_FALLBACK]
+    # extend from env list (doesn't *require* exactly 3, but tries to bring total to at most 3)
+    for e in ADMIN_EMAILS_LIST:
+        if len(emails) >= 3:
+            break
+        if e and e not in emails:
+            emails.append(e)
+    # ensure uniqueness, drop empties
+    emails = [e for i, e in enumerate(emails) if e and emails.index(e) == i]
     return emails
 
-# Build list of 15-minute time options as "HH:MM"
-TIME_SLOTS = [f"{h:02d}:{m:02d}" for h in range(0, 24) for m in (0, 15, 30, 45)]
-
-# Shared filter logic for list + exports
 def _filtered_requests_for(current_user_is_admin: bool):
+    """Shared filter logic for Requests list & exports."""
     status = request.args.get("status", "all").strip().lower()
     start_s = request.args.get("start", "").strip()
     end_s = request.args.get("end", "").strip()
@@ -272,64 +293,34 @@ def new_request():
         kind = request.form.get("kind", "annual")
         reason = request.form.get("reason", "")
 
-        # Parse dates
         try:
             sd = datetime.strptime(request.form["start_date"], "%Y-%m-%d").date()
             ed = datetime.strptime(request.form["end_date"], "%Y-%m-%d").date()
         except Exception:
             flash("Invalid dates.", "warning")
-            return render_template("new_request.html", title="New Request", workday=WORKDAY_HOURS, time_slots=TIME_SLOTS)
+            return render_template("new_request.html", title="New Request", workday=WORKDAY_HOURS)
 
         capacity_hours = workdays_between(sd, ed) * WORKDAY_HOURS
         if capacity_hours <= 0:
             flash("No working days in that range.", "warning")
-            return render_template("new_request.html", title="New Request", workday=WORKDAY_HOURS, time_slots=TIME_SLOTS)
-
-        # Determine hours
-        hours = 0.0
-        start_t_obj = None
-        end_t_obj = None
+            return render_template("new_request.html", title="New Request", workday=WORKDAY_HOURS)
 
         if mode == RequestMode.hourly:
-            use_times = request.form.get("use_times", "no") == "yes"
-            if use_times:
-                st_s = request.form.get("start_time", "").strip()
-                et_s = request.form.get("end_time", "").strip()
-                # Require same day for time-window requests
-                if sd != ed:
-                    flash("For start/end times, start and end date must be the same day.", "warning")
-                    return render_template("new_request.html", title="New Request", workday=WORKDAY_HOURS, time_slots=TIME_SLOTS)
-                try:
-                    start_t_obj = datetime.strptime(st_s, "%H:%M").time()
-                    end_t_obj = datetime.strptime(et_s, "%H:%M").time()
-                except Exception:
-                    flash("Invalid time selection.", "warning")
-                    return render_template("new_request.html", title="New Request", workday=WORKDAY_HOURS, time_slots=TIME_SLOTS)
-                start_dt = datetime.combine(sd, start_t_obj)
-                end_dt = datetime.combine(ed, end_t_obj)
-                delta_h = (end_dt - start_dt).total_seconds() / 3600.0
-                if delta_h <= 0:
-                    flash("End time must be after start time.", "warning")
-                    return render_template("new_request.html", title="New Request", workday=WORKDAY_HOURS, time_slots=TIME_SLOTS)
-                # 15-min increments already enforced by dropdowns; still clamp to 2 decimals
-                hours = round(delta_h, 2)
-            else:
-                # Manual hourly entry
-                try:
-                    hours = float(request.form.get("hours", "0"))
-                except Exception:
-                    hours = 0.0
+            try:
+                hours = float(request.form.get("hours", "0"))
+            except Exception:
+                hours = 0.0
         else:
             wd = workdays_between(sd, ed)
             hours = wd * WORKDAY_HOURS
 
         if hours <= 0:
             flash("Requested hours must be greater than zero.", "warning")
-            return render_template("new_request.html", title="New Request", workday=WORKDAY_HOURS, time_slots=TIME_SLOTS)
+            return render_template("new_request.html", title="New Request", workday=WORKDAY_HOURS)
 
         if hours > capacity_hours:
             flash(f"Requested {hours:.2f} exceeds capacity {capacity_hours:.2f} for that range.", "warning")
-            return render_template("new_request.html", title="New Request", workday=WORKDAY_HOURS, time_slots=TIME_SLOTS)
+            return render_template("new_request.html", title="New Request", workday=WORKDAY_HOURS)
 
         req = LeaveRequest(
             user_id=current_user.id,
@@ -337,8 +328,6 @@ def new_request():
             mode=mode,
             start_date=sd,
             end_date=ed,
-            start_time=start_t_obj,
-            end_time=end_t_obj,
             hours=hours,
             reason=reason
         )
@@ -347,11 +336,10 @@ def new_request():
 
         # Notify admins
         subj = "New Leave Request Submitted"
-        timed = (f"{req.start_time.strftime('%H:%M')}–{req.end_time.strftime('%H:%M')} on {sd}" if req.start_time and req.end_time else f"{sd} to {ed}")
         body = (
             f"User: {current_user.username}\n"
             f"Kind: {kind}\nMode: {mode}\nHours: {hours}\n"
-            f"When: {timed}\nReason: {reason or '(none)'}\n"
+            f"Dates: {sd} to {ed}\nReason: {reason or '(none)'}\n"
             f"Status: {req.status}\n"
         )
         send_email(admin_emails(), subj, body)
@@ -359,7 +347,7 @@ def new_request():
         flash("Request submitted.", "success")
         return redirect(url_for("my_requests"))
 
-    return render_template("new_request.html", title="New Request", workday=WORKDAY_HOURS, time_slots=TIME_SLOTS)
+    return render_template("new_request.html", title="New Request", workday=WORKDAY_HOURS)
 
 @app.get("/requests")
 @login_required
@@ -376,6 +364,7 @@ def my_requests():
         end=request.args.get("end", "")
     )
 
+# ----- Approvals (admins may approve into negative) -----
 @app.post("/requests/<int:req_id>/approve")
 @login_required
 def approve(req_id):
@@ -388,8 +377,9 @@ def approve(req_id):
         return redirect(url_for("my_requests"))
 
     u = User.query.get(r.user_id)
-    # Allow negative balances
+    # Allow going negative:
     u.hours_balance = float(u.hours_balance or 0.0) - float(r.hours or 0.0)
+
     r.status = RequestStatus.approved
     r.decided_at = datetime.utcnow()
     db.session.commit()
@@ -399,9 +389,8 @@ def approve(req_id):
         f"Hello {u.username},\n\n"
         f"Your leave request has been APPROVED.\n"
         f"Kind: {r.kind}\nMode: {r.mode}\nHours: {r.hours}\n"
-        f"Dates: {r.start_date} to {r.end_date}\n"
-        + (f"Times: {r.start_time.strftime('%H:%M')}–{r.end_time.strftime('%H:%M')}\n" if r.start_time and r.end_time else "")
-        + f"\nRemaining balance: {u.hours_balance:.1f} hours\n"
+        f"Dates: {r.start_date} to {r.end_date}\n\n"
+        f"Remaining balance: {u.hours_balance:.1f} hours\n"
     )
     send_email([u.email] + admin_emails(), subj, body)
 
@@ -430,7 +419,6 @@ def disapprove(req_id):
         f"Your leave request has been DISAPPROVED.\n"
         f"Kind: {r.kind}\nMode: {r.mode}\nHours: {r.hours}\n"
         f"Dates: {r.start_date} to {r.end_date}\n"
-        + (f"Times: {r.start_time.strftime('%H:%M')}–{r.end_time.strftime('%H:%M')}\n" if r.start_time and r.end_time else "")
     )
     send_email([u.email] + admin_emails(), subj, body)
 
@@ -456,8 +444,7 @@ def cancel(req_id):
         f"User {u.username} cancelled a leave request.\n"
         f"Kind: {r.kind}\nMode: {r.mode}\nHours: {r.hours}\n"
         f"Dates: {r.start_date} to {r.end_date}\n"
-        + (f"Times: {r.start_time.strftime('%H:%M')}–{r.end_time.strftime('%H:%M')}\n" if r.start_time and r.end_time else "")
-        + f"Balance is now: {u.hours_balance:.1f} hours\n"
+        f"Balance is now: {u.hours_balance:.1f} hours\n"
     )
     recipients = admin_emails()
     if u.email:
@@ -487,12 +474,15 @@ def admin_create_user():
     if current_user.role != Role.admin:
         flash("Admins only.", "warning")
         return redirect(url_for("manage_users"))
-
-    username = request.form.get("username", "").strip()
-    password = request.form.get("password", "").strip()
-    email = request.form.get("email", "").strip() or None
-    role = request.form.get("role", Role.faculty_staff)
-    hours_balance = request.form.get("hours_balance", "160.0").strip()
+    username = (request.form.get("username") or "").strip()
+    email = (request.form.get("email") or "").strip() or None
+    role = (request.form.get("role") or Role.faculty_staff).strip()
+    hours_balance = request.form.get("hours_balance") or "0"
+    password = request.form.get("password") or ""
+    try:
+        hb = float(hours_balance)
+    except Exception:
+        hb = 0.0
 
     if not username or not password:
         flash("Username and password are required.", "warning")
@@ -502,70 +492,58 @@ def admin_create_user():
         flash("Username already exists.", "danger")
         return redirect(url_for("manage_users"))
 
-    try:
-        hb = float(hours_balance)
-    except Exception:
-        hb = 160.0
+    if role not in (Role.admin, Role.faculty_staff):
+        role = Role.faculty_staff
 
     u = User(
         username=username,
         password_hash=generate_password_hash(password),
-        role=role if role in (Role.admin, Role.faculty_staff) else Role.faculty_staff,
+        role=role,
         hours_balance=hb,
         email=email
     )
     db.session.add(u)
     db.session.commit()
-    flash(f"User '{username}' created.", "success")
+    flash(f"Created user {username}.", "success")
     return redirect(url_for("manage_users"))
 
-@app.post("/admin/users/<int:user_id>/update-all")
+@app.post("/admin/users/<int:user_id>/update")
 @login_required
-def admin_update_user_all(user_id):
+def admin_update_user(user_id):
     if current_user.role != Role.admin:
         flash("Admins only.", "warning")
         return redirect(url_for("manage_users"))
-
     u = User.query.get_or_404(user_id)
-    new_username = request.form.get("username", "").strip()
-    email = request.form.get("email", "").strip() or None
-    role = request.form.get("role", Role.faculty_staff)
-    hours_balance_s = request.form.get("hours_balance", "").strip()
 
-    if new_username:
-        if new_username != u.username and User.query.filter_by(username=new_username).first():
-            flash("That username is already taken.", "danger")
+    # Editable fields: username, email, role, hours_balance, new_password (optional)
+    username = (request.form.get("username") or "").strip()
+    email = (request.form.get("email") or "").strip() or None
+    role = (request.form.get("role") or u.role).strip()
+    hours_balance = request.form.get("hours_balance")
+    new_pw = (request.form.get("new_password") or "").strip()
+
+    if username and username != u.username:
+        if User.query.filter(User.username.ilike(username)).first():
+            flash("Username already exists.", "danger")
             return redirect(url_for("manage_users"))
-        u.username = new_username
+        u.username = username
 
     u.email = email
     if role in (Role.admin, Role.faculty_staff):
         u.role = role
 
-    try:
-        if hours_balance_s != "":
-            u.hours_balance = float(hours_balance_s)
-    except Exception:
-        flash("Invalid hours balance value.", "warning")
+    if hours_balance is not None and hours_balance != "":
+        try:
+            u.hours_balance = float(hours_balance)
+        except Exception:
+            flash("hours_balance must be a number.", "warning")
+            return redirect(url_for("manage_users"))
+
+    if new_pw:
+        u.password_hash = generate_password_hash(new_pw)
 
     db.session.commit()
-    flash(f"Updated user '{u.username}'.", "success")
-    return redirect(url_for("manage_users"))
-
-@app.post("/admin/users/<int:user_id>/reset")
-@login_required
-def admin_reset_password(user_id):
-    if current_user.role != Role.admin:
-        flash("Admins only.", "warning")
-        return redirect(url_for("manage_users"))
-    new_pw = request.form.get("new_password", "").strip()
-    if not new_pw:
-        flash("Password cannot be empty.", "warning")
-        return redirect(url_for("manage_users"))
-    u = User.query.get_or_404(user_id)
-    u.password_hash = generate_password_hash(new_pw)
-    db.session.commit()
-    flash(f"Password updated for {u.username}.", "success")
+    flash(f"Updated {u.username}.", "success")
     return redirect(url_for("manage_users"))
 
 @app.post("/admin/users/<int:user_id>/delete")
@@ -574,16 +552,16 @@ def admin_delete_user(user_id):
     if current_user.role != Role.admin:
         flash("Admins only.", "warning")
         return redirect(url_for("manage_users"))
-
     u = User.query.get_or_404(user_id)
+
+    # prevent deleting yourself (optional safeguard)
     if u.id == current_user.id:
         flash("You cannot delete your own account.", "warning")
         return redirect(url_for("manage_users"))
 
-    LeaveRequest.query.filter_by(user_id=u.id).delete()
     db.session.delete(u)
     db.session.commit()
-    flash("User deleted.", "success")
+    flash("User deleted.", "info")
     return redirect(url_for("manage_users"))
 
 # ---------- Self-service password change ----------
@@ -616,20 +594,11 @@ def calendar_data():
     events = []
     approved = LeaveRequest.query.filter_by(status=RequestStatus.approved).all()
     for r in approved:
-        if r.start_time and r.end_time and r.start_date == r.end_date:
-            start_dt = datetime.combine(r.start_date, r.start_time)
-            end_dt = datetime.combine(r.end_date, r.end_time)
-            events.append({
-                "title": f"{r.user.username} - {r.kind} ({r.hours:.1f}h)",
-                "start": start_dt.isoformat(),
-                "end": end_dt.isoformat()
-            })
-        else:
-            events.append({
-                "title": f"{r.user.username} - {r.kind} ({r.hours:.1f}h)",
-                "start": r.start_date.isoformat(),
-                "end": (r.end_date + timedelta(days=1)).isoformat()
-            })
+        events.append({
+            "title": f"{r.user.username} - {r.kind} ({r.hours:.1f}h)",
+            "start": r.start_date.isoformat(),
+            "end": (r.end_date + timedelta(days=1)).isoformat()  # exclusive end for FullCalendar
+        })
     return jsonify(events)
 
 # ---------- Exports (admin only) ----------
@@ -641,13 +610,11 @@ def export_requests_csv():
     rows = _filtered_requests_for(True).all()
     output = io.StringIO()
     writer = csv.writer(output)
-    writer.writerow(["ID","Username","Kind","Mode","Hours","Status","Start","End","Start Time","End Time","Created","Decided"])
+    writer.writerow(["ID","Username","Kind","Mode","Hours","Status","Start","End","Created","Decided"])
     for r in rows:
         writer.writerow([
             r.id, r.user.username, r.kind, r.mode, f"{r.hours:.2f}", r.status,
             r.start_date.isoformat(), r.end_date.isoformat(),
-            r.start_time.strftime("%H:%M") if r.start_time else "",
-            r.end_time.strftime("%H:%M") if r.end_time else "",
             r.created_at.isoformat() if r.created_at else "",
             r.decided_at.isoformat() if r.decided_at else ""
         ])
@@ -667,7 +634,7 @@ def export_requests_xlsx():
     wb = xlsxwriter.Workbook(buf, {"in_memory": True})
     ws = wb.add_worksheet("Requests")
 
-    headers = ["ID","Username","Kind","Mode","Hours","Status","Start","End","Start Time","End Time","Created","Decided"]
+    headers = ["ID","Username","Kind","Mode","Hours","Status","Start","End","Created","Decided"]
     hdr_fmt = wb.add_format({"bold": True, "bg_color": "#F1F5F9", "border": 1})
     cell_fmt = wb.add_format({"border": 1})
     date_fmt = wb.add_format({"num_format": "yyyy-mm-dd", "border": 1})
@@ -686,18 +653,17 @@ def export_requests_xlsx():
         ws.write(rix, 5, r.status, cell_fmt)
         ws.write_datetime(rix, 6, datetime.combine(r.start_date, datetime.min.time()), date_fmt)
         ws.write_datetime(rix, 7, datetime.combine(r.end_date, datetime.min.time()), date_fmt)
-        ws.write(rix, 8, r.start_time.strftime("%H:%M") if r.start_time else "", cell_fmt)
-        ws.write(rix, 9, r.end_time.strftime("%H:%M") if r.end_time else "", cell_fmt)
         if r.created_at:
-            ws.write_datetime(rix, 10, r.created_at, dt_fmt)
+            ws.write_datetime(rix, 8, r.created_at, dt_fmt)
         else:
-            ws.write(rix, 10, "", cell_fmt)
+            ws.write(rix, 8, "", cell_fmt)
         if r.decided_at:
-            ws.write_datetime(rix, 11, r.decided_at, dt_fmt)
+            ws.write_datetime(rix, 9, r.decided_at, dt_fmt)
         else:
-            ws.write(rix, 11, "", cell_fmt)
+            ws.write(rix, 9, "", cell_fmt)
         rix += 1
 
+    # autosize columns
     widths = [len(h) for h in headers]
     for row in rows:
         widths[1] = max(widths[1], len(row.user.username or ""))
@@ -717,6 +683,20 @@ def export_requests_xlsx():
         mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
 
+# ---------- Admin: Test email ----------
+@app.post("/admin/test-email")
+@login_required
+def admin_test_email():
+    if current_user.role != Role.admin:
+        abort(403)
+    recipients = admin_emails()
+    if not recipients:
+        flash("No admin recipients found. Add admin emails or set ADMIN_EMAILS.", "warning")
+        return redirect(url_for("manage_users"))
+    send_email(recipients, "Test from RWA Leave System", "This is a test email.")
+    flash(f"Test email sent to: {', '.join(recipients)}", "success")
+    return redirect(url_for("manage_users"))
+
 # ---------- Errors ----------
 @app.errorhandler(404)
 def not_found(e):
@@ -729,5 +709,6 @@ def internal_error(e):
     except Exception:
         return "Internal Server Error", 500
 
+# Dev server entry (ignored by gunicorn)
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
