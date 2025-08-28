@@ -1,44 +1,167 @@
 {% extends "base.html" %}
-{% block title %}New Request{% endblock %}
-
 {% block content %}
-<h2>New Leave Request</h2>
+<div class="content-wrapper">
+  <h2>New Leave Request</h2>
 
-<form method="post" class="card">
-  <div class="grid grid-2">
-    <div>
-      <label>Start Date</label>
-      <input type="date" name="start_date" required>
-    </div>
-    <div>
-      <label>End Date</label>
-      <input type="date" name="end_date" required>
-    </div>
-    <div>
-      <label>Mode</label>
-      <select name="mode">
-        <option value="hourly">Hourly</option>
-        <option value="daily">Daily</option>
-      </select>
-    </div>
-    <div>
-      <label>Hours (if hourly)</label>
-      <input type="number" name="hours" step="0.25">
-    </div>
-    <div>
-      <label>Kind</label>
-      <select name="kind">
+  <form action="{{ url_for('new_request') }}" method="post" id="leaveForm" class="form-grid">
+    <!-- Kind -->
+    <div class="form-row">
+      <label for="kind">Leave Type</label>
+      <select name="kind" id="kind" required>
         <option value="annual">Annual</option>
         <option value="sick">Sick</option>
       </select>
     </div>
-    <div>
-      <label>Reason</label>
-      <textarea name="reason"></textarea>
+
+    <!-- Mode -->
+    <div class="form-row">
+      <label>Mode</label>
+      <div class="chip-group">
+        <label class="chip">
+          <input type="radio" name="mode" value="hourly" id="modeHourly" checked>
+          <span>Hourly</span>
+        </label>
+        <label class="chip">
+          <input type="radio" name="mode" value="daily" id="modeDaily">
+          <span>Full Day(s)</span>
+        </label>
+      </div>
+      <small class="hint">
+        Hourly: choose start/end time to the nearest 15 minutes.<br>
+        Full Day(s): we’ll auto-calc using a {{ "%.2f"|format(workday) }}-hour workday (Mon–Fri).
+      </small>
     </div>
+
+    <!-- Dates & Times -->
+    <div class="form-row two-col">
+      <div>
+        <label for="start_date">Start Date</label>
+        <input type="date" name="start_date" id="start_date" required>
+      </div>
+      <div>
+        <label for="end_date">End Date</label>
+        <input type="date" name="end_date" id="end_date" required>
+      </div>
+    </div>
+
+    <!-- Time pickers (15-min increments) — shown only for Hourly -->
+    <div class="form-row two-col hourly-only">
+      <div>
+        <label for="start_time">Start Time</label>
+        <input type="time" name="start_time" id="start_time" step="900" value="08:00">
+      </div>
+      <div>
+        <label for="end_time">End Time</label>
+        <input type="time" name="end_time" id="end_time" step="900" value="12:00">
+      </div>
+    </div>
+
+    <!-- Hours (readonly for Hourly; hidden for Daily since server computes) -->
+    <div class="form-row hourly-only">
+      <label for="hours">Total Hours (auto)</label>
+      <input type="number" name="hours" id="hours" step="0.25" min="0" value="4.00" readonly class="readonly">
+      <small class="hint">Calculated from start/end time, rounded to the nearest 0.25 hour.</small>
+    </div>
+
+    <!-- Reason -->
+    <div class="form-row">
+      <label for="reason">Reason (optional)</label>
+      <textarea name="reason" id="reason" rows="3" placeholder="Optional notes…"></textarea>
+    </div>
+
+    <div class="form-actions">
+      <button type="submit" class="btn">Submit Request</button>
+      <a href="{{ url_for('my_requests') }}" class="btn btn-secondary">Back to Requests</a>
+    </div>
+  </form>
+
+  <div class="note">
+    <strong>Heads-up:</strong> For Full Day(s), the exact hours will be calculated on the server using business days (Mon–Fri) × {{ "%.2f"|format(workday) }} hours/day.
   </div>
-  <div class="actions">
-    <button class="btn">Submit</button>
-  </div>
-</form>
+</div>
+
+<script>
+(function () {
+  const modeHourly = document.getElementById('modeHourly');
+  const modeDaily  = document.getElementById('modeDaily');
+  const hourlyBlocks = document.querySelectorAll('.hourly-only');
+
+  const startDate = document.getElementById('start_date');
+  const endDate   = document.getElementById('end_date');
+  const startTime = document.getElementById('start_time');
+  const endTime   = document.getElementById('end_time');
+  const hoursEl   = document.getElementById('hours');
+
+  // Toggle hourly UI
+  function syncModeUI() {
+    const isHourly = modeHourly.checked;
+    hourlyBlocks.forEach(el => {
+      el.style.display = isHourly ? '' : 'none';
+    });
+    // Hours field should only be required/posted when hourly
+    hoursEl.toggleAttribute('disabled', !isHourly);
+    hoursEl.toggleAttribute('readonly', isHourly);
+  }
+
+  // Round to nearest 0.25
+  function roundQuarter(h) {
+    return Math.round(h * 4) / 4;
+  }
+
+  // Compute hours from start/end date+time
+  function computeHours() {
+    if (!modeHourly.checked) return;
+
+    const sd = startDate.value;
+    const ed = endDate.value;
+    const st = startTime.value || '00:00';
+    const et = endTime.value   || '00:00';
+
+    if (!sd || !ed) return;
+
+    // Build ISO strings (assume local time)
+    // Using noon to avoid DST issues on date-only parse, then set HMS.
+    function buildDate(dateStr, timeStr) {
+      const [hh, mm] = timeStr.split(':').map(Number);
+      const d = new Date(dateStr + 'T12:00'); // middle of day
+      d.setHours(hh, mm, 0, 0);
+      return d;
+    }
+
+    const start = buildDate(sd, st);
+    const end   = buildDate(ed, et);
+
+    let diffMs = end - start;
+    // If negative (end before start), set to 0
+    if (isNaN(diffMs) || diffMs <= 0) {
+      hoursEl.value = '0.00';
+      return;
+    }
+
+    let hours = diffMs / (1000 * 60 * 60);
+    hours = roundQuarter(Math.max(0, hours));
+    hoursEl.value = hours.toFixed(2);
+  }
+
+  // Wire events
+  [modeHourly, modeDaily].forEach(el => el.addEventListener('change', () => {
+    syncModeUI();
+    computeHours();
+  }));
+
+  [startDate, endDate, startTime, endTime].forEach(el =>
+    el.addEventListener('change', computeHours)
+  );
+
+  // Default dates to today
+  const today = new Date();
+  const iso = today.toISOString().slice(0,10);
+  if (!startDate.value) startDate.value = iso;
+  if (!endDate.value)   endDate.value   = iso;
+
+  // Init
+  syncModeUI();
+  computeHours();
+})();
+</script>
 {% endblock %}
