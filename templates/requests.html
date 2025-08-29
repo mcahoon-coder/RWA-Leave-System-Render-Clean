@@ -1,30 +1,31 @@
 {% extends "base.html" %}
 {% block content %}
 <div class="card">
-  <h2>Leave Requests</h2>
-  <table>
-    <tr>
-      <th>User</th><th>Kind</th><th>Mode</th><th>Hours</th>
-      <th>Status</th><th>Dates</th><th>Actions</th>
-    </tr>
-    {% for r in reqs %}
-    <tr>
-      <td>{{ r.user.username }}</td>
-      <td>{{ r.kind }}</td>
-      <td>{{ r.mode }}</td>
-      <td>{{ r.hours }}</td>
-      <td>{{ r.status }}</td>
-      <td>{{ r.start_date }} → {{ r.end_date }}</td>
-      <td>
-        {% if is_admin and r.status == RequestStatus.pending %}
-          <form method="post" action="{{ url_for('approve', req_id=r.id) }}"><button>Approve</button></form>
-          <form method="post" action="{{ url_for('disapprove', req_id=r.id) }}"><button>Disapprove</button></form>
-        {% elif r.status == RequestStatus.pending and r.user_id == current_user.id %}
-          <form method="post" action="{{ url_for('cancel', req_id=r.id) }}"><button>Cancel</button></form>
-        {% endif %}
-      </td>
-    </tr>
-    {% endfor %}
-  </table>
+  <h2>New Leave Request</h2>
+  <form method="post">
+    <label>Mode:
+      <select name="mode">
+        <option value="hourly">Hourly</option>
+        <option value="daily">Daily</option>
+      </select>
+    </label><br>
+    <label>Kind:
+      <select name="kind">
+        <option value="annual">Annual</option>
+        <option value="sick">Sick</option>
+      </select>
+    </label><br>
+    <label>Start Date:<br><input type="date" name="start_date"></label><br>
+    <label>End Date:<br><input type="date" name="end_date"></label><br>
+    <label>Start Time (optional):<br>
+      <input type="time" name="start_time" step="900">
+    </label><br>
+    <label>End Time (optional):<br>
+      <input type="time" name="end_time" step="900">
+    </label><br>
+    <label>Hours (if hourly):<br><input type="number" step="0.1" name="hours"></label><br>
+    <label>Reason:<br><textarea name="reason"></textarea></label><br>
+    <button type="submit">Submit</button>
+  </form>
 </div>
 {% endblock %}
