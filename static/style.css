@@ -1,4 +1,4 @@
-/* Background: royal blue -> white */
+/* Base gradient background */
 body {
   margin: 0;
   font-family: Arial, sans-serif;
@@ -6,38 +6,58 @@ body {
   min-height: 100vh;
 }
 
-/* Header + nav */
-header {
-  background: #002f6c;
+/* Navigation bar */
+.navbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #0044cc;
   color: white;
-  padding: 10px;
+  padding: 10px 20px;
 }
-header h1 {
-  margin: 0;
+.navbar .brand {
+  font-weight: bold;
+  font-size: 1.2em;
 }
-nav ul {
+.navbar-links {
   list-style: none;
-  padding: 0;
   margin: 0;
+  padding: 0;
   display: flex;
   gap: 15px;
 }
-nav ul li {
-  display: inline;
-}
-nav ul li a {
+.navbar-links li a {
   color: white;
   text-decoration: none;
+  font-weight: bold;
 }
-nav ul li a:hover {
+.navbar-links li a:hover {
   text-decoration: underline;
 }
 
-/* Wrapper (pale yellow -> white gradient behind content) */
+/* Flash messages */
+.flash-messages {
+  margin: 15px auto;
+  width: 90%;
+}
+.flash {
+  padding: 10px;
+  border-radius: 4px;
+  margin-bottom: 8px;
+}
+.flash.success { background: #c8e6c9; }
+.flash.danger { background: #ffcdd2; }
+.flash.warning { background: #fff9c4; }
+.flash.info { background: #bbdefb; }
+
+/* Content wrapper */
 .content-wrapper {
+  max-width: 1000px;
+  margin: 20px auto;
   padding: 20px;
   background: linear-gradient(to bottom, #fff59d, #ffffff);
-  min-height: calc(100vh - 120px);
+  border-radius: 10px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
 }
 
 /* Cards */
@@ -51,33 +71,42 @@ nav ul li a:hover {
 
 /* Tables */
 table {
-  border-collapse: collapse;
   width: 100%;
+  border-collapse: collapse;
+  margin-top: 10px;
 }
-th, td {
+table th, table td {
   border: 1px solid #ccc;
   padding: 8px;
+  text-align: left;
 }
-th {
-  background: #f2f2f2;
+table th {
+  background: #f0f0f0;
 }
 
-/* Flash messages */
-.flashes { list-style: none; padding: 0; }
-.flashes li { padding: 8px; margin-bottom: 5px; border-radius: 4px; }
-.flashes .success { background: #c8e6c9; }
-.flashes .danger { background: #ffcdd2; }
-.flashes .warning { background: #fff9c4; }
-.flashes .info { background: #bbdefb; }
-.flashes .secondary { background: #eeeeee; }
-
-/* Negative hours in red */
-.negative { color: red; font-weight: bold; }
-
-/* Footer */
-footer {
-  text-align: center;
-  padding: 10px;
-  background: #002f6c;
+/* Forms */
+form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+input, select, textarea, button {
+  padding: 8px;
+  border-radius: 4px;
+  border: 1px solid #aaa;
+  font-size: 1em;
+}
+button {
+  background: #0044cc;
   color: white;
+  cursor: pointer;
+}
+button:hover {
+  background: #0033aa;
+}
+
+/* Negative balance style */
+.negative {
+  color: red;
+  font-weight: bold;
 }
