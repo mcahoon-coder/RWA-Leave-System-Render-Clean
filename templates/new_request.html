@@ -1,196 +1,38 @@
 {% extends "base.html" %}
 {% block content %}
-<div class="content-wrapper">
+<div class="card">
   <h2>New Leave Request</h2>
+  <form method="post">
+    <label>Type</label>
+    <select name="kind">
+      <option value="annual">Annual</option>
+      <option value="sick">Sick</option>
+    </select>
 
-  <div class="card">
-    <div class="card-body">
-      <form action="{{ url_for('new_request') }}" method="post" id="leave-form">
-        <!-- Mode & Kind -->
-        <div class="form-row two-col">
-          <div>
-            <label for="mode">Request Type</label>
-            <select id="mode" name="mode">
-              <option value="hourly" selected>Hourly (partial day)</option>
-              <option value="daily">Daily (full workdays)</option>
-            </select>
-            <small class="help">Hourly shows time fields and calculates hours. Daily uses {{ '%.2f'|format(workday) }} hours per workday.</small>
-          </div>
+    <label>Mode</label>
+    <select name="mode" id="mode-select">
+      <option value="hourly">Hourly</option>
+      <option value="daily">Daily</option>
+    </select>
 
-          <div>
-            <label for="kind">Leave Kind</label>
-            <select id="kind" name="kind">
-              <option value="annual" selected>Annual</option>
-              <option value="sick">Sick</option>
-            </select>
-          </div>
-        </div>
+    <label>Start Date</label>
+    <input type="date" name="start_date" required>
+    <label>End Date</label>
+    <input type="date" name="end_date" required>
 
-        <!-- Dates & Times -->
-        <div class="form-row four-col" id="dates-times">
-          <div>
-            <label for="start_date">Start Date</label>
-            <input type="date" id="start_date" name="start_date" required>
-          </div>
-          <div>
-            <label for="start_time">Start Time (15-min)</label>
-            <select id="start_time"></select>
-          </div>
-          <div>
-            <label for="end_date">End Date</label>
-            <input type="date" id="end_date" name="end_date" required>
-          </div>
-          <div>
-            <label for="end_time">End Time (15-min)</label>
-            <select id="end_time"></select>
-          </div>
-        </div>
-
-        <!-- Hours & Reason -->
-        <div class="form-row two-col">
-          <div>
-            <label for="hours">Hours</label>
-            <input type="number" id="hours" name="hours" min="0" step="0.25" placeholder="0.00" required>
-            <small class="help">
-              Auto-calculated when <b>Hourly</b> is selected. You can adjust if needed.
-            </small>
-          </div>
-          <div>
-            <label for="reason">Reason (optional)</label>
-            <input type="text" id="reason" name="reason" maxlength="500" placeholder="Optional note for approvers">
-          </div>
-        </div>
-
-        <div class="form-actions">
-          <button class="btn" type="submit">Submit Request</button>
-          <a class="btn btn-ghost" href="{{ url_for('my_requests') }}">Back to Requests</a>
-        </div>
-      </form>
+    <div id="hourly-fields">
+      <label>Hours</label>
+      <input type="number" step="0.25" name="hours">
+      <label>Start Time (quarter)</label>
+      <input type="time" name="start_time" step="900">
+      <label>End Time (quarter)</label>
+      <input type="time" name="end_time" step="900">
     </div>
-  </div>
 
-  <div class="card" style="margin-top:1rem;">
-    <div class="card-body">
-      <p style="margin:0;">
-        <strong>How hours are calculated client-side (for convenience):</strong><br>
-        • Same-day hourly: end time − start time (rounded to quarter hours).<br>
-        • Multi-day hourly: business days × {{ '%.2f'|format(workday) }}h per day (weekends skipped).<br>
-        The server still validates dates and hours.
-      </p>
-    </div>
-  </div>
+    <label>Reason</label>
+    <textarea name="reason"></textarea>
+
+    <button type="submit">Submit</button>
+  </form>
 </div>
-
-<!-- Page-specific styles -->
-<style>
-.two-col { display:grid; grid-template-columns: repeat(auto-fit, minmax(260px,1fr)); gap:1rem; }
-.four-col { display:grid; grid-template-columns: repeat(auto-fit, minmax(200px,1fr)); gap:1rem; }
-.help { display:block; opacity:.75; margin-top:.25rem; font-size:.85rem; }
-</style>
-
-<!-- Time + hours calculator -->
-<script>
-(function () {
-  const WORKDAY_HOURS = {{ workday|default(8) }};
-  const modeEl = document.getElementById('mode');
-  const startDateEl = document.getElementById('start_date');
-  const endDateEl = document.getElementById('end_date');
-  const startTimeEl = document.getElementById('start_time');
-  const endTimeEl = document.getElementById('end_time');
-  const hoursEl = document.getElementById('hours');
-
-  // Build 15-min options (you can change the window here)
-  function buildQuarterOptions(selectEl, startMinutes = 7*60, endMinutes = 18*60) {
-    selectEl.innerHTML = '';
-    for (let m = startMinutes; m <= endMinutes; m += 15) {
-      const h = Math.floor(m / 60);
-      const min = m % 60;
-      const label = `${String(h).padStart(2,'0')}:${String(min).padStart(2,'0')}`;
-      const opt = document.createElement('option');
-      opt.value = label;
-      opt.textContent = label;
-      selectEl.appendChild(opt);
-    }
-  }
-
-  function toDate(value) {
-    if (!value) return null;
-    const d = new Date(value + 'T00:00:00');
-    return isNaN(d) ? null : d;
-  }
-
-  function parseHM(str) {
-    const [hh, mm] = (str || '').split(':').map(Number);
-    if (isNaN(hh) || isNaN(mm)) return null;
-    return hh * 60 + mm;
-  }
-
-  function businessDays(start, end) {
-    if (!start || !end) return 0;
-    if (end < start) [start, end] = [end, start];
-    let days = 0;
-    let cur = new Date(start);
-    while (cur <= end) {
-      const dow = cur.getDay(); // 0 Sun .. 6 Sat
-      if (dow >= 1 && dow <= 5) days++;
-      cur.setDate(cur.getDate() + 1);
-    }
-    return days;
-  }
-
-  function roundToQuarter(hourFloat) {
-    return Math.round(hourFloat * 4) / 4;
-  }
-
-  function recalcHours() {
-    const mode = modeEl.value;
-    const sd = toDate(startDateEl.value);
-    const ed = toDate(endDateEl.value);
-
-    if (!sd || !ed) return;
-
-    if (mode === 'daily') {
-      // Daily: full workdays
-      const bdays = businessDays(sd, ed);
-      hoursEl.value = (bdays * WORKDAY_HOURS).toFixed(2);
-      startTimeEl.disabled = true;
-      endTimeEl.disabled = true;
-      return;
-    }
-
-    // Hourly:
-    startTimeEl.disabled = false;
-    endTimeEl.disabled = false;
-
-    // Same-day precise calc using times; multi-day falls back to bdays * workday
-    if (sd.toDateString() === ed.toDateString()) {
-      const sm = parseHM(startTimeEl.value);
-      const em = parseHM(endTimeEl.value);
-      if (sm == null || em == null) return;
-      let diffMin = em - sm;
-      if (diffMin < 0) diffMin = 0;
-      const hours = roundToQuarter(diffMin / 60);
-      hoursEl.value = hours.toFixed(2);
-    } else {
-      const bdays = businessDays(sd, ed);
-      hoursEl.value = (bdays * WORKDAY_HOURS).toFixed(2);
-    }
-  }
-
-  // Initialize time selects
-  buildQuarterOptions(startTimeEl);
-  buildQuarterOptions(endTimeEl);
-  // Set sensible defaults
-  startTimeEl.value = '08:00';
-  endTimeEl.value = '17:00';
-
-  // Wire events
-  [modeEl, startDateEl, endDateEl, startTimeEl, endTimeEl].forEach(el =>
-    el.addEventListener('change', recalcHours)
-  );
-
-  // Recalc on load if dates preset
-  recalcHours();
-})();
-</script>
 {% endblock %}
