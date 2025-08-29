@@ -1,48 +1,83 @@
-/* New Request form layout tweaks */
-.form-grid .form-row {
-  margin-bottom: 0.9rem;
+/* Background: royal blue -> white */
+body {
+  margin: 0;
+  font-family: Arial, sans-serif;
+  background: linear-gradient(to top, #6a8dff, #ffffff);
+  min-height: 100vh;
 }
 
-.form-row.two-col {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 1rem;
+/* Header + nav */
+header {
+  background: #002f6c;
+  color: white;
+  padding: 10px;
 }
-
-.readonly {
-  background: #f7f7f7;
+header h1 {
+  margin: 0;
 }
-
-.hint {
-  font-size: 0.9rem;
-  color: #374151;
-}
-
-.note {
-  margin-top: 1rem;
-  font-size: 0.95rem;
-  color: #333;
-}
-
-/* Chip-style radios */
-.chip-group {
+nav ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
   display: flex;
-  gap: 0.5rem;
-  flex-wrap: wrap;
-  margin-top: 0.25rem;
+  gap: 15px;
 }
-.chip input[type="radio"] { display: none; }
-.chip span {
-  display: inline-block;
-  padding: 0.4rem 0.7rem;
-  border-radius: 9999px;
-  border: 1px solid #1a237e;
-  color: #1a237e;
-  background: #ffffff;
-  cursor: pointer;
-  user-select: none;
+nav ul li {
+  display: inline;
 }
-.chip input[type="radio"]:checked + span {
-  background: #1a237e;
-  color: #ffffff;
+nav ul li a {
+  color: white;
+  text-decoration: none;
+}
+nav ul li a:hover {
+  text-decoration: underline;
+}
+
+/* Wrapper (pale yellow -> white gradient behind content) */
+.content-wrapper {
+  padding: 20px;
+  background: linear-gradient(to bottom, #fff59d, #ffffff);
+  min-height: calc(100vh - 120px);
+}
+
+/* Cards */
+.card {
+  background: white;
+  border-radius: 8px;
+  padding: 15px;
+  margin-bottom: 20px;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+}
+
+/* Tables */
+table {
+  border-collapse: collapse;
+  width: 100%;
+}
+th, td {
+  border: 1px solid #ccc;
+  padding: 8px;
+}
+th {
+  background: #f2f2f2;
+}
+
+/* Flash messages */
+.flashes { list-style: none; padding: 0; }
+.flashes li { padding: 8px; margin-bottom: 5px; border-radius: 4px; }
+.flashes .success { background: #c8e6c9; }
+.flashes .danger { background: #ffcdd2; }
+.flashes .warning { background: #fff9c4; }
+.flashes .info { background: #bbdefb; }
+.flashes .secondary { background: #eeeeee; }
+
+/* Negative hours in red */
+.negative { color: red; font-weight: bold; }
+
+/* Footer */
+footer {
+  text-align: center;
+  padding: 10px;
+  background: #002f6c;
+  color: white;
 }
