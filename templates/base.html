@@ -2,50 +2,46 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{% block title %}RWA Leave Management{% endblock %}</title>
+  <title>{{ title or "RWA Leave Management System" }}</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
-  <!-- Navigation -->
-  <nav class="navbar">
-    <ul>
-      {% if current_user.is_authenticated %}
+  <header>
+    <h1>RWA Leave Management System</h1>
+    {% if current_user.is_authenticated %}
+    <nav>
+      <ul>
         <li><a href="{{ url_for('dashboard') }}">Dashboard</a></li>
         <li><a href="{{ url_for('new_request') }}">New Request</a></li>
-        <li><a href="{{ url_for('my_requests') }}">My Requests</a></li>
+        <li><a href="{{ url_for('my_requests') }}">Requests</a></li>
         <li><a href="{{ url_for('calendar') }}">Calendar</a></li>
-        {% if current_user.role == 'admin' %}
+        {% if current_user.role == Role.admin %}
           <li><a href="{{ url_for('manage_users') }}">Manage Users</a></li>
           <li><a href="{{ url_for('export_requests_csv') }}">Export CSV</a></li>
           <li><a href="{{ url_for('export_requests_xlsx') }}">Export Excel</a></li>
         {% endif %}
-        <li><a href="{{ url_for('update_password') }}">Change Password</a></li>
+        <li><a href="{{ url_for('update_password') }}">Update Password</a></li>
         <li><a href="{{ url_for('logout') }}">Logout</a></li>
-      {% else %}
-        <li><a href="{{ url_for('login') }}">Login</a></li>
-      {% endif %}
-    </ul>
-  </nav>
+      </ul>
+    </nav>
+    {% endif %}
+  </header>
 
-  <!-- Content Wrapper -->
   <main class="content-wrapper">
     {% with messages = get_flashed_messages(with_categories=true) %}
       {% if messages %}
-        <div class="flashes">
+        <ul class="flashes">
           {% for category, message in messages %}
-            <div class="flash {{ category }}">{{ message }}</div>
+            <li class="{{ category }}">{{ message }}</li>
           {% endfor %}
-        </div>
+        </ul>
       {% endif %}
     {% endwith %}
-
     {% block content %}{% endblock %}
   </main>
 
-  <!-- Footer -->
-  <footer class="footer">
-    <p>&copy; {{ now.year }} RWA Leave Management System</p>
+  <footer>
+    &copy; {{ datetime.utcnow().year }} RWA Leave Management System
   </footer>
 </body>
 </html>
