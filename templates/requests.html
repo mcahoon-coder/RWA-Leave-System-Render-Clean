@@ -1,124 +1,30 @@
 {% extends "base.html" %}
 {% block content %}
-<div class="content-wrapper">
+<div class="card">
   <h2>Leave Requests</h2>
-
-  <!-- Filter -->
-  <form action="{{ url_for('my_requests') }}" method="get" class="card" style="margin-bottom:1rem;">
-    <div class="card-body">
-      <div class="form-row three-col">
-        <div>
-          <label for="status">Status</label>
-          <select id="status" name="status">
-            {% set cur = (status or 'all')|lower %}
-            <option value="all"       {{ 'selected' if cur=='all' else '' }}>All</option>
-            <option value="pending"   {{ 'selected' if cur=='pending' else '' }}>Pending</option>
-            <option value="approved"  {{ 'selected' if cur=='approved' else '' }}>Approved</option>
-            <option value="disapproved" {{ 'selected' if cur=='disapproved' else '' }}>Disapproved</option>
-            <option value="cancelled" {{ 'selected' if cur=='cancelled' else '' }}>Cancelled</option>
-          </select>
-        </div>
-        <div>
-          <label for="start">Start on/after</label>
-          <input type="date" id="start" name="start" value="{{ start or '' }}">
-        </div>
-        <div>
-          <label for="end">End on/before</label>
-          <input type="date" id="end" name="end" value="{{ end or '' }}">
-        </div>
-      </div>
-
-      <div class="form-actions">
-        <button class="btn" type="submit">Apply Filters</button>
-        <a class="btn btn-ghost" href="{{ url_for('my_requests') }}">Clear</a>
-
-        {% if is_admin %}
-        <div class="spacer"></div>
-        <a class="btn btn-secondary" href="{{ url_for('export_requests_csv') }}">Export CSV</a>
-        <a class="btn btn-secondary" href="{{ url_for('export_requests_xlsx') }}">Export Excel</a>
+  <table>
+    <tr>
+      <th>User</th><th>Kind</th><th>Mode</th><th>Hours</th>
+      <th>Status</th><th>Dates</th><th>Actions</th>
+    </tr>
+    {% for r in reqs %}
+    <tr>
+      <td>{{ r.user.username }}</td>
+      <td>{{ r.kind }}</td>
+      <td>{{ r.mode }}</td>
+      <td>{{ r.hours }}</td>
+      <td>{{ r.status }}</td>
+      <td>{{ r.start_date }} → {{ r.end_date }}</td>
+      <td>
+        {% if is_admin and r.status == RequestStatus.pending %}
+          <form method="post" action="{{ url_for('approve', req_id=r.id) }}"><button>Approve</button></form>
+          <form method="post" action="{{ url_for('disapprove', req_id=r.id) }}"><button>Disapprove</button></form>
+        {% elif r.status == RequestStatus.pending and r.user_id == current_user.id %}
+          <form method="post" action="{{ url_for('cancel', req_id=r.id) }}"><button>Cancel</button></form>
         {% endif %}
-      </div>
-    </div>
-  </form>
-
-  <!-- Requests table -->
-  <div class="card">
-    <div class="card-body">
-      {% if reqs %}
-      <div class="table-wrap">
-        <table class="table">
-          <thead>
-            <tr>
-              {% if is_admin %}<th>User</th>{% endif %}
-              <th>Kind</th>
-              <th>Mode</th>
-              <th>Hours</th>
-              <th>Start</th>
-              <th>End</th>
-              <th>Status</th>
-              <th>Reason</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-          {% for r in reqs %}
-            <tr>
-              {% if is_admin %}<td class="nowrap">{{ r.user.username }}</td>{% endif %}
-              <td class="nowrap">{{ r.kind|capitalize }}</td>
-              <td class="nowrap">{{ r.mode|capitalize }}</td>
-              <td class="nowrap">{{ '%.2f'|format(r.hours or 0.0) }}</td>
-              <td class="nowrap">{{ r.start_date.strftime('%Y-%m-%d') }}</td>
-              <td class="nowrap">{{ r.end_date.strftime('%Y-%m-%d') }}</td>
-              <td class="nowrap">
-                <span class="status status-{{ r.status|lower }}">{{ r.status }}</span>
-              </td>
-              <td>{{ r.reason or '' }}</td>
-              <td class="nowrap">
-                {% if is_admin and r.status == 'Pending' %}
-                  <form action="{{ url_for('approve', req_id=r.id) }}" method="post" style="display:inline;">
-                    <button class="btn" type="submit" title="Approve">Approve</button>
-                  </form>
-                  <form action="{{ url_for('disapprove', req_id=r.id) }}" method="post" style="display:inline;">
-                    <button class="btn btn-secondary" type="submit" title="Disapprove">Disapprove</button>
-                  </form>
-                {% endif %}
-                {% if current_user.role == 'admin' or r.user_id == current_user.id %}
-                  {% if r.status in ['Pending','Approved'] %}
-                  <form action="{{ url_for('cancel', req_id=r.id) }}" method="post" style="display:inline;">
-                    <button class="btn btn-ghost" type="submit" title="Cancel" onclick="return confirm('Cancel this request?');">Cancel</button>
-                  </form>
-                  {% endif %}
-                {% endif %}
-              </td>
-            </tr>
-          {% endfor %}
-          </tbody>
-        </table>
-      </div>
-      {% else %}
-        <p>No requests match your filter.</p>
-      {% endif %}
-    </div>
-  </div>
-
-  <div class="form-actions" style="margin-top:1rem;">
-    <a class="btn" href="{{ url_for('new_request') }}">New Leave Request</a>
-  </div>
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
 </div>
-
-<style>
-.table-wrap { overflow-x: auto; }
-.table { width:100%; border-collapse: collapse; }
-.table th, .table td { padding: 0.6rem; border-bottom: 1px solid rgba(0,0,0,0.06); vertical-align: top; }
-.table th { text-align: left; font-weight: 600; }
-.nowrap { white-space: nowrap; }
-.status { padding: .15rem .5rem; border-radius: .5rem; font-size: .85rem; }
-.status-pending { background: #fff3cd; color: #7a5d00; }
-.status-approved { background: #e6f4ea; color: #1b5e20; }
-.status-disapproved { background: #fdecea; color: #7f1d1d; }
-.status-cancelled { background: #eceff1; color: #263238; }
-.spacer { flex: 1; }
-.form-actions { display:flex; gap:.5rem; align-items:center; flex-wrap:wrap; }
-.btn-ghost { background: transparent; border: 1px solid #1a237e; color: #1a237e; }
-</style>
 {% endblock %}
