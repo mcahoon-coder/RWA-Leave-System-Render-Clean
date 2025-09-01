@@ -1,31 +1,26 @@
 {% extends "base.html" %}
-{% block title %}Calendar{% endblock %}
+{% block title %}Team Calendar · RWA Leave{% endblock %}
 {% block content %}
-<div class="page-header">
-  <h1>Calendar</h1>
-</div>
+  <h1>Team Calendar</h1>
+  <div id="calendar"></div>
 
-<div id="calendar" class="card" style="padding: 12px;"></div>
+  <!-- FullCalendar assets -->
+  <link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.css" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.js"></script>
 
-<!-- FullCalendar (CDN) -->
-<link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/main.min.css" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/main.min.js"></script>
-
-<script>
-document.addEventListener('DOMContentLoaded', function () {
-  const el = document.getElementById('calendar');
-  const calendar = new FullCalendar.Calendar(el, {
-    initialView: 'dayGridMonth',
-    height: 'auto',
-    headerToolbar: {
-      left: 'prev,next today',
-      center: 'title',
-      right: 'dayGridMonth,timeGridWeek,timeGridDay,listMonth'
-    },
-    events: '{{ url_for("calendar_data") }}',   // <-- uses your /calendar-data route
-    eventDisplay: 'block'
-  });
-  calendar.render();
-});
-</script>
+  <script>
+    document.addEventListener("DOMContentLoaded", function () {
+      const el = document.getElementById("calendar");
+      const calendar = new FullCalendar.Calendar(el, {
+        initialView: "dayGridMonth",
+        headerToolbar: {
+          left: "prev,next today",
+          center: "title",
+          right: "dayGridMonth,timeGridWeek,timeGridDay"
+        },
+        events: "/api/events" // Flask route returning JSON list
+      });
+      calendar.render();
+    });
+  </script>
 {% endblock %}
