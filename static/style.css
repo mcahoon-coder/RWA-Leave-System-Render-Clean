@@ -3,9 +3,7 @@
    ========================================= */
 
 /* Page background: light blue fading into white */
-html, body {
-  height: 100%;
-}
+html, body { height: 100%; }
 body {
   margin: 0;
   font-family: system-ui, -apple-system, Segoe UI, Roboto, Inter, Arial, sans-serif;
@@ -34,6 +32,31 @@ h1 { margin: 10px 0 18px; font-size: 1.6rem; font-weight: 700; }
 h2 { margin: 8px 0 12px; font-size: 1.25rem; font-weight: 700; }
 
 /* -----------------------------------------
+   Cards (for forms/tables/sections)
+   ----------------------------------------- */
+.card {
+  background: linear-gradient(180deg, #fff7cc 0%, #ffffff 55%);
+  border: 1px solid #e5e7eb;
+  border-radius: 14px;
+  padding: 16px;
+  box-shadow: 0 6px 18px rgba(2, 6, 23, 0.06);
+}
+.card + .card { margin-top: 14px; } /* space between stacked cards */
+
+.card-title { margin: 0 0 10px; font-size: 1.1rem; font-weight: 700; }
+.card-subtle { opacity: .85; font-size: .95rem; }
+
+/* Simple responsive grid for arranging cards */
+.card-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 14px;
+}
+@media (min-width: 900px) {
+  .card-grid { grid-template-columns: 1fr 1fr; }
+}
+
+/* -----------------------------------------
    Forms
    ----------------------------------------- */
 
@@ -44,17 +67,9 @@ h2 { margin: 8px 0 12px; font-size: 1.25rem; font-weight: 700; }
   gap: 12px 16px;
   align-items: end;
 }
+.form-grid-2 .full { grid-column: 1 / -1; }
 
-.form-grid-2 .full {
-  grid-column: 1 / -1;
-}
-
-label {
-  display: block;
-  font-weight: 600;
-  margin-bottom: 6px;
-  color: #0f172a;
-}
+label { display: block; font-weight: 600; margin-bottom: 6px; color: #0f172a; }
 
 input[type="text"],
 input[type="password"],
@@ -82,11 +97,11 @@ button, .btn {
   text-decoration: none;
   cursor: pointer;
 }
-button:hover, .btn:hover {
-  background: #eef2ff;               /* indigo-50 */
-}
+button:hover, .btn:hover { background: #eef2ff; } /* indigo-50 */
 
-/* Tables */
+/* -----------------------------------------
+   Tables
+   ----------------------------------------- */
 table {
   width: 100%;
   border-collapse: collapse;
@@ -99,15 +114,14 @@ table th, table td {
   padding: 8px 10px;
   text-align: left;
 }
-table thead th {
-  background: #f8fafc;
-  font-weight: 700;
-}
+table thead th { background: #f8fafc; font-weight: 700; }
 
 /* Small utility spacing */
+.mt-1 { margin-top: 6px; }
 .mt-2 { margin-top: 8px; }
 .mt-3 { margin-top: 12px; }
 .mt-4 { margin-top: 16px; }
+.mb-2 { margin-bottom: 8px; }
 
 /* -----------------------------------------
    Calendar readability on light surface
@@ -134,19 +148,10 @@ table thead th {
   border-color: #e5e7eb;
 }
 #calendar .fc-daygrid-day-number,
-#calendar .fc-col-header-cell-cushion {
-  color: #0f172a;
-  text-decoration: none;
-}
-#calendar .fc-event {
-  background: #2563eb;
-  border: 1px solid #1d4ed8;
-  color: #ffffff;
-}
+#calendar .fc-col-header-cell-cushion { color: #0f172a; text-decoration: none; }
+#calendar .fc-event { background: #2563eb; border: 1px solid #1d4ed8; color: #ffffff; }
 
 /* Responsive: stack the login inputs on small screens */
 @media (max-width: 600px) {
-  .form-grid-2 {
-    grid-template-columns: 1fr;
-  }
+  .form-grid-2 { grid-template-columns: 1fr; }
 }
