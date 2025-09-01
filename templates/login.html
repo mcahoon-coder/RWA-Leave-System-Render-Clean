@@ -1,10 +1,24 @@
 {% extends "base.html" %}
 {% block title %}Login · RWA Leave{% endblock %}
+
 {% block content %}
   <h1>Login</h1>
+
   <form method="post" action="{{ url_for('login') }}">
-    <div><label>Username <input type="text" name="username" required></label></div>
-    <div><label>Password <input type="password" name="password" required></label></div>
-    <div style="margin-top:10px;"><button type="submit">Sign in</button></div>
+    <div class="form-grid-2">
+      <div>
+        <label for="username">Username</label>
+        <input id="username" type="text" name="username" required>
+      </div>
+
+      <div>
+        <label for="password">Password</label>
+        <input id="password" type="password" name="password" required>
+      </div>
+
+      <div class="full mt-3">
+        <button type="submit">Sign in</button>
+      </div>
+    </div>
   </form>
 {% endblock %}
