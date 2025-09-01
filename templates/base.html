@@ -4,11 +4,14 @@
   <meta charset="utf-8">
   <title>{% block title %}RWA Leave System{% endblock %}</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <!-- Single source of truth for styles -->
   <link href="{{ url_for('static', filename='styles.css') }}" rel="stylesheet">
+
   {% block head %}{% endblock %}
 </head>
 <body>
-  <!-- Nav -->
+  <!-- Royal blue nav -->
   <div class="nav">
     <a href="{{ NAV.dashboard }}" class="brand">RWA Leave</a>
     <ul class="nav-links">
@@ -21,15 +24,16 @@
     </ul>
   </div>
 
-  <!-- Content wrapper -->
+  <!-- Royal blue -> white background wrapper -->
   <div class="content-wrapper">
+    <!-- Pale yellow -> white container -->
     <div class="container">
       <!-- Flash messages -->
       <div class="flash-stack">
         {% with messages = get_flashed_messages(with_categories=true) %}
           {% if messages %}
             {% for category, message in messages %}
-              <div class="flash flash-{{ category }}">{{ message }}</div>
+              <div class="flash flash-{{ category|lower }}">{{ message }}</div>
             {% endfor %}
           {% endif %}
         {% endwith %}
