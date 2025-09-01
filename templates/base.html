@@ -7,29 +7,20 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
 </head>
 <body>
-  <nav class="navbar">
-    <div class="navbar-left">
-      <span class="brand">RWA Leave System</span>
-    </div>
-    <ul class="navbar-links">
-      {% if current_user.is_authenticated %}
-        <li><a href="{{ url_for('dashboard') }}">Dashboard</a></li>
-        <li><a href="{{ url_for('my_requests') }}">Requests</a></li>
-        <li><a href="{{ url_for('new_request') }}">New Request</a></li>
-        <li><a href="{{ url_for('calendar') }}">Calendar</a></li>
-        {% if current_user.role == 'admin' %}
-          <li><a href="{{ url_for('manage_users') }}">Manage Users</a></li>
-          <li><a href="{{ url_for('export_requests_csv') }}">Export CSV</a></li>
-          <li><a href="{{ url_for('export_requests_xlsx') }}">Export Excel</a></li>
-        {% endif %}
-        <li><a href="{{ url_for('update_password') }}">Password</a></li>
-        <li><a href="{{ url_for('logout') }}">Logout</a></li>
-      {% else %}
-        <li><a href="{{ url_for('login') }}">Login</a></li>
-      {% endif %}
-    </ul>
-  </nav>
-
+  <nav class="top-nav">
+  <ul>
+    <li><a href="{{ url_for('dashboard') }}">Dashboard</a></li>
+    <li><a href="{{ url_for('new_request') }}">Request Leave</a></li>
+    <li><a href="{{ url_for('my_requests') }}">My Requests</a></li>
+    <li><a href="{{ url_for('calendar') }}">Calendar</a></li>
+    {% if current_user.is_authenticated and current_user.role == 'admin' %}
+      <li><a href="{{ url_for('manage_users') }}">Manage Users</a></li>
+    {% endif %}
+    {% if current_user.is_authenticated %}
+      <li><a href="{{ url_for('logout') }}">Logout</a></li>
+    {% endif %}
+  </ul>
+</nav>
   <main class="content-wrapper">
     {% with messages = get_flashed_messages(with_categories=true) %}
       {% if messages %}
