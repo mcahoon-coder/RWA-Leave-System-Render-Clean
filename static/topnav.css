@@ -1,21 +1,54 @@
-:root {
-  --bg: #0f172a;
-  --fg: #e2e8f0;
-  --border: #1f2937;
-}
+/* topnav.css — scoped only to the navbar so your site colors remain unchanged */
 
-* { box-sizing: border-box; }
-body { margin: 0; color: var(--fg); font-family: system-ui, -apple-system, Segoe UI, Roboto, Inter, Arial, sans-serif; }
+/* Palette just for the navbar */
+:root {
+  --nav-bg: #0f172a;      /* deep slate for bar only */
+  --nav-fg: #e2e8f0;      /* light text on bar */
+  --nav-border: #1f2937;  /* divider under bar */
+}
 
 .topnav {
-  position: sticky; top: 0; z-index: 100;
-  display: flex; align-items: center; justify-content: space-between; gap: 16px;
-  padding: 12px 20px; background: var(--bg); border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 20px;
+  background: var(--nav-bg);
+  border-bottom: 1px solid var(--nav-border);
 }
-.topnav .brand a { text-decoration: none; color: var(--fg); font-weight: 700; letter-spacing: .3px; }
-.topnav .menu { display: flex; flex-wrap: wrap; gap: 10px; }
-.topnav .menu a { text-decoration: none; color: var(--fg); padding: 8px 12px; border-radius: 10px; border: 1px solid transparent; }
-.topnav .menu a:hover { border-color: var(--border); background: rgba(255,255,255,0.05); }
 
-.page { max-width: 1100px; margin: 24px auto; padding: 0 16px 60px; }
-h1 { margin: 10px 0 18px; font-size: 1.6rem; font-weight: 700; }
+.topnav .brand a {
+  text-decoration: none;
+  color: var(--nav-fg);
+  font-weight: 700;
+  letter-spacing: 0.3px;
+}
+
+.topnav .menu {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.topnav .menu a {
+  text-decoration: none;
+  color: var(--nav-fg);
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid transparent;
+}
+
+.topnav .menu a:hover {
+  border-color: var(--nav-border);
+  background: rgba(255,255,255,0.06);
+}
+
+/* Optional: a bit of page spacing so content isn't jammed under the bar */
+.page {
+  max-width: 1100px;
+  margin: 24px auto;
+  padding: 0 16px 60px;
+}
