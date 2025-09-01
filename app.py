@@ -31,7 +31,7 @@ elif db_url.startswith("postgresql://") and "+psycopg" not in db_url:
 
 app.config["SQLALCHEMY_DATABASE_URI"] = db_url
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
-# (Optional but helpful on Render)
+# Helpful on Render
 app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {"pool_pre_ping": True}
 
 db = SQLAlchemy(app)
@@ -42,9 +42,7 @@ login_manager.login_view = "login"
 # Make current_year available to every template (avoids Jinja errors)
 @app.context_processor
 def inject_globals():
-    return {
-        "current_year": datetime.utcnow().year
-    }
+    return {"current_year": datetime.utcnow().year}
 
 # =========================================================
 # TOP NAV: safe links for templates (prevents 500s if endpoints vary)
@@ -56,16 +54,16 @@ def inject_nav():
             return url_for(endpoint)
         except Exception:
             return fallback
-    # Map the labels you want in your top nav to the correct endpoints/paths
+    # Navbar targets
     return dict(NAV={
-        "dashboard":    safe("dashboard", "/dashboard"),
-        "my_requests":  safe("my_requests", "/requests"),
+        "dashboard":     safe("dashboard", "/dashboard"),
+        "my_requests":   safe("my_requests", "/requests"),
         "team_calendar": safe("calendar", "/calendar"),
-        "new_request":  safe("new_request", "/request/new"),
-        "admin":        safe("manage_users", "/admin/users"),  # points to your admin users page
-        "logout":       safe("logout", "/logout"),
-        "login":        safe("login", "/login"),
-        "home":         safe("home", "/"),
+        "new_request":   safe("new_request", "/request/new"),
+        "admin":         safe("admin_home", "/admin"),   # << Admin goes to Admin HOME
+        "logout":        safe("logout", "/logout"),
+        "login":         safe("login", "/login"),
+        "home":          safe("home", "/"),
     })
 
 @login_manager.user_loader
@@ -93,13 +91,8 @@ def send_email(to_addrs, subject, body):
         return
     if isinstance(to_addrs, str):
         to_addrs = [to_addrs]
-
-    # filter empties
     to_addrs = [a for a in to_addrs if a]
-    if not to_addrs:
-        return
-
-    if not MAIL_HOST or not MAIL_FROM:
+    if not to_addrs or not MAIL_HOST or not MAIL_FROM:
         return  # SMTP not configured
 
     msg = EmailMessage()
@@ -152,21 +145,16 @@ class LeaveRequest(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
     kind = db.Column(db.String(20), default="annual", nullable=False)    # annual/sick
-    mode = db.Column(db.String(10), default=RequestMode.hourly, nullable=False)  # hourly/daily
+    mode = db.Column(db.String(10), default=RequestMode.hourly, nullable=False)
     start_date = db.Column(db.Date, nullable=False)
     end_date = db.Column(db.Date, nullable=False)
-
-    # Optional quarter-hour times (when mode == hourly and hours not provided)
     start_time = db.Column(db.String(5))  # "HH:MM"
     end_time   = db.Column(db.String(5))  # "HH:MM"
-
     hours = db.Column(db.Float, nullable=False)
     reason = db.Column(db.String(500), default="")
     status = db.Column(db.String(20), default=RequestStatus.pending, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     decided_at = db.Column(db.DateTime)
-
-    # eager-load user to avoid DetachedInstanceError in templates
     user = db.relationship("User", backref="leave_requests", lazy="joined")
 
 # =========================================================
@@ -176,10 +164,9 @@ WORKDAY_HOURS = float(os.environ.get("WORKDAY_HOURS", "8"))
 HOLIDAYS: set[date] = set()  # add date(...) objects here if you want static holidays
 
 def is_workday(d: date) -> bool:
-    return d.weekday() < 5 and d not in HOLIDAYS  # Mon–Fri & not holiday
+    return d.weekday() < 5 and d not in HOLIDAYS
 
 def workdays_between(start: date, end: date) -> int:
-    """Inclusive range, counts only Mon–Fri not in HOLIDAYS."""
     if end < start:
         start, end = end, start
     n, cur = 0, start
@@ -190,7 +177,6 @@ def workdays_between(start: date, end: date) -> int:
     return n
 
 def parse_quarter_time(s: str) -> dt_time | None:
-    """Parse 'HH:MM' 24h where MM in {00,15,30,45}."""
     try:
         hh, mm = s.split(":")
         hh_i = int(hh); mm_i = int(mm)
@@ -201,33 +187,27 @@ def parse_quarter_time(s: str) -> dt_time | None:
     return None
 
 def interval_hours(t1: dt_time, t2: dt_time) -> float:
-    """Compute hours between two times on same day; if t2 < t1, swap."""
     dt1 = datetime.combine(date.today(), t1)
     dt2 = datetime.combine(date.today(), t2)
     if dt2 < dt1:
         dt1, dt2 = dt2, dt1
-    delta = dt2 - dt1
-    return delta.total_seconds() / 3600.0
+    return (dt2 - dt1).total_seconds() / 3600.0
 
 def _column_exists(table_name: str, column_name: str) -> bool:
-    """Check column existence (SQLite + Postgres)."""
     bind = db.engine
     dialect = bind.dialect.name
     if dialect == "sqlite":
         res = db.session.execute(text(f"PRAGMA table_info({table_name})")).fetchall()
         return any(row[1] == column_name for row in res)
-    else:
-        q = text("""
-            SELECT 1 FROM information_schema.columns
-            WHERE table_name = :t AND column_name = :c
-            LIMIT 1
-        """)
-        return db.session.execute(q, {"t": table_name, "c": column_name}).first() is not None
+    q = text("""
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name = :t AND column_name = :c
+        LIMIT 1
+    """)
+    return db.session.execute(q, {"t": table_name, "c": column_name}).first() is not None
 
 def ensure_db():
     db.create_all()
-
-    # add newly introduced columns if missing (safe no-ops if exist)
     try:
         if not _column_exists("leave_request", "start_time"):
             if db.engine.dialect.name == "sqlite":
@@ -240,13 +220,10 @@ def ensure_db():
     except Exception:
         db.session.rollback()
 
-    # Seed admin ONLY if there are no users at all (first boot)
     if User.query.count() == 0:
-        # Single bootstrap admin (username/password come from env or defaults)
         bootstrap_username = os.environ.get("BOOTSTRAP_ADMIN_USERNAME", "mc-admin")
         bootstrap_password = os.environ.get("BOOTSTRAP_ADMIN_PASSWORD", "RWAadmin2")
         bootstrap_email    = os.environ.get("BOOTSTRAP_ADMIN_EMAIL", (ADMIN_EMAILS_ENV[0] if ADMIN_EMAILS_ENV else ""))
-
         db.session.add(User(
             username=bootstrap_username,
             password_hash=generate_password_hash(bootstrap_password),
@@ -260,23 +237,14 @@ with app.app_context():
     ensure_db()
 
 def admin_emails() -> list[str]:
-    """All admin notification recipients:
-       1) Any valid emails from ADMIN_EMAILS env
-       2) Any emails on users with role=admin
-    """
     env_list = ADMIN_EMAILS_ENV[:]
     user_list = [u.email for u in User.query.filter_by(role=Role.admin).all() if u.email]
-    combined = env_list + user_list
-    # de-dupe while preserving order
-    seen = set()
-    result = []
-    for e in combined:
+    seen, result = set(), []
+    for e in env_list + user_list:
         if e and e not in seen:
-            result.append(e)
-            seen.add(e)
+            result.append(e); seen.add(e)
     return result
 
-# Shared filter logic for list + exports
 def _filtered_requests_for(current_user_is_admin: bool):
     status = request.args.get("status", "all").strip().lower()
     start_s = request.args.get("start", "").strip()
@@ -289,20 +257,15 @@ def _filtered_requests_for(current_user_is_admin: bool):
     if status and status != "all":
         q = q.filter_by(status=status.capitalize())
 
-    def parse_date(s):
+    def pd(s):
         try:
             return datetime.strptime(s, "%Y-%m-%d").date()
         except Exception:
             return None
 
-    sd = parse_date(start_s)
-    ed = parse_date(end_s)
-
-    if sd:
-        q = q.filter(LeaveRequest.start_date >= sd)
-    if ed:
-        q = q.filter(LeaveRequest.end_date <= ed)
-
+    sd = pd(start_s); ed = pd(end_s)
+    if sd: q = q.filter(LeaveRequest.start_date >= sd)
+    if ed: q = q.filter(LeaveRequest.end_date <= ed)
     return q.order_by(LeaveRequest.created_at.desc())
 
 # =========================================================
@@ -312,7 +275,6 @@ def _filtered_requests_for(current_user_is_admin: bool):
 def health():
     return "ok", 200
 
-# Extra health endpoint (Render-friendly)
 @app.get("/healthz")
 def healthz():
     return {"ok": True}, 200
@@ -357,11 +319,10 @@ def dashboard():
         recent=recent,
     )
 
-# ----- Route aliases for top-nav consistency -----
+# ----- Route aliases for navbar consistency -----
 @app.get("/my-requests")
 @login_required
 def my_requests_alias():
-    # Keep existing links working; canonical page is /requests
     return redirect(url_for("my_requests"))
 
 @app.get("/new-request")
@@ -369,6 +330,7 @@ def my_requests_alias():
 def new_request_alias():
     return redirect(url_for("new_request"))
 
+# ----- New Request -----
 @app.route("/request/new", methods=["GET", "POST"])
 @login_required
 def new_request():
@@ -376,8 +338,6 @@ def new_request():
         mode = request.form.get("mode", RequestMode.hourly)
         kind = request.form.get("kind", "annual")
         reason = request.form.get("reason", "")
-
-        # dates
         try:
             sd = datetime.strptime(request.form["start_date"], "%Y-%m-%d").date()
             ed = datetime.strptime(request.form["end_date"], "%Y-%m-%d").date()
@@ -390,10 +350,8 @@ def new_request():
             flash("No working days in that range.", "warning")
             return render_template("new_request.html", title="New Request", workday=WORKDAY_HOURS)
 
-        # compute hours
         hours = 0.0
         if mode == RequestMode.hourly:
-            # if explicit hours given, use it; else compute from quarter times
             hours_str = (request.form.get("hours") or "").strip()
             if hours_str:
                 try:
@@ -408,7 +366,6 @@ def new_request():
                 if st and et and sd == ed:
                     hours = interval_hours(st, et)
                 else:
-                    # fallback if times not usable
                     hours = 0.0
         else:
             wd = workdays_between(sd, ed)
@@ -419,7 +376,6 @@ def new_request():
             return render_template("new_request.html", title="New Request", workday=WORKDAY_HOURS)
 
         if hours > capacity_hours and mode != RequestMode.hourly:
-            # for daily mode the capacity check is meaningful
             flash(f"Requested {hours:.2f} exceeds capacity {capacity_hours:.2f} for that range.", "warning")
             return render_template("new_request.html", title="New Request", workday=WORKDAY_HOURS)
 
@@ -434,10 +390,8 @@ def new_request():
             hours=hours,
             reason=reason
         )
-        db.session.add(req)
-        db.session.commit()
+        db.session.add(req); db.session.commit()
 
-        # Notify admins
         subj = "New Leave Request Submitted"
         body = (
             f"User: {current_user.username}\n"
@@ -448,12 +402,12 @@ def new_request():
             f"Status: {req.status}\n"
         )
         send_email(admin_emails(), subj, body)
-
         flash("Request submitted.", "success")
         return redirect(url_for("my_requests"))
 
     return render_template("new_request.html", title="New Request", workday=WORKDAY_HOURS)
 
+# ----- Requests list -----
 @app.get("/requests")
 @login_required
 def my_requests():
@@ -469,6 +423,7 @@ def my_requests():
         end=request.args.get("end", "")
     )
 
+# ----- Approvals -----
 @app.post("/requests/<int:req_id>/approve")
 @login_required
 def approve(req_id):
@@ -480,8 +435,6 @@ def approve(req_id):
         flash("Request not pending.", "warning")
         return redirect(url_for("my_requests"))
     u = User.query.get(r.user_id)
-
-    # APPROVE INTO NEGATIVE — no blocking on balance
     u.hours_balance = float(u.hours_balance or 0.0) - float(r.hours or 0.0)
     r.status = RequestStatus.approved
     r.decided_at = datetime.utcnow()
@@ -496,7 +449,6 @@ def approve(req_id):
         f"Remaining balance: {u.hours_balance:.2f} hours\n"
     )
     send_email([u.email] + admin_emails(), subj, body)
-
     flash("Approved.", "success")
     return redirect(url_for("my_requests"))
 
@@ -510,7 +462,6 @@ def disapprove(req_id):
     if r.status != RequestStatus.pending:
         flash("Request not pending.", "warning")
         return redirect(url_for("my_requests"))
-
     r.status = RequestStatus.disapproved
     r.decided_at = datetime.utcnow()
     db.session.commit()
@@ -524,7 +475,6 @@ def disapprove(req_id):
         f"Dates: {r.start_date} to {r.end_date}\n"
     )
     send_email([u.email] + admin_emails(), subj, body)
-
     flash("Disapproved.", "info")
     return redirect(url_for("my_requests"))
 
@@ -537,7 +487,6 @@ def cancel(req_id):
         return redirect(url_for("my_requests"))
     u = User.query.get(r.user_id)
     if r.status == RequestStatus.approved:
-        # restore hours (can move negative toward zero)
         u.hours_balance = float(u.hours_balance or 0.0) + float(r.hours or 0.0)
     r.status = RequestStatus.cancelled
     r.decided_at = datetime.utcnow()
@@ -558,7 +507,53 @@ def cancel(req_id):
     flash("Cancelled.", "secondary")
     return redirect(url_for("my_requests"))
 
-# ---------- Manage Users (admin) ----------
+# ---------- Self-service password change ----------
+@app.route("/account/password", methods=["GET", "POST"])
+@login_required
+def update_password():
+    if request.method == "POST":
+        cur = request.form.get("current_password", "")
+        new = (request.form.get("new_password") or "").strip()
+        if not check_password_hash(current_user.password_hash, cur):
+            flash("Current password is incorrect.", "danger")
+        elif not new:
+            flash("New password cannot be empty.", "warning")
+        else:
+            current_user.password_hash = generate_password_hash(new)
+            db.session.commit()
+            flash("Password updated.", "success")
+            return redirect(url_for("dashboard"))
+    return render_template("update_password.html", title="Update Password")
+
+# ---------- Calendar ----------
+@app.get("/calendar")
+@login_required
+def calendar():
+    return render_template("calendar.html", title="Calendar")
+
+@app.get("/calendar-data")
+@login_required
+def calendar_data():
+    events = []
+    approved = LeaveRequest.query.filter_by(status=RequestStatus.approved).all()
+    for r in approved:
+        events.append({
+            "title": f"{r.user.username} - {r.kind} ({r.hours:.1f}h)",
+            "start": r.start_date.isoformat(),
+            "end": (r.end_date + timedelta(days=1)).isoformat()  # exclusive end for FullCalendar
+        })
+    return jsonify(events)
+
+# ---------- Admin Home (contains User Management, Approvals, Reports) ----------
+@app.get("/admin")
+@login_required
+def admin_home():
+    if current_user.role != Role.admin:
+        flash("Admins only.", "warning")
+        return redirect(url_for("dashboard"))
+    return render_template("admin.html", title="Admin")
+
+# ---------- User Management screen ----------
 @app.route("/admin/users", methods=["GET"])
 @login_required
 def manage_users():
@@ -578,26 +573,21 @@ def admin_create_user():
     if current_user.role != Role.admin:
         flash("Admins only.", "warning")
         return redirect(url_for("manage_users"))
-
     username = (request.form.get("username") or "").strip()
     email = (request.form.get("email") or "").strip()
     role = (request.form.get("role") or Role.staff).strip()
     hours_str = (request.form.get("hours_balance") or "").strip()
     pw = (request.form.get("password") or "").strip()
-
     if not username or not pw:
         flash("Username and password are required.", "warning")
         return redirect(url_for("manage_users"))
-
     if User.query.filter(User.username.ilike(username)).first():
         flash("Username already exists.", "danger")
         return redirect(url_for("manage_users"))
-
     try:
         hours_balance = float(hours_str) if hours_str else 160.0
     except Exception:
         hours_balance = 160.0
-
     user = User(
         username=username,
         password_hash=generate_password_hash(pw),
@@ -605,8 +595,7 @@ def admin_create_user():
         hours_balance=hours_balance,
         email=email or None
     )
-    db.session.add(user)
-    db.session.commit()
+    db.session.add(user); db.session.commit()
     flash(f"User '{username}' created.", "success")
     return redirect(url_for("manage_users"))
 
@@ -617,8 +606,6 @@ def admin_update_user(user_id):
         flash("Admins only.", "warning")
         return redirect(url_for("manage_users"))
     u = User.query.get_or_404(user_id)
-
-    # Editable fields inline
     new_username = (request.form.get("username") or "").strip()
     email = (request.form.get("email") or "").strip()
     role = (request.form.get("role") or "").strip()
@@ -667,60 +654,16 @@ def admin_delete_user(user_id):
         flash("Admins only.", "warning")
         return redirect(url_for("manage_users"))
     u = User.query.get_or_404(user_id)
-
-    # don't let an admin delete themselves (safety)
     if u.id == current_user.id:
         flash("You cannot delete your own account.", "warning")
         return redirect(url_for("manage_users"))
-
-    # also, keep at least one admin in the system
     if u.role == Role.admin and User.query.filter_by(role=Role.admin).count() <= 1:
         flash("At least one admin must remain.", "warning")
         return redirect(url_for("manage_users"))
-
-    # delete user's requests first (or set cascade in model if preferred)
     LeaveRequest.query.filter_by(user_id=u.id).delete()
-    db.session.delete(u)
-    db.session.commit()
+    db.session.delete(u); db.session.commit()
     flash("User deleted.", "success")
     return redirect(url_for("manage_users"))
-
-# ---------- Self-service password change ----------
-@app.route("/account/password", methods=["GET", "POST"])
-@login_required
-def update_password():
-    if request.method == "POST":
-        cur = request.form.get("current_password", "")
-        new = (request.form.get("new_password") or "").strip()
-        if not check_password_hash(current_user.password_hash, cur):
-            flash("Current password is incorrect.", "danger")
-        elif not new:
-            flash("New password cannot be empty.", "warning")
-        else:
-            current_user.password_hash = generate_password_hash(new)
-            db.session.commit()
-            flash("Password updated.", "success")
-            return redirect(url_for("dashboard"))
-    return render_template("update_password.html", title="Update Password")
-
-# ---------- Calendar ----------
-@app.get("/calendar")
-@login_required
-def calendar():
-    return render_template("calendar.html", title="Calendar")
-
-@app.get("/calendar-data")
-@login_required
-def calendar_data():
-    events = []
-    approved = LeaveRequest.query.filter_by(status=RequestStatus.approved).all()
-    for r in approved:
-        events.append({
-            "title": f"{r.user.username} - {r.kind} ({r.hours:.1f}h)",
-            "start": r.start_date.isoformat(),
-            "end": (r.end_date + timedelta(days=1)).isoformat()  # exclusive end for FullCalendar
-        })
-    return jsonify(events)
 
 # ---------- Exports (admin only) ----------
 @app.get("/admin/export/requests.csv")
@@ -773,13 +716,10 @@ def export_requests_xlsx():
         ws.write(rix, 3, r.mode, cell_fmt)
         ws.write_number(rix, 4, float(r.hours or 0.0), cell_fmt)
         ws.write(rix, 5, r.status, cell_fmt)
-
         ws.write_datetime(rix, 6, datetime.combine(r.start_date, datetime.min.time()), date_fmt)
         ws.write_datetime(rix, 7, datetime.combine(r.end_date, datetime.min.time()), date_fmt)
-
         ws.write(rix, 8, r.start_time or "", cell_fmt)
         ws.write(rix, 9, r.end_time or "", cell_fmt)
-
         if r.created_at:
             ws.write_datetime(rix, 10, r.created_at, dt_fmt)
         else:
@@ -788,26 +728,21 @@ def export_requests_xlsx():
             ws.write_datetime(rix, 11, r.decided_at, dt_fmt)
         else:
             ws.write(rix, 11, "", cell_fmt)
-
         rix += 1
 
-    # autosize columns (simple heuristic)
     widths = [len(h) for h in headers]
     for r in rows:
         widths[1] = max(widths[1], len(r.user.username or ""))
         widths[2] = max(widths[2], len(r.kind or ""))
         widths[3] = max(widths[3], len(r.mode or ""))
         widths[5] = max(widths[5], len(r.status or ""))
-
     for c, w in enumerate(widths):
         ws.set_column(c, c, min(max(w + 2, 10), 32))
 
     wb.close()
     buf.seek(0)
     return send_file(
-        buf,
-        as_attachment=True,
-        download_name="leave_requests.xlsx",
+        buf, as_attachment=True, download_name="leave_requests.xlsx",
         mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
 
@@ -823,7 +758,6 @@ def internal_error(e):
     except Exception:
         return "Internal Server Error", 500
 
-# Dev server entry (ignored by gunicorn)
+# Dev server entry (ignored by gunicorn in production)
 if __name__ == "__main__":
-    # useful for local dev
     app.run(host="0.0.0.0", port=5000, debug=True)
