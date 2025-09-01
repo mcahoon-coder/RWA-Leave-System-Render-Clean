@@ -1,25 +1,22 @@
 {% extends "base.html" %}
+{% block title %}Dashboard · RWA Leave{% endblock %}
 {% block content %}
-<div class="card">
-  <h2>Welcome, {{ me.username }}</h2>
-  <p>Your role: {{ me.role }}</p>
-  <p>Your balance:
-    <span class="{% if me.hours_balance < 0 %}negative{% endif %}">
-      {{ "%.2f"|format(me.hours_balance) }} hours
-    </span>
-  </p>
-</div>
+  <h1>Dashboard</h1>
+  <p>Welcome, {{ (me and me.username) or 'user' }}.</p>
 
-<div class="card">
-  <h3>Recent Requests</h3>
-  {% if recent %}
+  <h2>Recent Requests</h2>
+  {% if recent and recent|length %}
     <ul>
       {% for r in recent %}
-        <li>{{ r.start_date }} → {{ r.end_date }} ({{ r.hours }}h) — {{ r.status }}</li>
+        <li>
+          {{ r.created_at.strftime('%Y-%m-%d') if r.created_at else '' }} —
+          {{ r.kind }} ({{ r.mode }}) · {{ '%.2f'|format(r.hours) }}h ·
+          {{ r.start_date }} → {{ r.end_date }} ·
+          <strong>{{ r.status }}</strong>
+        </li>
       {% endfor %}
     </ul>
   {% else %}
     <p>No recent requests.</p>
   {% endif %}
-</div>
 {% endblock %}
