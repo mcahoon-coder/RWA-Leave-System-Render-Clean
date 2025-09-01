@@ -2,21 +2,85 @@
 {% block title %}Dashboard{% endblock %}
 
 {% block content %}
-  <div class="card">
-    <h1>Welcome, {{ me.username }}</h1>
-    <p>Your leave balance: {{ '%.2f'|format(me.hours_balance) }} hours.</p>
-  </div>
+  {% if me.role != 'admin' %}
+    <!-- Staff dashboard -->
+    <div class="card">
+      <h1 style="margin-top:0;">Welcome, {{ me.username }}</h1>
+      <p>Your leave balance: <strong>{{ '%.2f'|format(me.hours_balance) }}</strong> hours.</p>
+      <p>
+        <a class="btn" href="{{ NAV.new_request }}">New Request</a>
+        <a class="btn" href="{{ NAV.my_requests }}">View My Requests</a>
+        <a class="btn" href="{{ NAV.team_calendar }}">My Calendar</a>
+      </p>
+    </div>
 
-  <div class="card">
-    <h2>Recent Requests</h2>
-    {% if recent %}
-      <ul>
-        {% for r in recent %}
-          <li>{{ r.start_date }} → {{ r.end_date }} — {{ r.kind }} ({{ r.hours }}h) — {{ r.status }}</li>
-        {% endfor %}
-      </ul>
-    {% else %}
-      <p>No recent requests.</p>
-    {% endif %}
-  </div>
+    <div class="card">
+      <h2 style="margin-top:0;">Recent Requests</h2>
+      {% if recent %}
+        <table>
+          <thead>
+            <tr><th>Dates</th><th>Kind</th><th>Mode</th><th>Hours</th><th>Status</th></tr>
+          </thead>
+          <tbody>
+            {% for r in recent %}
+              <tr>
+                <td>{{ r.start_date }} → {{ r.end_date }}</td>
+                <td>{{ r.kind }}</td>
+                <td>{{ r.mode }}</td>
+                <td>{{ '%.2f'|format(r.hours) }}</td>
+                <td>{{ r.status }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      {% else %}
+        <p>No recent requests.</p>
+      {% endif %}
+    </div>
+
+  {% else %}
+    <!-- Admin dashboard -->
+    <div class="card">
+      <h1 style="margin-top:0;">Welcome, {{ me.username }}</h1>
+      <p>Your leave balance: <strong>{{ '%.2f'|format(me.hours_balance) }}</strong> hours.</p>
+      <p>
+        <a class="btn" href="{{ NAV.my_requests }}">All Requests</a>
+        <a class="btn" href="{{ NAV.team_calendar }}">Team Calendar</a>
+        <a class="btn" href="{{ NAV.admin }}">Admin</a>
+      </p>
+    </div>
+
+    <div class="card">
+      <h2 style="margin-top:0;">Recent Requests (You)</h2>
+      {% if recent %}
+        <table>
+          <thead>
+            <tr><th>Dates</th><th>Kind</th><th>Mode</th><th>Hours</th><th>Status</th></tr>
+          </thead>
+          <tbody>
+            {% for r in recent %}
+              <tr>
+                <td>{{ r.start_date }} → {{ r.end_date }}</td>
+                <td>{{ r.kind }}</td>
+                <td>{{ r.mode }}</td>
+                <td>{{ '%.2f'|format(r.hours) }}</td>
+                <td>{{ r.status }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      {% else %}
+        <p>No recent requests.</p>
+      {% endif %}
+    </div>
+
+    <div class="card">
+      <h2 style="margin-top:0;">Admin Shortcuts</h2>
+      <p>
+        <a class="btn" href="{{ NAV.my_requests }}?status=Pending">Pending Approvals</a>
+        <a class="btn" href="/admin/users">Manage Users</a>
+        <a class="btn" href="/admin/export/requests.xlsx">Export Excel</a>
+      </p>
+    </div>
+  {% endif %}
 {% endblock %}
