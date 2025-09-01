@@ -39,6 +39,12 @@ db = SQLAlchemy(app)
 login_manager = LoginManager(app)
 login_manager.login_view = "login"
 
+# Make current_year available to every template (avoids Jinja errors)
+@app.context_processor
+def inject_globals():
+    return {
+        "current_year": datetime.utcnow().year
+    }
 # =========================================================
 # Email settings (env vars)
 # =========================================================
