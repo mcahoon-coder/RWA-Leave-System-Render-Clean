@@ -1,46 +1,63 @@
 {% extends "base.html" %}
-{% block title %}Requests · RWA Leave{% endblock %}
+{% block title %}My Requests{% endblock %}
 
 {% block content %}
-  <h1>My Requests</h1>
-
-  <!-- Filters -->
   <div class="card">
-    <div class="card-title">Filter</div>
-    <form method="get" action="{{ NAV.my_requests }}" class="form-grid-2">
-      <div>
-        <label>Status</label>
-        <select name="status">
-          {% set s = (status or 'all')|lower %}
-          {% for x in ['all','Pending','Approved','Disapproved','Cancelled'] %}
-            <option value="{{ x }}" {% if x|lower == s %}selected{% endif %}>{{ x }}</option>
-          {% endfor %}
-        </select>
-      </div>
-      <div>
-        <label>Start</label>
-        <input type="date" name="start" value="{{ start or '' }}">
-      </div>
-      <div>
-        <label>End</label>
-        <input type="date" name="end" value="{{ end or '' }}">
-      </div>
-      <div class="full mt-2">
-        <button type="submit">Apply Filters</button>
+    <h1 style="margin-top:0;">My Requests</h1>
+
+    <!-- Quick status shortcuts -->
+    <div style="margin-bottom: 0.75rem;">
+      <a class="btn" href="{{ NAV.my_requests }}">All</a>
+      <a class="btn" href="{{ NAV.my_requests }}?status=Pending">Pending</a>
+      <a class="btn" href="{{ NAV.my_requests }}?status=Approved">Approved</a>
+      <a class="btn" href="{{ NAV.my_requests }}?status=Disapproved">Disapproved</a>
+      <a class="btn" href="{{ NAV.my_requests }}?status=Cancelled">Cancelled</a>
+    </div>
+
+    <!-- Filters card content -->
+    <form method="get" action="{{ NAV.my_requests }}">
+      <div style="display:grid; grid-template-columns: 1fr 1fr 1fr auto; gap: 12px 16px; align-items:end;">
+        <div>
+          <label>Status</label>
+          <select name="status">
+            {% set s = (status or 'all')|lower %}
+            {% for x in ['all','Pending','Approved','Disapproved','Cancelled'] %}
+              <option value="{{ x }}" {% if x|lower == s %}selected{% endif %}>{{ x }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div>
+          <label>Start</label>
+          <input type="date" name="start" value="{{ start or '' }}">
+        </div>
+        <div>
+          <label>End</label>
+          <input type="date" name="end" value="{{ end or '' }}">
+        </div>
+        <div>
+          <button type="submit">Apply</button>
+        </div>
       </div>
     </form>
   </div>
 
-  <!-- Results -->
-  <div class="card mt-3">
-    <div class="card-title">Results</div>
+  <div class="card">
+    <h2 style="margin-top:0;">Results</h2>
+
     {% set items = reqs or requests %}
     {% if items and items|length %}
       <table>
         <thead>
           <tr>
-            <th>ID</th><th>User</th><th>Kind</th><th>Mode</th><th>Hours</th>
-            <th>Status</th><th>Start</th><th>End</th><th>Reason</th>
+            <th>ID</th>
+            <th>User</th>
+            <th>Kind</th>
+            <th>Mode</th>
+            <th>Hours</th>
+            <th>Status</th>
+            <th>Start</th>
+            <th>End</th>
+            <th>Reason</th>
             {% if is_admin %}<th>Actions</th>{% endif %}
           </tr>
         </thead>
@@ -56,6 +73,7 @@
             <td>{{ r.start_date }}</td>
             <td>{{ r.end_date }}</td>
             <td>{{ r.reason }}</td>
+
             {% if is_admin %}
             <td>
               {% if r.status == 'Pending' %}
@@ -65,7 +83,9 @@
                 <form method="post" action="{{ url_for('disapprove', req_id=r.id) }}" style="display:inline;">
                   <button type="submit">Disapprove</button>
                 </form>
-              {% else %} — {% endif %}
+              {% else %}
+                —
+              {% endif %}
               {% if r.status != 'Cancelled' %}
                 <form method="post" action="{{ url_for('cancel', req_id=r.id) }}" style="display:inline;">
                   <button type="submit">Cancel</button>
@@ -78,7 +98,7 @@
         </tbody>
       </table>
     {% else %}
-      <p class="card-subtle">No requests match your filters.</p>
+      <p>No requests match your filters.</p>
     {% endif %}
   </div>
 {% endblock %}
