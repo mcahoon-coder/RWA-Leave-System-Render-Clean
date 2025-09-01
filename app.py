@@ -45,6 +45,33 @@ def inject_globals():
     return {
         "current_year": datetime.utcnow().year
     }
+
+# =========================================================
+# TOP NAV: safe links for templates (prevents 500s if endpoints vary)
+# =========================================================
+@app.context_processor
+def inject_nav():
+    def safe(endpoint, fallback):
+        try:
+            return url_for(endpoint)
+        except Exception:
+            return fallback
+    # Map the labels you want in your top nav to the correct endpoints/paths
+    return dict(NAV={
+        "dashboard":    safe("dashboard", "/dashboard"),
+        "my_requests":  safe("my_requests", "/requests"),
+        "team_calendar": safe("calendar", "/calendar"),
+        "new_request":  safe("new_request", "/request/new"),
+        "admin":        safe("manage_users", "/admin/users"),  # points to your admin users page
+        "logout":       safe("logout", "/logout"),
+        "login":        safe("login", "/login"),
+        "home":         safe("home", "/"),
+    })
+
+@login_manager.user_loader
+def load_user(user_id):
+    return User.query.get(int(user_id))
+
 # =========================================================
 # Email settings (env vars)
 # =========================================================
@@ -141,10 +168,6 @@ class LeaveRequest(db.Model):
 
     # eager-load user to avoid DetachedInstanceError in templates
     user = db.relationship("User", backref="leave_requests", lazy="joined")
-
-@login_manager.user_loader
-def load_user(user_id):
-    return User.query.get(int(user_id))
 
 # =========================================================
 # Helpers
@@ -289,6 +312,11 @@ def _filtered_requests_for(current_user_is_admin: bool):
 def health():
     return "ok", 200
 
+# Extra health endpoint (Render-friendly)
+@app.get("/healthz")
+def healthz():
+    return {"ok": True}, 200
+
 @app.route("/")
 def home():
     return redirect(url_for("login"))
@@ -328,6 +356,18 @@ def dashboard():
         workday=WORKDAY_HOURS,
         recent=recent,
     )
+
+# ----- Route aliases for top-nav consistency -----
+@app.get("/my-requests")
+@login_required
+def my_requests_alias():
+    # Keep existing links working; canonical page is /requests
+    return redirect(url_for("my_requests"))
+
+@app.get("/new-request")
+@login_required
+def new_request_alias():
+    return redirect(url_for("new_request"))
 
 @app.route("/request/new", methods=["GET", "POST"])
 @login_required
