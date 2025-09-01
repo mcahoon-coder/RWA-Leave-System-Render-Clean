@@ -516,21 +516,43 @@ def update_password():
 @app.get("/calendar")
 @login_required
 def calendar():
-    return render_template("calendar.html", title="Calendar")
+    """
+    Admins see everyone's events; staff see only their own.
+    The template will show a little note so it's obvious.
+    """
+    return render_template(
+        "calendar.html",
+        title="Calendar",
+        is_admin=(current_user.role == Role.admin),
+        me=current_user
+    )
 
 @app.get("/calendar-data")
 @login_required
 def calendar_data():
+    """
+    Returns events based on role:
+      - admin: all approved requests
+      - staff: only current user's approved requests
+    """
+    q = LeaveRequest.query.filter_by(status=RequestStatus.approved)
+    if current_user.role != Role.admin:
+        q = q.filter_by(user_id=current_user.id)
+
     events = []
-    approved = LeaveRequest.query.filter_by(status=RequestStatus.approved).all()
-    for r in approved:
+    for r in q.all():
+        # Admins can see who the event is for; staff only get their own name anyway
+        title = f"{r.user.username} - {r.kind} ({r.hours:.1f}h)" if current_user.role == Role.admin \
+                else f"{r.kind} ({r.hours:.1f}h)"
+
         events.append({
-            "title": f"{r.user.username} - {r.kind} ({r.hours:.1f}h)",
+            "title": title,
             "start": r.start_date.isoformat(),
-            "end": (r.end_date + timedelta(days=1)).isoformat()  # exclusive end for FullCalendar
+            # FullCalendar's 'end' is exclusive; add 1 day
+            "end": (r.end_date + timedelta(days=1)).isoformat(),
         })
     return jsonify(events)
-
+    
 # ---------- Admin Home (User Management, Approvals, Reports) ----------
 @app.get("/admin")
 @login_required
