@@ -2,77 +2,46 @@
 {% block title %}Calendar · RWA Leave{% endblock %}
 
 {% block head %}
-  <!-- FullCalendar CSS -->
   <link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.css" rel="stylesheet">
-  <style>
-    /* Container styling (keeps your dark card look) */
-    #calendar {
-      background: #111827;           /* dark card */
-      border: 1px solid #1f2937;     /* subtle border */
-      border-radius: 12px;
-      padding: 12px;
-      min-height: 600px;
-    }
-    .cal-status {
-      margin: 8px 0 16px;
-      font-size: 0.95rem;
-      opacity: 0.85;
-    }
-
-    /* ---- Readability fixes on dark background ---- */
-    /* Make all calendar text light */
-    #calendar .fc {
-      color: #e5e7eb; /* slate-200 */
-    }
-
-    /* Month title & toolbar buttons */
-    #calendar .fc-toolbar-title { color: #e5e7eb; }
-    #calendar .fc-button {
-      background: transparent;
-      border: 1px solid #374151;
-      color: #e5e7eb;
-    }
-    #calendar .fc-button:hover { background: rgba(255,255,255,0.06); }
-    #calendar .fc-button-primary:not(:disabled).fc-button-active,
-    #calendar .fc-button-primary:not(:disabled):active {
-      background: rgba(255,255,255,0.12);
-      border-color: #4b5563;
-      color: #ffffff;
-    }
-
-    /* Day numbers */
-    #calendar .fc-daygrid-day-number,
-    #calendar .fc-col-header-cell-cushion {
-      color: #e5e7eb; /* light text */
-      text-decoration: none;
-    }
-
-    /* Grid borders so cells are visible on dark bg */
-    #calendar .fc-theme-standard td, 
-    #calendar .fc-theme-standard th,
-    #calendar .fc-scrollgrid,
-    #calendar .fc-scrollgrid-section > * {
-      border-color: #374151; /* slate-700 */
-    }
-
-    /* Event pills contrast */
-    #calendar .fc-event {
-      background: #2563eb;   /* blue-600 */
-      border: 1px solid #1d4ed8;
-      color: #ffffff;
-    }
-  </style>
 {% endblock %}
 
 {% block content %}
   <h1>Team Calendar</h1>
-
-  <div id="cal-status" class="cal-status">Loading calendar…</div>
-  <div id="calendar"></div>
+  <div id="cal-status" class="mt-2">Loading calendar…</div>
+  <div id="calendar" class="mt-3"></div>
 {% endblock %}
 
 {% block scripts %}
-  <!-- FullCalendar JS -->
   <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.js"></script>
   <script>
-    document.a
+    document.addEventListener("DOMContentLoaded", function () {
+      const statusEl = document.getElementById("cal-status");
+      const el = document.getElementById("calendar");
+
+      const calendar = new FullCalendar.Calendar(el, {
+        initialView: "dayGridMonth",
+        headerToolbar: {
+          left: "prev,next today",
+          center: "title",
+          right: "dayGridMonth,timeGridWeek,timeGridDay,listWeek"
+        },
+        navLinks: true,
+        nowIndicator: true,
+        eventTimeFormat: { hour: '2-digit', minute: '2-digit', meridiem: false },
+        events: {
+          url: "{{ url_for('calendar_data') }}",
+          failure: function(err) {
+            console.error(err);
+            if (statusEl) statusEl.textContent = "Could not load events. Please try again.";
+          }
+        },
+        loading: function(isLoading) {
+          if (!statusEl) return;
+          statusEl.textContent = isLoading ? "Loading calendar…" : "";
+        },
+      });
+
+      calendar.render();
+    });
+  </script>
+{% endblock %}
