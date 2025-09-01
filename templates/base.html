@@ -5,9 +5,8 @@
   <title>{% block title %}RWA Leave System{% endblock %}</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
 
-  <!-- Keep your original site CSS if you have it -->
+  <!-- Site theme and navbar -->
   <link href="{{ url_for('static', filename='styles.css') }}" rel="stylesheet">
-  <!-- Top nav styling (scoped; won't change your page colors) -->
   <link href="{{ url_for('static', filename='topnav.css') }}" rel="stylesheet">
 
   {% block head %}{% endblock %}
@@ -29,7 +28,9 @@
   </header>
 
   <main class="page">
-    {% block content %}{% endblock %}
+    <div class="content-surface">
+      {% block content %}{% endblock %}
+    </div>
   </main>
 
   {% block scripts %}{% endblock %}
