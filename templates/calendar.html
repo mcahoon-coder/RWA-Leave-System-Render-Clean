@@ -1,25 +1,64 @@
 {% extends "base.html" %}
-{% block title %}Team Calendar · RWA Leave{% endblock %}
+{% block title %}Calendar · RWA Leave{% endblock %}
+
+{% block head %}
+  <!-- FullCalendar CSS -->
+  <link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.css" rel="stylesheet">
+  <style>
+    /* Light styling so the calendar looks nice within your layout */
+    #calendar {
+      background: #111827;           /* matches topnav.css card color */
+      border: 1px solid #1f2937;     /* subtle border */
+      border-radius: 12px;
+      padding: 12px;
+      min-height: 600px;
+    }
+    .cal-status {
+      margin: 8px 0 16px;
+      font-size: 0.95rem;
+      opacity: 0.85;
+    }
+  </style>
+{% endblock %}
+
 {% block content %}
   <h1>Team Calendar</h1>
+
+  <div id="cal-status" class="cal-status">Loading calendar…</div>
   <div id="calendar"></div>
+{% endblock %}
 
-  <!-- FullCalendar assets -->
-  <link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.css" rel="stylesheet">
+{% block scripts %}
+  <!-- FullCalendar JS -->
   <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.js"></script>
-
   <script>
     document.addEventListener("DOMContentLoaded", function () {
+      const statusEl = document.getElementById("cal-status");
       const el = document.getElementById("calendar");
+
       const calendar = new FullCalendar.Calendar(el, {
         initialView: "dayGridMonth",
         headerToolbar: {
           left: "prev,next today",
           center: "title",
-          right: "dayGridMonth,timeGridWeek,timeGridDay"
+          right: "dayGridMonth,timeGridWeek,timeGridDay,listWeek"
         },
-        events: "/api/events" // Flask route returning JSON list
+        navLinks: true,
+        nowIndicator: true,
+        eventTimeFormat: { hour: '2-digit', minute: '2-digit', meridiem: false },
+        events: {
+          url: "{{ url_for('calendar_data') }}",   // -> /calendar-data
+          failure: function(err) {
+            console.error(err);
+            if (statusEl) statusEl.textContent = "Could not load events. Please try again.";
+          }
+        },
+        loading: function(isLoading) {
+          if (!statusEl) return;
+          statusEl.textContent = isLoading ? "Loading calendar…" : "";
+        },
       });
+
       calendar.render();
     });
   </script>
