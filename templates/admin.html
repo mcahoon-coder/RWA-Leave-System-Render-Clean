@@ -1,42 +1,39 @@
 {% extends "base.html" %}
-{% block title %}Admin · RWA Leave{% endblock %}
+{% block title %}Admin{% endblock %}
 
 {% block content %}
-  <h1>Admin</h1>
-  <div class="card-subtle mb-2">Admin tools for user management, approvals, and reports.</div>
+  <div class="card">
+    <h1 style="margin-top:0;">Admin</h1>
+    <p>Admin tools for user management, approvals, and reports.</p>
+  </div>
 
-  <div class="card-grid">
-    <!-- User Management -->
-    <section class="card">
-      <div class="card-title">User Management</div>
-      <p class="card-subtle">Create users, edit roles, reset passwords, and adjust hours balance.</p>
-      <div class="mt-2">
-        <a class="btn" href="/admin/users">Open User Manager</a>
-        <a class="btn" href="/admin/users#create">Add New User</a>
-      </div>
-    </section>
+  <div class="card">
+    <h2>User Management</h2>
+    <p>Create users, edit roles, reset passwords, and adjust hours balance.</p>
+    <p>
+      <a class="btn" href="/admin/users">Open User Manager</a>
+      <a class="btn" href="/admin/users#create">Add New User</a>
+    </p>
+  </div>
 
-    <!-- Approvals -->
-    <section class="card">
-      <div class="card-title">Approvals</div>
-      <p class="card-subtle">Review and take action on leave requests.</p>
-      <div class="mt-2">
-        <a class="btn" href="{{ NAV.my_requests }}?status=Pending">View Pending</a>
-        <a class="btn" href="{{ NAV.my_requests }}?status=Approved">Approved</a>
-        <a class="btn" href="{{ NAV.my_requests }}?status=Disapproved">Disapproved</a>
-        <a class="btn" href="{{ NAV.my_requests }}?status=Cancelled">Cancelled</a>
-      </div>
-    </section>
+  <div class="card">
+    <h2>Approvals</h2>
+    <p>Review and take action on leave requests.</p>
+    <p>
+      <a class="btn" href="{{ NAV.my_requests }}?status=Pending">View Pending</a>
+      <a class="btn" href="{{ NAV.my_requests }}?status=Approved">Approved</a>
+      <a class="btn" href="{{ NAV.my_requests }}?status=Disapproved">Disapproved</a>
+      <a class="btn" href="{{ NAV.my_requests }}?status=Cancelled">Cancelled</a>
+    </p>
+  </div>
 
-    <!-- Reports -->
-    <section class="card">
-      <div class="card-title">Reports</div>
-      <p class="card-subtle">Export requests for HR or analysis.</p>
-      <div class="mt-2">
-        <a class="btn" href="/admin/export/requests.csv">Export CSV</a>
-        <a class="btn" href="/admin/export/requests.xlsx">Export Excel</a>
-        <a class="btn" href="{{ NAV.team_calendar }}">Open Team Calendar</a>
-      </div>
-    </section>
+  <div class="card">
+    <h2>Reports</h2>
+    <p>Export requests for HR or analysis.</p>
+    <p>
+      <a class="btn" href="/admin/export/requests.csv">Export CSV</a>
+      <a class="btn" href="/admin/export/requests.xlsx">Export Excel</a>
+      <a class="btn" href="{{ NAV.team_calendar }}">Open Team Calendar</a>
+    </p>
   </div>
 {% endblock %}
