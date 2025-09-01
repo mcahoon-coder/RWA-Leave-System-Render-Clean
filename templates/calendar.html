@@ -1,14 +1,22 @@
 {% extends "base.html" %}
-{% block title %}Calendar · RWA Leave{% endblock %}
+{% block title %}Calendar{% endblock %}
 
 {% block head %}
   <link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.css" rel="stylesheet">
 {% endblock %}
 
 {% block content %}
-  <h1>Team Calendar</h1>
-  <div id="cal-status" class="mt-2">Loading calendar…</div>
-  <div id="calendar" class="mt-3"></div>
+  <div class="card">
+    <h1 style="margin-top:0;">Calendar</h1>
+    {% if is_admin %}
+      <p style="margin:0 0 8px; color:#374151;">You are viewing <strong>all approved staff leave</strong>.</p>
+    {% else %}
+      <p style="margin:0 0 8px; color:#374151;">You are viewing <strong>only your approved leave</strong>.</p>
+    {% endif %}
+
+    <div id="cal-status" style="margin: 8px 0 12px;">Loading calendar…</div>
+    <div id="calendar" style="border:1px solid #e5e7eb; border-radius:8px; padding:8px; min-height:600px;"></div>
+  </div>
 {% endblock %}
 
 {% block scripts %}
