@@ -43,8 +43,7 @@ login_manager.login_view = "login"
 # =========================================================
 @app.context_processor
 def inject_globals_and_nav():
-    # Always-available context so templates don't 500 if a page forgets to pass these
-    safe_me = current_user if hasattr(current_user, "is_authenticated") and current_user.is_authenticated else None
+    safe_me = current_user if getattr(current_user, "is_authenticated", False) else None
 
     def safe(endpoint, fallback):
         try:
@@ -200,19 +199,43 @@ def _column_exists(table_name: str, column_name: str) -> bool:
     return db.session.execute(q, {"t": table_name, "c": column_name}).first() is not None
 
 def ensure_db():
+    # Create tables if they don't exist
     db.create_all()
-    try:
-        if not _column_exists("leave_request", "start_time"):
-            if db.engine.dialect.name == "sqlite":
-                db.session.execute(text("ALTER TABLE leave_request ADD COLUMN start_time VARCHAR(5)"))
-                db.session.commit()
-        if not _column_exists("leave_request", "end_time"):
-            if db.engine.dialect.name == "sqlite":
-                db.session.execute(text("ALTER TABLE leave_request ADD COLUMN end_time VARCHAR(5)"))
-                db.session.commit()
-    except Exception:
-        db.session.rollback()
 
+    # ---- LIGHTWEIGHT MIGRATIONS (add missing columns) ----
+    try:
+        dialect = db.engine.dialect.name
+
+        if dialect == "sqlite":
+            # Add columns if missing on SQLite
+            if not _column_exists("leave_request", "start_time"):
+                db.session.execute(text("ALTER TABLE leave_request ADD COLUMN start_time VARCHAR(5)"))
+            if not _column_exists("leave_request", "end_time"):
+                db.session.execute(text("ALTER TABLE leave_request ADD COLUMN end_time VARCHAR(5)"))
+            db.session.commit()
+
+        elif dialect == "postgresql":
+            # Add columns if missing on Postgres (idempotent)
+            db.session.execute(text("""
+                ALTER TABLE leave_request
+                ADD COLUMN IF NOT EXISTS start_time VARCHAR(5),
+                ADD COLUMN IF NOT EXISTS end_time   VARCHAR(5)
+            """))
+            db.session.commit()
+
+        else:
+            # Fallback generic attempt
+            if not _column_exists("leave_request", "start_time"):
+                db.session.execute(text("ALTER TABLE leave_request ADD COLUMN start_time VARCHAR(5)"))
+            if not _column_exists("leave_request", "end_time"):
+                db.session.execute(text("ALTER TABLE leave_request ADD COLUMN end_time VARCHAR(5)"))
+            db.session.commit()
+
+    except Exception as e:
+        db.session.rollback()
+        app.logger.error("ensure_db migration failed: %s", e)
+
+    # Seed first admin user if empty
     if User.query.count() == 0:
         bootstrap_username = os.environ.get("BOOTSTRAP_ADMIN_USERNAME", "mc-admin")
         bootstrap_password = os.environ.get("BOOTSTRAP_ADMIN_PASSWORD", "RWAadmin2")
@@ -385,12 +408,11 @@ def new_request():
 def my_requests():
     q = _filtered_requests_for(current_user.role == Role.admin)
     items = q.all()
-    # Provide both names to satisfy any existing template expectations
     return render_template(
         "requests.html",
         title="Requests",
         reqs=items,
-        requests=items,  # alias
+        requests=items,  # alias for safety with older templates
         is_admin=(current_user.role == Role.admin),
         status=request.args.get("status", "all"),
         start=request.args.get("start", ""),
