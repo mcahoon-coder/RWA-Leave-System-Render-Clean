@@ -1,112 +1,152 @@
-/* Base gradient background */
+/* =========================================
+   Site-wide theming & utilities
+   ========================================= */
+
+/* Page background: light blue fading into white */
+html, body {
+  height: 100%;
+}
 body {
   margin: 0;
-  font-family: Arial, sans-serif;
-  background: linear-gradient(to top, #6a8dff, #ffffff);
-  min-height: 100vh;
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, Inter, Arial, sans-serif;
+  background: linear-gradient(180deg, #e6f3ff 0%, #ffffff 40%);
+  color: #0f172a; /* dark slate text for good contrast */
 }
 
-/* Navigation bar */
-.navbar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  background: #0044cc;
-  color: white;
-  padding: 10px 20px;
-}
-.navbar .brand {
-  font-weight: bold;
-  font-size: 1.2em;
-}
-.navbar-links {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  gap: 15px;
-}
-.navbar-links li a {
-  color: white;
-  text-decoration: none;
-  font-weight: bold;
-}
-.navbar-links li a:hover {
-  text-decoration: underline;
+/* Main content area: light yellow fading into white */
+.content-surface {
+  background: linear-gradient(180deg, #fff7cc 0%, #ffffff 50%);
+  border: 1px solid #e5e7eb;      /* subtle border */
+  border-radius: 14px;
+  padding: 16px;
+  box-shadow: 0 6px 18px rgba(2, 6, 23, 0.06);
 }
 
-/* Flash messages */
-.flash-messages {
-  margin: 15px auto;
-  width: 90%;
+/* Page container spacing (keeps things centered) */
+.page {
+  max-width: 1100px;
+  margin: 24px auto;
+  padding: 0 16px 60px;
 }
-.flash {
-  padding: 10px;
-  border-radius: 4px;
-  margin-bottom: 8px;
-}
-.flash.success { background: #c8e6c9; }
-.flash.danger { background: #ffcdd2; }
-.flash.warning { background: #fff9c4; }
-.flash.info { background: #bbdefb; }
 
-/* Content wrapper */
-.content-wrapper {
-  max-width: 1000px;
-  margin: 20px auto;
-  padding: 20px;
-  background: linear-gradient(to bottom, #fff59d, #ffffff);
+/* Headings */
+h1 { margin: 10px 0 18px; font-size: 1.6rem; font-weight: 700; }
+h2 { margin: 8px 0 12px; font-size: 1.25rem; font-weight: 700; }
+
+/* -----------------------------------------
+   Forms
+   ----------------------------------------- */
+
+/* Two-up layout for login & similar forms */
+.form-grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px 16px;
+  align-items: end;
+}
+
+.form-grid-2 .full {
+  grid-column: 1 / -1;
+}
+
+label {
+  display: block;
+  font-weight: 600;
+  margin-bottom: 6px;
+  color: #0f172a;
+}
+
+input[type="text"],
+input[type="password"],
+input[type="email"],
+input[type="number"],
+input[type="date"],
+input[type="time"],
+select,
+textarea {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #cbd5e1;        /* slate-300 */
   border-radius: 10px;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+  background: #ffffffcc;             /* translucent white */
+  color: #0f172a;
 }
 
-/* Cards */
-.card {
-  background: white;
-  border-radius: 8px;
-  padding: 15px;
-  margin-bottom: 20px;
-  box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+button, .btn {
+  display: inline-block;
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid #cbd5e1;
+  background: #f8fafc;               /* slate-50 */
+  color: #0f172a;
+  text-decoration: none;
+  cursor: pointer;
+}
+button:hover, .btn:hover {
+  background: #eef2ff;               /* indigo-50 */
 }
 
 /* Tables */
 table {
   width: 100%;
   border-collapse: collapse;
-  margin-top: 10px;
+  background: #ffffffb3;
+  border-radius: 12px;
+  overflow: hidden;
 }
 table th, table td {
-  border: 1px solid #ccc;
-  padding: 8px;
+  border: 1px solid #e5e7eb;
+  padding: 8px 10px;
   text-align: left;
 }
-table th {
-  background: #f0f0f0;
+table thead th {
+  background: #f8fafc;
+  font-weight: 700;
 }
 
-/* Forms */
-form {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
+/* Small utility spacing */
+.mt-2 { margin-top: 8px; }
+.mt-3 { margin-top: 12px; }
+.mt-4 { margin-top: 16px; }
+
+/* -----------------------------------------
+   Calendar readability on light surface
+   ----------------------------------------- */
+#calendar {
+  background: linear-gradient(180deg, #fff7cc 0%, #ffffff 50%);
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 12px;
+  min-height: 600px;
 }
-input, select, textarea, button {
-  padding: 8px;
-  border-radius: 4px;
-  border: 1px solid #aaa;
-  font-size: 1em;
+#calendar .fc { color: #0f172a; }
+#calendar .fc-toolbar-title { color: #0f172a; }
+#calendar .fc-button {
+  background: #f8fafc;
+  border: 1px solid #cbd5e1;
+  color: #0f172a;
 }
-button {
-  background: #0044cc;
-  color: white;
-  cursor: pointer;
+#calendar .fc-button:hover { background: #eef2ff; }
+#calendar .fc-theme-standard td, 
+#calendar .fc-theme-standard th,
+#calendar .fc-scrollgrid,
+#calendar .fc-scrollgrid-section > * {
+  border-color: #e5e7eb;
 }
-button:hover {
-  background: #0033aa;
+#calendar .fc-daygrid-day-number,
+#calendar .fc-col-header-cell-cushion {
+  color: #0f172a;
+  text-decoration: none;
+}
+#calendar .fc-event {
+  background: #2563eb;
+  border: 1px solid #1d4ed8;
+  color: #ffffff;
 }
 
-/* Negative balance style */
-.negative {
-  color: red;
-  font-weight: bold;
+/* Responsive: stack the login inputs on small screens */
+@media (max-width: 600px) {
+  .form-grid-2 {
+    grid-template-columns: 1fr;
+  }
 }
