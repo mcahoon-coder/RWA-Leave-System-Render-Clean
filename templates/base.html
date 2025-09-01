@@ -4,25 +4,27 @@
   <meta charset="utf-8">
   <title>{% block title %}RWA Leave System{% endblock %}</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  {# Keep your existing site CSS if you have it. If your main CSS is e.g. styles.css, leave it here: #}
-  {# <link href="{{ url_for('static', filename='styles.css') }}" rel="stylesheet"> #}
+
+  <!-- Optional: keep your original styles.css if you had one -->
+  <link href="{{ url_for('static', filename='styles.css') }}" rel="stylesheet">
+  <!-- New top nav styling -->
   <link href="{{ url_for('static', filename='topnav.css') }}" rel="stylesheet">
+
   {% block head %}{% endblock %}
 </head>
 <body>
-  <!-- Top Navbar (replaces column/side menu) -->
+  <!-- Top Navigation Bar -->
   <header class="topnav">
     <div class="brand">
-      <a href="{{ url_for('dashboard') }}">RWA Leave</a>
+      <a href="{{ NAV.dashboard }}">RWA Leave</a>
     </div>
     <nav class="menu">
-      <!-- Keep these links matching your existing routes/titles -->
-      <a href="{{ url_for('dashboard') }}">Dashboard</a>
-      <a href="{{ url_for('my_requests') }}">My Requests</a>
-      <a href="{{ url_for('team_calendar') }}">Team Calendar</a>
-      <a href="{{ url_for('new_request') }}">New Request</a>
-      <a href="{{ url_for('admin') }}">Admin</a>
-      <a href="{{ url_for('logout') }}">Logout</a>
+      <a href="{{ NAV.dashboard }}">Dashboard</a>
+      <a href="{{ NAV.my_requests }}">My Requests</a>
+      <a href="{{ NAV.team_calendar }}">Team Calendar</a>
+      <a href="{{ NAV.new_request }}">New Request</a>
+      <a href="{{ NAV.admin }}">Admin</a>
+      <a href="{{ NAV.logout }}">Logout</a>
     </nav>
   </header>
 
