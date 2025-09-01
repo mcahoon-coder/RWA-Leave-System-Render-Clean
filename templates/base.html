@@ -4,15 +4,19 @@
   <meta charset="utf-8">
   <title>{% block title %}RWA Leave System{% endblock %}</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <link href="{{ url_for('static', filename='styles.css') }}" rel="stylesheet">
+  {# Keep your existing site CSS if you have it. If your main CSS is e.g. styles.css, leave it here: #}
+  {# <link href="{{ url_for('static', filename='styles.css') }}" rel="stylesheet"> #}
+  <link href="{{ url_for('static', filename='topnav.css') }}" rel="stylesheet">
+  {% block head %}{% endblock %}
 </head>
 <body>
-  <!-- Top Navbar -->
+  <!-- Top Navbar (replaces column/side menu) -->
   <header class="topnav">
     <div class="brand">
       <a href="{{ url_for('dashboard') }}">RWA Leave</a>
     </div>
     <nav class="menu">
+      <!-- Keep these links matching your existing routes/titles -->
       <a href="{{ url_for('dashboard') }}">Dashboard</a>
       <a href="{{ url_for('my_requests') }}">My Requests</a>
       <a href="{{ url_for('team_calendar') }}">Team Calendar</a>
@@ -25,5 +29,7 @@
   <main class="page">
     {% block content %}{% endblock %}
   </main>
+
+  {% block scripts %}{% endblock %}
 </body>
 </html>
