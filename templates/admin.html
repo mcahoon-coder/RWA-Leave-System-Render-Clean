@@ -1,48 +1,26 @@
 {% extends "base.html" %}
 {% block title %}Admin · RWA Leave{% endblock %}
 
-{% block head %}
-<style>
-  .admin-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-    gap: 16px; margin-top: 12px;
-  }
-  .admin-card {
-    background: #111827; border: 1px solid #1f2937;
-    border-radius: 14px; padding: 16px;
-  }
-  .admin-card h2 { margin: 0 0 10px; font-size: 1.1rem; }
-  .admin-actions { display: flex; flex-wrap: wrap; gap: 10px; }
-  .btn {
-    display:inline-block; padding:8px 12px; border-radius:10px;
-    border:1px solid #1f2937; text-decoration:none; color:#e2e8f0;
-  }
-  .btn:hover { background: rgba(255,255,255,0.05); }
-  .muted { opacity: .85; font-size: .95rem; }
-</style>
-{% endblock %}
-
 {% block content %}
   <h1>Admin</h1>
-  <p class="muted">Admin tools for user management, approvals, and reports.</p>
+  <div class="card-subtle mb-2">Admin tools for user management, approvals, and reports.</div>
 
-  <div class="admin-grid">
+  <div class="card-grid">
     <!-- User Management -->
-    <section class="admin-card">
-      <h2>User Management</h2>
-      <p class="muted">Create users, edit roles, reset passwords, and adjust hours balance.</p>
-      <div class="admin-actions">
+    <section class="card">
+      <div class="card-title">User Management</div>
+      <p class="card-subtle">Create users, edit roles, reset passwords, and adjust hours balance.</p>
+      <div class="mt-2">
         <a class="btn" href="/admin/users">Open User Manager</a>
         <a class="btn" href="/admin/users#create">Add New User</a>
       </div>
     </section>
 
     <!-- Approvals -->
-    <section class="admin-card">
-      <h2>Approvals</h2>
-      <p class="muted">Review and take action on leave requests.</p>
-      <div class="admin-actions">
+    <section class="card">
+      <div class="card-title">Approvals</div>
+      <p class="card-subtle">Review and take action on leave requests.</p>
+      <div class="mt-2">
         <a class="btn" href="{{ NAV.my_requests }}?status=Pending">View Pending</a>
         <a class="btn" href="{{ NAV.my_requests }}?status=Approved">Approved</a>
         <a class="btn" href="{{ NAV.my_requests }}?status=Disapproved">Disapproved</a>
@@ -51,10 +29,10 @@
     </section>
 
     <!-- Reports -->
-    <section class="admin-card">
-      <h2>Reports</h2>
-      <p class="muted">Export requests for HR or analysis.</p>
-      <div class="admin-actions">
+    <section class="card">
+      <div class="card-title">Reports</div>
+      <p class="card-subtle">Export requests for HR or analysis.</p>
+      <div class="mt-2">
         <a class="btn" href="/admin/export/requests.csv">Export CSV</a>
         <a class="btn" href="/admin/export/requests.xlsx">Export Excel</a>
         <a class="btn" href="{{ NAV.team_calendar }}">Open Team Calendar</a>
