@@ -7,7 +7,7 @@
 
   <!-- Keep your original site CSS if you have it -->
   <link href="{{ url_for('static', filename='styles.css') }}" rel="stylesheet">
-  <!-- Top nav styling -->
+  <!-- Top nav styling (scoped; won't change your page colors) -->
   <link href="{{ url_for('static', filename='topnav.css') }}" rel="stylesheet">
 
   {% block head %}{% endblock %}
