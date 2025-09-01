@@ -1,38 +1,51 @@
 {% extends "base.html" %}
+{% block title %}New Request · RWA Leave{% endblock %}
 {% block content %}
-<div class="card">
-  <h2>New Leave Request</h2>
-  <form method="post">
-    <label>Type</label>
-    <select name="kind">
-      <option value="annual">Annual</option>
-      <option value="sick">Sick</option>
-    </select>
+  <h1>New Request</h1>
 
-    <label>Mode</label>
-    <select name="mode" id="mode-select">
-      <option value="hourly">Hourly</option>
-      <option value="daily">Daily</option>
-    </select>
-
-    <label>Start Date</label>
-    <input type="date" name="start_date" required>
-    <label>End Date</label>
-    <input type="date" name="end_date" required>
-
-    <div id="hourly-fields">
-      <label>Hours</label>
-      <input type="number" step="0.25" name="hours">
-      <label>Start Time (quarter)</label>
-      <input type="time" name="start_time" step="900">
-      <label>End Time (quarter)</label>
-      <input type="time" name="end_time" step="900">
+  <form method="post" action="{{ url_for('new_request') }}">
+    <div>
+      <label>Kind
+        <select name="kind">
+          <option value="annual">Annual</option>
+          <option value="sick">Sick</option>
+        </select>
+      </label>
     </div>
 
-    <label>Reason</label>
-    <textarea name="reason"></textarea>
+    <div>
+      <label>Mode
+        <select name="mode">
+          <option value="hourly">Hourly</option>
+          <option value="daily">Daily</option>
+        </select>
+      </label>
+    </div>
 
-    <button type="submit">Submit</button>
+    <div>
+      <label>Start date <input type="date" name="start_date" required></label>
+      <label>End date <input type="date" name="end_date" required></label>
+    </div>
+
+    <div>
+      <em>Hourly mode options (optional if you enter Hours directly):</em><br>
+      <label>Start time <input type="time" name="start_time" step="900"></label>
+      <label>End time <input type="time" name="end_time" step="900"></label>
+    </div>
+
+    <div>
+      <label>Hours <input type="number" step="0.25" min="0" name="hours" placeholder="e.g., 4.5"></label>
+      <small>(If blank and times are given for the same day, hours will be computed.)</small>
+    </div>
+
+    <div>
+      <label>Reason<br>
+        <textarea name="reason" rows="3" cols="50" placeholder="Optional"></textarea>
+      </label>
+    </div>
+
+    <div style="margin-top:10px;">
+      <button type="submit">Submit Request</button>
+    </div>
   </form>
-</div>
 {% endblock %}
