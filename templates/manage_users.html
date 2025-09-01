@@ -1,57 +1,67 @@
 {% extends "base.html" %}
+{% block title %}Manage Users · RWA Leave{% endblock %}
 {% block content %}
-<div class="card">
-  <h2>Manage Users</h2>
+  <h1>Manage Users</h1>
 
-  <form method="post" action="{{ url_for('admin_create_user') }}">
-    <h3>Create User</h3>
-    <input name="username" placeholder="Username" required>
-    <input type="email" name="email" placeholder="Email">
-    <input type="number" step="0.25" name="hours_balance" placeholder="Hours Balance" value="160">
-    <select name="role">
-      <option value="faculty_staff">Faculty/Staff</option>
-      <option value="admin">Admin</option>
-    </select>
-    <input type="password" name="password" placeholder="Password" required>
-    <button type="submit">Create</button>
+  <form method="get" action="{{ url_for('manage_users') }}" style="margin-bottom:12px;">
+    <input type="text" name="q" value="{{ q or '' }}" placeholder="Search username">
+    <button type="submit">Search</button>
   </form>
-</div>
 
-<div class="card">
-  <h3>Existing Users</h3>
-  <table>
-    <thead><tr><th>Username</th><th>Email</th><th>Role</th><th>Hours</th><th>Actions</th></tr></thead>
-    <tbody>
-    {% for u in users %}
-      <tr>
-        <form method="post" action="{{ url_for('admin_update_user', user_id=u.id) }}">
-          <td><input name="username" value="{{ u.username }}"></td>
-          <td><input name="email" value="{{ u.email or '' }}"></td>
-          <td>
-            <select name="role">
-              <option value="faculty_staff" {% if u.role == "faculty_staff" %}selected{% endif %}>Faculty/Staff</option>
-              <option value="admin" {% if u.role == "admin" %}selected{% endif %}>Admin</option>
-            </select>
-          </td>
-          <td>
-            <input type="number" step="0.25" name="hours_balance" value="{{ "%.2f"|format(u.hours_balance) }}"
-              class="{% if u.hours_balance < 0 %}negative{% endif %}">
-          </td>
-          <td>
-            <button type="submit">Update</button>
-        </form>
-        <form method="post" action="{{ url_for('admin_reset_password', user_id=u.id) }}" style="display:inline">
-          <input type="password" name="new_password" placeholder="New Password">
-          <button>Reset PW</button>
-        </form>
-        <form method="post" action="{{ url_for('admin_delete_user', user_id=u.id) }}" style="display:inline"
-              onsubmit="return confirm('Delete this user?');">
-          <button>Delete</button>
-        </form>
-          </td>
-      </tr>
-    {% endfor %}
-    </tbody>
-  </table>
-</div>
+  <h2 id="create">Create User</h2>
+  <form method="post" action="{{ url_for('admin_create_user') }}">
+    <div><label>Username <input name="username" required></label></div>
+    <div><label>Password <input type="password" name="password" required></label></div>
+    <div><label>Email <input type="email" name="email"></label></div>
+    <div>
+      <label>Role
+        <select name="role">
+          <option value="faculty_staff">Staff</option>
+          <option value="admin">Admin</option>
+        </select>
+      </label>
+    </div>
+    <div><label>Hours balance <input type="number" step="0.25" name="hours_balance" value="160"></label></div>
+    <div style="margin-top:8px;"><button type="submit">Create</button></div>
+  </form>
+
+  <h2 style="margin-top:20px;">All Users</h2>
+  {% if users and users|length %}
+    <table border="1" cellpadding="6" cellspacing="0">
+      <thead>
+        <tr><th>Username</th><th>Email</th><th>Role</th><th>Hours</th><th>Actions</th></tr>
+      </thead>
+      <tbody>
+        {% for u in users %}
+          <tr>
+            <td>{{ u.username }}</td>
+            <td>{{ u.email or '—' }}</td>
+            <td>{{ u.role }}</td>
+            <td>{{ '%.2f'|format(u.hours_balance or 0) }}</td>
+            <td>
+              <form method="post" action="{{ url_for('admin_update_user', user_id=u.id) }}" style="display:inline-block;">
+                <input name="username" value="{{ u.username }}" required>
+                <input name="email" value="{{ u.email or '' }}">
+                <select name="role">
+                  <option value="faculty_staff" {% if u.role=='faculty_staff' %}selected{% endif %}>Staff</option>
+                  <option value="admin" {% if u.role=='admin' %}selected{% endif %}>Admin</option>
+                </select>
+                <input name="hours_balance" type="number" step="0.25" value="{{ u.hours_balance or 0 }}">
+                <button type="submit">Update</button>
+              </form>
+              <form method="post" action="{{ url_for('admin_reset_password', user_id=u.id) }}" style="display:inline-block; margin-left:6px;">
+                <input type="password" name="new_password" placeholder="New password" required>
+                <button type="submit">Reset PW</button>
+              </form>
+              <form method="post" action="{{ url_for('admin_delete_user', user_id=u.id) }}" style="display:inline-block; margin-left:6px;" onsubmit="return confirm('Delete {{ u.username }}?')">
+                <button type="submit">Delete</button>
+              </form>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p>No users found.</p>
+  {% endif %}
 {% endblock %}
