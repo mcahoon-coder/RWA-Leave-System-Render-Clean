@@ -1,67 +1,96 @@
 {% extends "base.html" %}
 {% block title %}Manage Users · RWA Leave{% endblock %}
+
 {% block content %}
   <h1>Manage Users</h1>
 
-  <form method="get" action="{{ url_for('manage_users') }}" style="margin-bottom:12px;">
-    <input type="text" name="q" value="{{ q or '' }}" placeholder="Search username">
-    <button type="submit">Search</button>
-  </form>
+  <!-- Search -->
+  <div class="card">
+    <div class="card-title">Search</div>
+    <form method="get" action="{{ url_for('manage_users') }}" class="form-grid-2">
+      <div>
+        <label>Username</label>
+        <input type="text" name="q" value="{{ q or '' }}" placeholder="Search username">
+      </div>
+      <div class="full mt-2">
+        <button type="submit">Search</button>
+      </div>
+    </form>
+  </div>
 
-  <h2 id="create">Create User</h2>
-  <form method="post" action="{{ url_for('admin_create_user') }}">
-    <div><label>Username <input name="username" required></label></div>
-    <div><label>Password <input type="password" name="password" required></label></div>
-    <div><label>Email <input type="email" name="email"></label></div>
-    <div>
-      <label>Role
+  <!-- Create user -->
+  <div class="card mt-3" id="create">
+    <div class="card-title">Create User</div>
+    <form method="post" action="{{ url_for('admin_create_user') }}" class="form-grid-2">
+      <div>
+        <label>Username</label>
+        <input name="username" required>
+      </div>
+      <div>
+        <label>Password</label>
+        <input type="password" name="password" required>
+      </div>
+      <div>
+        <label>Email</label>
+        <input type="email" name="email">
+      </div>
+      <div>
+        <label>Role</label>
         <select name="role">
           <option value="faculty_staff">Staff</option>
           <option value="admin">Admin</option>
         </select>
-      </label>
-    </div>
-    <div><label>Hours balance <input type="number" step="0.25" name="hours_balance" value="160"></label></div>
-    <div style="margin-top:8px;"><button type="submit">Create</button></div>
-  </form>
+      </div>
+      <div class="full">
+        <label>Hours balance</label>
+        <input type="number" step="0.25" name="hours_balance" value="160">
+      </div>
+      <div class="full mt-2">
+        <button type="submit">Create</button>
+      </div>
+    </form>
+  </div>
 
-  <h2 style="margin-top:20px;">All Users</h2>
-  {% if users and users|length %}
-    <table border="1" cellpadding="6" cellspacing="0">
-      <thead>
-        <tr><th>Username</th><th>Email</th><th>Role</th><th>Hours</th><th>Actions</th></tr>
-      </thead>
-      <tbody>
-        {% for u in users %}
-          <tr>
-            <td>{{ u.username }}</td>
-            <td>{{ u.email or '—' }}</td>
-            <td>{{ u.role }}</td>
-            <td>{{ '%.2f'|format(u.hours_balance or 0) }}</td>
-            <td>
-              <form method="post" action="{{ url_for('admin_update_user', user_id=u.id) }}" style="display:inline-block;">
-                <input name="username" value="{{ u.username }}" required>
-                <input name="email" value="{{ u.email or '' }}">
-                <select name="role">
-                  <option value="faculty_staff" {% if u.role=='faculty_staff' %}selected{% endif %}>Staff</option>
-                  <option value="admin" {% if u.role=='admin' %}selected{% endif %}>Admin</option>
-                </select>
-                <input name="hours_balance" type="number" step="0.25" value="{{ u.hours_balance or 0 }}">
-                <button type="submit">Update</button>
-              </form>
-              <form method="post" action="{{ url_for('admin_reset_password', user_id=u.id) }}" style="display:inline-block; margin-left:6px;">
-                <input type="password" name="new_password" placeholder="New password" required>
-                <button type="submit">Reset PW</button>
-              </form>
-              <form method="post" action="{{ url_for('admin_delete_user', user_id=u.id) }}" style="display:inline-block; margin-left:6px;" onsubmit="return confirm('Delete {{ u.username }}?')">
-                <button type="submit">Delete</button>
-              </form>
-            </td>
-          </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  {% else %}
-    <p>No users found.</p>
-  {% endif %}
+  <!-- All users -->
+  <div class="card mt-3">
+    <div class="card-title">All Users</div>
+    {% if users and users|length %}
+      <table>
+        <thead>
+          <tr><th>Username</th><th>Email</th><th>Role</th><th>Hours</th><th>Actions</th></tr>
+        </thead>
+        <tbody>
+          {% for u in users %}
+            <tr>
+              <td>{{ u.username }}</td>
+              <td>{{ u.email or '—' }}</td>
+              <td>{{ u.role }}</td>
+              <td>{{ '%.2f'|format(u.hours_balance or 0) }}</td>
+              <td>
+                <form method="post" action="{{ url_for('admin_update_user', user_id=u.id) }}" style="display:inline-block;">
+                  <input name="username" value="{{ u.username }}" required>
+                  <input name="email" value="{{ u.email or '' }}">
+                  <select name="role">
+                    <option value="faculty_staff" {% if u.role=='faculty_staff' %}selected{% endif %}>Staff</option>
+                    <option value="admin" {% if u.role=='admin' %}selected{% endif %}>Admin</option>
+                  </select>
+                  <input name="hours_balance" type="number" step="0.25" value="{{ u.hours_balance or 0 }}">
+                  <button type="submit">Update</button>
+                </form>
+                <form method="post" action="{{ url_for('admin_reset_password', user_id=u.id) }}" style="display:inline-block; margin-left:6px;">
+                  <input type="password" name="new_password" placeholder="New password" required>
+                  <button type="submit">Reset PW</button>
+                </form>
+                <form method="post" action="{{ url_for('admin_delete_user', user_id=u.id) }}" style="display:inline-block; margin-left:6px;" onsubmit="return confirm('Delete {{ u.username }}?')">
+                  <button type="submit">Delete</button>
+                </form>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% else %}
+      <p class="card-subtle">No users found.</p>
+    {% endif %}
+  </div>
 {% endblock %}
