@@ -22,15 +22,11 @@ body {
 }
 .nav-links {
   list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  gap: 1rem;
+  margin: 0; padding: 0;
+  display: flex; gap: 1rem;
 }
 .nav-links li a {
-  color: white;
-  text-decoration: none;
-  font-weight: 500;
+  color: white; text-decoration: none; font-weight: 500;
 }
 .nav-links li a:hover { text-decoration: underline; }
 
@@ -75,7 +71,7 @@ body {
   margin-bottom: 1.5rem;
 }
 
-/* ==== BUTTONS & TABLES (helpers) ==== */
+/* Buttons & tables */
 .btn {
   display: inline-block;
   padding: 10px 14px;
@@ -98,16 +94,10 @@ table {
 th, td { border: 1px solid #e5e7eb; padding: 8px 10px; text-align: left; }
 thead th { background: #f8fafc; font-weight: 700; }
 
-/* ==== FORM LAYOUT HELPERS ==== */
-/* Side-by-side fields for login & small forms */
-.form-row {
-  display: flex;
-  gap: 16px;
-  align-items: flex-end;
-}
+/* Form helpers */
+.form-row { display: flex; gap: 16px; align-items: flex-end; }
 .form-row > div { flex: 1; }
 
-/* Grid helper when needed */
 .form-grid-2 {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -116,7 +106,6 @@ thead th { background: #f8fafc; font-weight: 700; }
 }
 .form-grid-2 .full { grid-column: 1 / -1; }
 
-/* Basic inputs */
 label { display: block; font-weight: 600; margin-bottom: 6px; color: #0f172a; }
 input[type="text"], input[type="password"], input[type="email"],
 input[type="number"], input[type="date"], input[type="time"],
