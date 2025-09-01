@@ -1,51 +1,68 @@
 {% extends "base.html" %}
-{% block title %}New Request · RWA Leave{% endblock %}
+{% block title %}New Request{% endblock %}
+
 {% block content %}
-  <h1>New Request</h1>
+  <div class="card">
+    <h1 style="margin-top:0;">New Leave Request</h1>
 
-  <form method="post" action="{{ url_for('new_request') }}">
-    <div>
-      <label>Kind
-        <select name="kind">
-          <option value="annual">Annual</option>
-          <option value="sick">Sick</option>
-        </select>
-      </label>
-    </div>
+    <form method="post" action="{{ url_for('new_request') }}">
+      <div style="display:grid; grid-template-columns: 1fr 1fr; gap:16px;">
+        <!-- Mode -->
+        <div>
+          <label for="mode">Mode</label>
+          <select id="mode" name="mode">
+            <option value="hourly">Hourly</option>
+            <option value="daily">Daily</option>
+          </select>
+        </div>
 
-    <div>
-      <label>Mode
-        <select name="mode">
-          <option value="hourly">Hourly</option>
-          <option value="daily">Daily</option>
-        </select>
-      </label>
-    </div>
+        <!-- Kind -->
+        <div>
+          <label for="kind">Kind</label>
+          <select id="kind" name="kind">
+            <option value="annual">Annual</option>
+            <option value="sick">Sick</option>
+          </select>
+        </div>
 
-    <div>
-      <label>Start date <input type="date" name="start_date" required></label>
-      <label>End date <input type="date" name="end_date" required></label>
-    </div>
+        <!-- Dates -->
+        <div>
+          <label for="start_date">Start Date</label>
+          <input type="date" id="start_date" name="start_date" required>
+        </div>
+        <div>
+          <label for="end_date">End Date</label>
+          <input type="date" id="end_date" name="end_date" required>
+        </div>
 
-    <div>
-      <em>Hourly mode options (optional if you enter Hours directly):</em><br>
-      <label>Start time <input type="time" name="start_time" step="900"></label>
-      <label>End time <input type="time" name="end_time" step="900"></label>
-    </div>
+        <!-- Hours (for hourly mode) -->
+        <div>
+          <label for="hours">Hours (if hourly)</label>
+          <input type="number" step="0.25" id="hours" name="hours">
+          <small style="color:#555;">Default workday: {{ workday }} hours</small>
+        </div>
 
-    <div>
-      <label>Hours <input type="number" step="0.25" min="0" name="hours" placeholder="e.g., 4.5"></label>
-      <small>(If blank and times are given for the same day, hours will be computed.)</small>
-    </div>
+        <!-- Optional start/end times -->
+        <div>
+          <label for="start_time">Start Time</label>
+          <input type="time" id="start_time" name="start_time" step="900">
+        </div>
+        <div>
+          <label for="end_time">End Time</label>
+          <input type="time" id="end_time" name="end_time" step="900">
+        </div>
 
-    <div>
-      <label>Reason<br>
-        <textarea name="reason" rows="3" cols="50" placeholder="Optional"></textarea>
-      </label>
-    </div>
+        <!-- Reason -->
+        <div style="grid-column:1/-1;">
+          <label for="reason">Reason</label>
+          <textarea id="reason" name="reason" rows="3" style="width:100%;"></textarea>
+        </div>
 
-    <div style="margin-top:10px;">
-      <button type="submit">Submit Request</button>
-    </div>
-  </form>
+        <!-- Submit -->
+        <div style="grid-column:1/-1; margin-top:12px;">
+          <button type="submit">Submit Request</button>
+        </div>
+      </div>
+    </form>
+  </div>
 {% endblock %}
