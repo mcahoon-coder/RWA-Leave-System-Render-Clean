@@ -1,15 +1,10 @@
 {% extends "base.html" %}
+{% block title %}Login · RWA Leave{% endblock %}
 {% block content %}
-<div class="card">
-  <h2>Login</h2>
-  <form method="post">
-    <label>Username</label>
-    <input type="text" name="username" required>
-
-    <label>Password</label>
-    <input type="password" name="password" required>
-
-    <button type="submit">Login</button>
+  <h1>Login</h1>
+  <form method="post" action="{{ url_for('login') }}">
+    <div><label>Username <input type="text" name="username" required></label></div>
+    <div><label>Password <input type="password" name="password" required></label></div>
+    <div style="margin-top:10px;"><button type="submit">Sign in</button></div>
   </form>
-</div>
 {% endblock %}
