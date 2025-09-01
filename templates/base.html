@@ -4,34 +4,40 @@
   <meta charset="utf-8">
   <title>{% block title %}RWA Leave System{% endblock %}</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
-
-  <!-- Site theme and navbar -->
   <link href="{{ url_for('static', filename='styles.css') }}" rel="stylesheet">
-  <link href="{{ url_for('static', filename='topnav.css') }}" rel="stylesheet">
-
   {% block head %}{% endblock %}
 </head>
 <body>
-  <!-- Top Navigation Bar -->
-  <header class="topnav">
-    <div class="brand">
-      <a href="{{ NAV.dashboard }}">RWA Leave</a>
-    </div>
-    <nav class="menu">
-      <a href="{{ NAV.dashboard }}">Dashboard</a>
-      <a href="{{ NAV.my_requests }}">My Requests</a>
-      <a href="{{ NAV.team_calendar }}">Team Calendar</a>
-      <a href="{{ NAV.new_request }}">New Request</a>
-      <a href="{{ NAV.admin }}">Admin</a>
-      <a href="{{ NAV.logout }}">Logout</a>
-    </nav>
-  </header>
+  <!-- Nav -->
+  <div class="nav">
+    <a href="{{ NAV.dashboard }}" class="brand">RWA Leave</a>
+    <ul class="nav-links">
+      <li><a href="{{ NAV.dashboard }}">Dashboard</a></li>
+      <li><a href="{{ NAV.my_requests }}">My Requests</a></li>
+      <li><a href="{{ NAV.team_calendar }}">Calendar</a></li>
+      <li><a href="{{ NAV.new_request }}">New Request</a></li>
+      <li><a href="{{ NAV.admin }}">Admin</a></li>
+      <li><a href="{{ NAV.logout }}">Logout</a></li>
+    </ul>
+  </div>
 
-  <main class="page">
-    <div class="content-surface">
+  <!-- Content wrapper -->
+  <div class="content-wrapper">
+    <div class="container">
+      <!-- Flash messages -->
+      <div class="flash-stack">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+            {% for category, message in messages %}
+              <div class="flash flash-{{ category }}">{{ message }}</div>
+            {% endfor %}
+          {% endif %}
+        {% endwith %}
+      </div>
+
       {% block content %}{% endblock %}
     </div>
-  </main>
+  </div>
 
   {% block scripts %}{% endblock %}
 </body>
