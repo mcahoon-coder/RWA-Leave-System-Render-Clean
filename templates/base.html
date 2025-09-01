@@ -1,37 +1,28 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>{{ title or "Leave System" }}</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <meta charset="utf-8">
+  <title>{% block title %}RWA Leave System{% endblock %}</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link href="{{ url_for('static', filename='styles.css') }}" rel="stylesheet">
 </head>
 <body>
-  <nav class="top-nav">
-  <ul>
-    <li><a href="{{ url_for('dashboard') }}">Dashboard</a></li>
-    <li><a href="{{ url_for('new_request') }}">Request Leave</a></li>
-    <li><a href="{{ url_for('my_requests') }}">My Requests</a></li>
-    <li><a href="{{ url_for('calendar') }}">Calendar</a></li>
-    {% if current_user.is_authenticated and current_user.role == 'admin' %}
-      <li><a href="{{ url_for('manage_users') }}">Manage Users</a></li>
-    {% endif %}
-    {% if current_user.is_authenticated %}
-      <li><a href="{{ url_for('logout') }}">Logout</a></li>
-    {% endif %}
-  </ul>
-</nav>
-  <main class="content-wrapper">
-    {% with messages = get_flashed_messages(with_categories=true) %}
-      {% if messages %}
-        <div class="flash-messages">
-          {% for cat, msg in messages %}
-            <div class="flash {{ cat }}">{{ msg }}</div>
-          {% endfor %}
-        </div>
-      {% endif %}
-    {% endwith %}
+  <!-- Top Navbar -->
+  <header class="topnav">
+    <div class="brand">
+      <a href="{{ url_for('dashboard') }}">RWA Leave</a>
+    </div>
+    <nav class="menu">
+      <a href="{{ url_for('dashboard') }}">Dashboard</a>
+      <a href="{{ url_for('my_requests') }}">My Requests</a>
+      <a href="{{ url_for('team_calendar') }}">Team Calendar</a>
+      <a href="{{ url_for('new_request') }}">New Request</a>
+      <a href="{{ url_for('admin') }}">Admin</a>
+      <a href="{{ url_for('logout') }}">Logout</a>
+    </nav>
+  </header>
 
+  <main class="page">
     {% block content %}{% endblock %}
   </main>
 </body>
