@@ -4,36 +4,105 @@
 {% block content %}
   <div class="card">
     <h1 style="margin-top:0;">Admin</h1>
-    <p>Admin tools for user management, approvals, and reports.</p>
+    <p>Quick links:</p>
+    <div style="display:flex; gap:10px; flex-wrap:wrap;">
+      <a class="btn" href="{{ url_for('manage_users') }}">Manage Users</a>
+      <a class="btn" href="{{ url_for('my_requests') }}?status=Pending">View Pending Requests</a>
+      <a class="btn" href="{{ url_for('calendar') }}">Calendar</a>
+      <a class="btn" href="{{ url_for('export_requests_csv') }}">Export CSV</a>
+      <a class="btn" href="{{ url_for('export_requests_xlsx') }}">Export Excel</a>
+    </div>
   </div>
 
   <div class="card">
-    <h2>User Management</h2>
-    <p>Create users, edit roles, reset passwords, and adjust hours balance.</p>
-    <p>
-      <a class="btn" href="/admin/users">Open User Manager</a>
-      <a class="btn" href="/admin/users#create">Add New User</a>
-    </p>
+    <h2 style="margin-top:0;">Approvals</h2>
+
+    {% if pending and pending|length %}
+      <table>
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>User</th>
+            <th>Kind</th>
+            <th>Mode</th>
+            <th>Hours</th>
+            <th>School</th>
+            <th style="min-width:260px;">Substitutes</th>
+            <th>Dates</th>
+            <th>Reason</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in pending %}
+            <tr>
+              <td>{{ r.id }}</td>
+              <td>{{ r.user.username }}</td>
+              <td>{{ r.kind }}</td>
+              <td>{{ r.mode }}</td>
+              <td>{{ '%.2f'|format(r.hours) }}</td>
+              <td>{{ 'Yes' if r.is_school_related else 'No' }}</td>
+              <td>
+                {% if r.subs and r.subs|length %}
+                  <ul style="margin:0; padding-left:18px;">
+                    {% for s in r.subs %}
+                      <li>
+                        <form method="post" action="{{ url_for('update_substitute', req_id=r.id, sub_id=s.id) }}" style="display:inline-flex; gap:6px; align-items:center;">
+                          <input name="sub_name" value="{{ s.name }}" style="max-width:130px;">
+                          <input name="sub_hours" type="number" step="0.25" value="{{ '%.2f'|format(s.hours) }}" style="width:90px;">
+                          <button class="btn" type="submit">Save</button>
+                        </form>
+                        <form method="post" action="{{ url_for('delete_substitute', req_id=r.id, sub_id=s.id) }}" style="display:inline;">
+                          <button class="btn" type="submit">✕</button>
+                        </form>
+                      </li>
+                    {% endfor %}
+                  </ul>
+                {% else %}
+                  <em>No subs yet</em>
+                {% endif %}
+                <form method="post" action="{{ url_for('add_substitute', req_id=r.id) }}" style="display:flex; gap:6px; align-items:center; margin-top:6px;">
+                  <input name="sub_name" placeholder="Name" required style="max-width:130px;">
+                  <input name="sub_hours" type="number" step="0.25" placeholder="Hours" style="width:90px;">
+                  <button class="btn" type="submit">Add</button>
+                </form>
+              </td>
+              <td>{{ r.start_date }} → {{ r.end_date }}</td>
+              <td>{{ r.reason }}</td>
+              <td>
+                <!-- school toggle -->
+                {% if not r.is_school_related %}
+                  <form method="post" action="{{ url_for('mark_school_related', req_id=r.id) }}" style="display:inline;">
+                    <button class="btn" type="submit">Mark School</button>
+                  </form>
+                {% else %}
+                  <form method="post" action="{{ url_for('unmark_school_related', req_id=r.id) }}" style="display:inline;">
+                    <button class="btn" type="submit">Unmark School</button>
+                  </form>
+                {% endif %}
+                <!-- approve/disapprove -->
+                <form method="post" action="{{ url_for('approve', req_id=r.id) }}" style="display:inline;">
+                  <button class="btn" type="submit">Approve</button>
+                </form>
+                <form method="post" action="{{ url_for('disapprove', req_id=r.id) }}" style="display:inline;">
+                  <button class="btn" type="submit">Disapprove</button>
+                </form>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% else %}
+      <p>No pending requests.</p>
+    {% endif %}
   </div>
 
   <div class="card">
-    <h2>Approvals</h2>
-    <p>Review and take action on leave requests.</p>
-    <p>
-      <a class="btn" href="{{ NAV.my_requests }}?status=Pending">View Pending</a>
-      <a class="btn" href="{{ NAV.my_requests }}?status=Approved">Approved</a>
-      <a class="btn" href="{{ NAV.my_requests }}?status=Disapproved">Disapproved</a>
-      <a class="btn" href="{{ NAV.my_requests }}?status=Cancelled">Cancelled</a>
-    </p>
-  </div>
-
-  <div class="card">
-    <h2>Reports</h2>
-    <p>Export requests for HR or analysis.</p>
-    <p>
-      <a class="btn" href="/admin/export/requests.csv">Export CSV</a>
-      <a class="btn" href="/admin/export/requests.xlsx">Export Excel</a>
-      <a class="btn" href="{{ NAV.team_calendar }}">Open Team Calendar</a>
-    </p>
+    <h2 style="margin-top:0;">Reports</h2>
+    <p>Download current filtered data from the Requests page, or export everything here:</p>
+    <div style="display:flex; gap:10px; flex-wrap:wrap;">
+      <a class="btn" href="{{ url_for('export_requests_csv') }}">Export CSV</a>
+      <a class="btn" href="{{ url_for('export_requests_xlsx') }}">Export Excel</a>
+    </div>
   </div>
 {% endblock %}
