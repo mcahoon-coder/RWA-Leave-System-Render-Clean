@@ -4,7 +4,6 @@
 {% block content %}
   <div class="card">
     <h1 style="margin-top:0;">{{ 'Requests' if is_admin else 'My Requests' }}</h1>
-
     <form method="get" action="{{ NAV.my_requests }}">
       <div class="form-grid-2">
         <div>
@@ -55,96 +54,93 @@
         </thead>
         <tbody>
           {% for r in items %}
-          <tr>
-            <td>{{ r.id }}</td>
-            {% if is_admin %}<td>{{ r.user.username }}</td>{% endif %}
-            <td>{{ r.kind }}</td>
-            <td>{{ r.mode }}</td>
-            <td>{{ '%.2f'|format(r.hours) }}</td>
-            <td>{{ 'Yes' if r.is_school_related else 'No' }}</td>
+            <tr>
+              <td>{{ r.id }}</td>
+              {% if is_admin %}<td>{{ r.user.username }}</td>{% endif %}
+              <td>{{ r.kind }}</td>
+              <td>{{ r.mode }}</td>
+              <td>{{ '%.2f'|format(r.hours) }}</td>
+              <td>{{ 'Yes' if r.is_school_related else 'No' }}</td>
 
-            {% if is_admin %}
-              <td>
-                <!-- Existing subs list -->
-                {% if r.subs and r.subs|length %}
-                  <ul style="margin:0; padding-left:18px;">
-                    {% for s in r.subs %}
-                      <li>
-                        <form method="post" action="{{ url_for('update_substitute', req_id=r.id, sub_id=s.id) }}" style="display:inline-flex; gap:6px; align-items:center;">
-                          <input name="sub_name" value="{{ s.name }}" style="max-width:130px;">
-                          <input name="sub_hours" type="number" step="0.25" value="{{ '%.2f'|format(s.hours) }}" style="width:90px;">
-                          <button class="btn" type="submit">Save</button>
-                        </form>
-                        <form method="post" action="{{ url_for('delete_substitute', req_id=r.id, sub_id=s.id) }}" style="display:inline;">
-                          <button class="btn" type="submit">✕</button>
-                        </form>
-                      </li>
-                    {% endfor %}
-                  </ul>
-                {% else %}
-                  <em>No subs yet</em>
-                {% endif %}
-
-                <!-- Add a new sub -->
-                <form method="post" action="{{ url_for('add_substitute', req_id=r.id) }}" style="display:flex; gap:6px; align-items:center; margin-top:6px;">
-                  <input name="sub_name" placeholder="Name" required style="max-width:130px;">
-                  <input name="sub_hours" type="number" step="0.25" placeholder="Hours" style="width:90px;">
-                  <button class="btn" type="submit">Add</button>
-                </form>
-              </td>
-            {% endif %}
-
-            <td>{{ r.status }}</td>
-            <td>{{ r.start_date }}</td>
-            <td>{{ r.end_date }}</td>
-            <td>{{ r.reason }}</td>
-
-            <td>
               {% if is_admin %}
-                {% if r.status == 'Pending' %}
-                  <form method="post" action="{{ url_for('approve', req_id=r.id) }}" style="display:inline;">
-                    <button class="btn" type="submit">Approve</button>
-                  </form>
-                  <form method="post" action="{{ url_for('disapprove', req_id=r.id) }}" style="display:inline;">
-                    <button class="btn" type="submit">Disapprove</button>
-                  </form>
-                  {% if not r.is_school_related %}
-                    <form method="post" action="{{ url_for('mark_school_related', req_id=r.id) }}" style="display:inline;">
-                      <button class="btn" type="submit">Mark School</button>
-                    </form>
+                <td>
+                  {% if r.subs and r.subs|length %}
+                    <ul style="margin:0; padding-left:18px;">
+                      {% for s in r.subs %}
+                        <li>
+                          <form method="post" action="{{ url_for('update_substitute', req_id=r.id, sub_id=s.id) }}" style="display:inline-flex; gap:6px; align-items:center;">
+                            <input name="sub_name" value="{{ s.name }}" style="max-width:130px;">
+                            <input name="sub_hours" type="number" step="0.25" value="{{ '%.2f'|format(s.hours) }}" style="width:90px;">
+                            <button class="btn" type="submit">Save</button>
+                          </form>
+                          <form method="post" action="{{ url_for('delete_substitute', req_id=r.id, sub_id=s.id) }}" style="display:inline;">
+                            <button class="btn" type="submit">✕</button>
+                          </form>
+                        </li>
+                      {% endfor %}
+                    </ul>
                   {% else %}
-                    <form method="post" action="{{ url_for('unmark_school_related', req_id=r.id) }}" style="display:inline;">
-                      <button class="btn" type="submit">Unmark School</button>
-                    </form>
+                    <em>No subs yet</em>
                   {% endif %}
-                {% endif %}
-                {% if r.status != 'Cancelled' %}
-                  <form method="post" action="{{ url_for('cancel', req_id=r.id) }}" style="display:inline;">
-                    <button class="btn" type="submit">Cancel</button>
+                  <form method="post" action="{{ url_for('add_substitute', req_id=r.id) }}" style="display:flex; gap:6px; align-items:center; margin-top:6px;">
+                    <input name="sub_name" placeholder="Name" required style="max-width:130px;">
+                    <input name="sub_hours" type="number" step="0.25" placeholder="Hours" style="width:90px;">
+                    <button class="btn" type="submit">Add</button>
                   </form>
-                {% endif %}
-              {% else %}
-                {% if r.user_id == me.id and r.status == 'Pending' %}
-                  {% if not r.is_school_related %}
-                    <form method="post" action="{{ url_for('mark_school_related', req_id=r.id) }}" style="display:inline;">
-                      <button class="btn" type="submit">Mark School</button>
-                    </form>
-                  {% else %}
-                    <form method="post" action="{{ url_for('unmark_school_related', req_id=r.id) }}" style="display:inline;">
-                      <button class="btn" type="submit">Unmark School</button>
-                    </form>
-                  {% endif %}
-                {% endif %}
-                {% if r.user_id == me.id and r.status != 'Cancelled' %}
-                  <form method="post" action="{{ url_for('cancel', req_id=r.id) }}" style="display:inline;">
-                    <button class="btn" type="submit">Cancel</button>
-                  </form>
-                {% else %}
-                  —
-                {% endif %}
+                </td>
               {% endif %}
-            </td>
-          </tr>
+
+              <td>{{ r.status }}</td>
+              <td>{{ r.start_date }}</td>
+              <td>{{ r.end_date }}</td>
+              <td>{{ r.reason }}</td>
+
+              <td>
+                {% if is_admin %}
+                  {% if r.status == 'Pending' %}
+                    <form method="post" action="{{ url_for('approve', req_id=r.id) }}" style="display:inline;">
+                      <button class="btn" type="submit">Approve</button>
+                    </form>
+                    <form method="post" action="{{ url_for('disapprove', req_id=r.id) }}" style="display:inline;">
+                      <button class="btn" type="submit">Disapprove</button>
+                    </form>
+                    {% if not r.is_school_related %}
+                      <form method="post" action="{{ url_for('mark_school_related', req_id=r.id) }}" style="display:inline;">
+                        <button class="btn" type="submit">Mark School</button>
+                      </form>
+                    {% else %}
+                      <form method="post" action="{{ url_for('unmark_school_related', req_id=r.id) }}" style="display:inline;">
+                        <button class="btn" type="submit">Unmark School</button>
+                      </form>
+                    {% endif %}
+                  {% endif %}
+                  {% if r.status != 'Cancelled' %}
+                    <form method="post" action="{{ url_for('cancel', req_id=r.id) }}" style="display:inline;">
+                      <button class="btn" type="submit">Cancel</button>
+                    </form>
+                  {% endif %}
+                {% else %}
+                  {% if r.user_id == me.id and r.status == 'Pending' %}
+                    {% if not r.is_school_related %}
+                      <form method="post" action="{{ url_for('mark_school_related', req_id=r.id) }}" style="display:inline;">
+                        <button class="btn" type="submit">Mark School</button>
+                      </form>
+                    {% else %}
+                      <form method="post" action="{{ url_for('unmark_school_related', req_id=r.id) }}" style="display:inline;">
+                        <button class="btn" type="submit">Unmark School</button>
+                      </form>
+                    {% endif %}
+                  {% endif %}
+                  {% if r.user_id == me.id and r.status != 'Cancelled' %}
+                    <form method="post" action="{{ url_for('cancel', req_id=r.id) }}" style="display:inline;">
+                      <button class="btn" type="submit">Cancel</button>
+                    </form>
+                  {% else %}
+                    —
+                  {% endif %}
+                {% endif %}
+              </td>
+            </tr>
           {% endfor %}
         </tbody>
       </table>
