@@ -62,35 +62,43 @@ ADMIN_EMAILS_ENV = [
 ]
 
 def send_email(to_addrs, subject, body):
-    """Send plain-text email. Safe no-op if not configured."""
-    if not to_addrs:
-        return
-    if isinstance(to_addrs, str):
-        to_addrs = [to_addrs]
-    to_addrs = [a for a in to_addrs if a]
-    if not to_addrs or not MAIL_HOST or not MAIL_FROM:
-        return  # SMTP not configured
+    """Send plain-text email. Returns (ok: bool, msg: str). Safe no-op if not configured."""
+    try:
+        if not to_addrs:
+            app.logger.warning("Email skipped: no recipients provided.")
+            return False, "No recipients"
+        if isinstance(to_addrs, str):
+            to_addrs = [to_addrs]
+        to_addrs = [a for a in to_addrs if a]
 
-    msg = EmailMessage()
-    msg["From"] = MAIL_FROM
-    msg["To"] = ", ".join(to_addrs)
-    msg["Subject"] = subject
-    msg.set_content(body)
+        if not MAIL_HOST or not MAIL_FROM:
+            app.logger.warning("Email skipped: MAIL_HOST or MAIL_FROM not set.")
+            return False, "SMTP not configured"
 
-    if MAIL_USE_TLS:
-        context = ssl.create_default_context()
-        with smtplib.SMTP(MAIL_HOST, MAIL_PORT) as server:
-            server.ehlo()
-            server.starttls(context=context)
-            server.ehlo()
-            if MAIL_USER:
-                server.login(MAIL_USER, MAIL_PASSWORD)
-            server.send_message(msg)
-    else:
-        with smtplib.SMTP(MAIL_HOST, MAIL_PORT) as server:
-            if MAIL_USER:
-                server.login(MAIL_USER, MAIL_PASSWORD)
-            server.send_message(msg)
+        msg = EmailMessage()
+        msg["From"] = MAIL_FROM
+        msg["To"] = ", ".join(to_addrs)
+        msg["Subject"] = subject
+        msg.set_content(body)
+
+        if MAIL_USE_TLS:
+            context = ssl.create_default_context()
+            with smtplib.SMTP(MAIL_HOST, MAIL_PORT) as server:
+                server.ehlo()
+                server.starttls(context=context)
+                server.ehlo()
+                if MAIL_USER:
+                    server.login(MAIL_USER, MAIL_PASSWORD)
+                server.send_message(msg)
+        else:
+            with smtplib.SMTP(MAIL_HOST, MAIL_PORT) as server:
+                if MAIL_USER:
+                    server.login(MAIL_USER, MAIL_PASSWORD)
+                server.send_message(msg)
+        return True, "Sent"
+    except Exception as e:
+        app.logger.error(f"Email send failed: {e}")
+        return False, f"Failed: {e}"
 
 # =========================================================
 # Models & constants
@@ -382,6 +390,37 @@ def admin_hub():
     # Your templates/admin.html should render BUTTONS for actions
     return render_template("admin.html", title="Admin", pending=pending)
 
+# Admin email test endpoint
+@app.get("/admin/email-test")
+@login_required
+def admin_email_test():
+    if current_user.role != Role.admin:
+        flash("Admins only.", "warning")
+        return redirect(url_for("dashboard"))
+
+    # Recipients: current admin's email (if set) + ADMIN_EMAILS env + other admin emails
+    recipients = []
+    if current_user.email:
+        recipients.append(current_user.email)
+    recipients += admin_emails()
+    # de-duplicate
+    seen = set(); recipients = [r for r in recipients if r and not (r in seen or seen.add(r))]
+
+    subject = "RWA Leave System – Test Email"
+    body = (
+        "This is a test email from the RWA Leave System.\n\n"
+        f"Time: {datetime.utcnow().isoformat()}Z\n"
+        f"From: {MAIL_FROM}\nHost: {MAIL_HOST}:{MAIL_PORT} TLS={MAIL_USE_TLS}\n"
+        f"Recipients: {', '.join(recipients) if recipients else '(none)'}\n"
+    )
+
+    ok, msg = send_email(recipients, subject, body)
+    if ok:
+        flash(f"Test email sent to: {', '.join(recipients)}", "success")
+    else:
+        flash(f"Test email failed: {msg}", "danger")
+    return redirect(url_for("admin_hub"))
+
 # ---------- New Request ----------
 @app.route("/request/new", methods=["GET", "POST"])
 @login_required
@@ -408,7 +447,6 @@ def new_request():
         # compute hours
         hours = 0.0
         if mode == RequestMode.hourly:
-            # explicit hours or compute from quarter times
             hours_str = (request.form.get("hours") or "").strip()
             if hours_str:
                 try:
@@ -433,7 +471,6 @@ def new_request():
             return render_template("new_request.html", title="New Request", workday=WORKDAY_HOURS)
 
         if hours > capacity_hours and mode != RequestMode.hourly:
-            # for daily mode the capacity check is meaningful
             flash(f"Requested {hours:.2f} exceeds capacity {capacity_hours:.2f} for that range.", "warning")
             return render_template("new_request.html", title="New Request", workday=WORKDAY_HOURS)
 
@@ -463,7 +500,9 @@ def new_request():
             f"Reason: {reason or '(none)'}\n"
             f"Status: {req.status}\n"
         )
-        send_email(admin_emails(), subj, body)
+        ok, emsg = send_email(admin_emails(), subj, body)
+        if not ok:
+            flash(f"Notice: admin email not sent ({emsg}). Check SMTP settings.", "warning")
 
         flash("Request submitted.", "success")
         return redirect(url_for("my_requests"))
@@ -593,7 +632,9 @@ def approve(req_id):
         f"Dates: {r.start_date} to {r.end_date}\n\n"
         f"Remaining balance: {u.hours_balance:.2f} hours\n"
     )
-    send_email([u.email] + admin_emails(), subj, body)
+    ok, emsg = send_email([u.email] + admin_emails(), subj, body)
+    if not ok:
+        flash(f"Notice: approval email not sent ({emsg}).", "warning")
 
     flash("Approved.", "success")
     return redirect(request.referrer or url_for("my_requests"))
@@ -621,7 +662,9 @@ def disapprove(req_id):
         f"Substitutes: {subs_text}\n"
         f"Dates: {r.start_date} to {r.end_date}\n"
     )
-    send_email([u.email] + admin_emails(), subj, body)
+    ok, emsg = send_email([u.email] + admin_emails(), subj, body)
+    if not ok:
+        flash(f"Notice: disapproval email not sent ({emsg}).", "warning")
 
     flash("Disapproved.", "info")
     return redirect(request.referrer or url_for("my_requests"))
@@ -654,7 +697,9 @@ def cancel(req_id):
     recipients = admin_emails()
     if u.email:
         recipients = [u.email] + recipients
-    send_email(recipients, subj, body)
+    ok, emsg = send_email(recipients, subj, body)
+    if not ok:
+        flash(f"Notice: cancel email not sent ({emsg}).", "warning")
 
     flash("Cancelled.", "secondary")
     return redirect(request.referrer or url_for("my_requests"))
