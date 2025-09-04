@@ -131,5 +131,31 @@
       </div>
     </form>
   </div>
+
+  <!-- Bulk Import (CSV) -->
+  <div class="card" style="padding:.9rem 1rem;">
+    <h3 style="margin:.2rem 0 .6rem;">Bulk Import (CSV)</h3>
+    <form method="post" action="{{ url_for('admin_import_users') }}" enctype="multipart/form-data" style="display:flex; gap:10px; align-items:end; flex-wrap:wrap;">
+      <div style="min-width:260px; flex:1;">
+        <label for="csv_file">CSV file</label>
+        <input id="csv_file" type="file" name="file" accept=".csv" required>
+      </div>
+      <div>
+        <label>&nbsp;</label>
+        <button class="btn sm" type="submit">Upload</button>
+      </div>
+    </form>
+    <details style="margin-top:.6rem;">
+      <summary class="btn link sm">CSV format help</summary>
+      <div class="muted" style="margin-top:.4rem;">
+        Header row required. Supported columns: <strong>username</strong>, <strong>email</strong>, <strong>role</strong> (admin or faculty_staff), <strong>hours_balance</strong>, <strong>password</strong> (optional).
+        <pre style="background:#f8fafc; padding:.6rem; border-radius:8px; overflow:auto;">username,email,role,hours_balance,password
+jsmith,jsmith@school.org,faculty_staff,160,
+adoe,adoe@school.org,admin,200,Temp!234
+</pre>
+      </div>
+    </details>
+  </div>
+
 </div>
 {% endblock %}
