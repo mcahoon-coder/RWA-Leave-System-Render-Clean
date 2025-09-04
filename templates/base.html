@@ -1,52 +1,57 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>{% block title %}Leave System{% endblock %}</title>
+  <meta charset="utf-8">
+  <title>{% block title %}RWA Leave System{% endblock %}</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <!-- Main CSS -->
   <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+
+  {% block extra_head %}{% endblock %}
 </head>
 <body>
-
-  <!-- NAVIGATION -->
+  <!-- Top Navigation -->
   <nav class="nav">
-    <a class="brand" href="{{ url_for('dashboard') }}">RWA Leave System</a>
+    <a class="brand" href="{{ NAV.dashboard }}">RWA Leave System</a>
+
     <ul class="nav-links">
-      <li><a href="{{ url_for('dashboard') }}">Dashboard</a></li>
-      <li><a href="{{ url_for('my_requests') }}">My Requests</a></li>
-      <li><a href="{{ url_for('calendar') }}">Calendar</a></li>
-      <li><a href="{{ url_for('new_request') }}">New Request</a></li>
-      {% if current_user.is_authenticated and current_user.role == 'admin' %}
-        <li><a href="{{ url_for('admin_hub') }}">Admin</a></li>
+      <li><a href="{{ NAV.dashboard }}">Dashboard</a></li>
+      <li><a href="{{ NAV.my_requests }}">My Requests</a></li>
+      <li><a href="{{ NAV.team_calendar }}">Calendar</a></li>
+      <li><a href="{{ NAV.new_request }}">New Request</a></li>
+      {% if NAV.admin %}
+      <li><a href="{{ NAV.admin }}">Admin</a></li>
       {% endif %}
       {% if current_user.is_authenticated %}
-        <li><a href="{{ url_for('logout') }}">Logout</a></li>
-      {% else %}
-        <li><a href="{{ url_for('login') }}">Login</a></li>
+      <li><a href="{{ NAV.logout }}">Logout</a></li>
       {% endif %}
     </ul>
   </nav>
 
-  <!-- PAGE WRAPPER -->
+  <!-- Page Background Gradient -->
   <div class="content-wrapper">
-    <div class="container">
-
-      <!-- FLASH MESSAGES -->
-      {% with messages = get_flashed_messages(with_categories=true) %}
-        {% if messages %}
-          <div class="flash-stack">
-            {% for category, msg in messages %}
-              <div class="flash flash-{{ category }}">{{ msg }}</div>
+    <!-- Pale-yellow Content Container -->
+    <main class="container">
+      <!-- Flash messages -->
+      <div class="flash-stack">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+            {% for cat, msg in messages %}
+              <div class="flash {{ 'flash-' + cat|lower }}">{{ msg }}</div>
             {% endfor %}
-          </div>
-        {% endif %}
-      {% endwith %}
+          {% endif %}
+        {% endwith %}
+      </div>
 
-      <!-- MAIN CONTENT -->
       {% block content %}{% endblock %}
 
-    </div>
+      <footer class="muted" style="margin-top:1rem; font-size:.9rem;">
+        &copy; {{ current_year }}
+      </footer>
+    </main>
   </div>
 
+  {% block extra_scripts %}{% endblock %}
 </body>
 </html>
