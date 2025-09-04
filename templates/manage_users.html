@@ -13,7 +13,7 @@
   </div>
 </div>
 
-<!-- Create user (compact) -->
+<!-- Create user -->
 <div class="card">
   <h3 style="margin:0 0 .6rem;">Add User</h3>
   <form method="post" action="{{ url_for('admin_create_user') }}">
@@ -21,6 +21,10 @@
       <div style="min-width:200px; flex:1 1 220px;">
         <label>Username</label>
         <input class="input-sm" name="username" required>
+      </div>
+      <div style="min-width:200px; flex:1 1 220px;">
+        <label>Staff Name</label>
+        <input class="input-sm" name="staff_name" placeholder="Full name">
       </div>
       <div style="min-width:180px; flex:1 1 200px;">
         <label>Password</label>
@@ -48,13 +52,14 @@
   </form>
 </div>
 
-<!-- Users table (tight) -->
+<!-- Users table -->
 <div class="card">
   <h3 style="margin:0 0 .6rem;">All Users</h3>
   <table class="table-tight" style="font-size:.95rem;">
     <thead>
       <tr>
         <th>User</th>
+        <th>Staff Name</th>
         <th>Email</th>
         <th>Role</th>
         <th>Hours</th>
@@ -64,21 +69,14 @@
     <tbody>
       {% for u in users %}
       <tr>
-        <td>
-          {{ u.username }}
-          {% if u.role == 'admin' %}
-            <div class="muted">Admin</div>
-          {% else %}
-            <div class="muted">Faculty/Staff</div>
-          {% endif %}
-        </td>
+        <td>{{ u.username }}</td>
+        <td>{{ u.staff_name or '—' }}</td>
         <td>{{ u.email or '—' }}</td>
         <td>{{ 'Admin' if u.role=='admin' else 'Faculty/Staff' }}</td>
         <td>{{ '%.2f'|format(u.hours_balance or 0) }}</td>
         <td style="white-space:nowrap;">
-          <!-- Inline update -->
+          <!-- Update (email / role / hours only) -->
           <form method="post" action="{{ url_for('admin_update_user', user_id=u.id) }}" class="row" style="margin-bottom:6px;">
-            <input class="input-sm" name="username" placeholder="new username" style="max-width:160px;">
             <input class="input-sm" name="email" placeholder="email" style="max-width:220px;">
             <select class="input-sm" name="role" style="max-width:150px;">
               <option value="">(keep)</option>
@@ -95,7 +93,7 @@
             <button class="btn sm" type="submit">Reset PW</button>
           </form>
 
-          <!-- Delete (confirm) -->
+          <!-- Delete -->
           <form method="post" action="{{ url_for('admin_delete_user', user_id=u.id) }}"
                 onsubmit="return confirm('Delete {{ u.username }}? This also deletes their requests.');">
             <button class="btn sm danger" type="submit">Delete</button>
@@ -103,7 +101,7 @@
         </td>
       </tr>
       {% else %}
-      <tr><td colspan="5" class="muted">No users found.</td></tr>
+      <tr><td colspan="6" class="muted">No users found.</td></tr>
       {% endfor %}
     </tbody>
   </table>
