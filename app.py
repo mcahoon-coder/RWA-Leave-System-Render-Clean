@@ -36,26 +36,6 @@ app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {"pool_pre_ping": True}
 
 db = SQLAlchemy(app)
 
-# ---- Time formatting filter (12-hour with AM/PM) ----
-@app.template_filter("h12")
-def h12(time_str: str) -> str:
-    """
-    Convert 'HH:MM' (24h) to 'h:MM AM/PM'. 
-    Returns the input if it can't be parsed or is empty.
-    """
-    try:
-        if not time_str:
-            return ""
-        hh, mm = time_str.split(":")
-        h = int(hh)
-        suffix = "AM" if h < 12 else "PM"
-        h12 = h % 12
-        if h12 == 0:
-            h12 = 12
-        return f"{h12}:{mm} {suffix}"
-    except Exception:
-        return time_str
-
 login_manager = LoginManager(app)
 login_manager.login_view = "login"
 
@@ -144,7 +124,7 @@ class User(UserMixin, db.Model):
     role = db.Column(db.String(20), default=Role.staff, nullable=False)
     hours_balance = db.Column(db.Float, default=160.0, nullable=False)
     email = db.Column(db.String(255))  # for notifications
-    # NEW: optional display name
+    # optional display name
     staff_name = db.Column(db.String(150))
 
 class LeaveRequest(db.Model):
@@ -165,7 +145,7 @@ class LeaveRequest(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     decided_at = db.Column(db.DateTime)
 
-    # New flags/extra
+    # extras
     is_school_related = db.Column(db.Boolean, default=False, nullable=False)
     substitute = db.Column(db.String(120))  # legacy single substitute text (optional)
 
@@ -262,7 +242,6 @@ def ensure_db():
                 db.session.execute(text("ALTER TABLE leave_request ADD COLUMN is_school_related BOOLEAN DEFAULT 0 NOT NULL"))
             if not _column_exists("leave_request", "substitute"):
                 db.session.execute(text("ALTER TABLE leave_request ADD COLUMN substitute VARCHAR(120)"))
-            # NEW: staff_name on user
             if not _column_exists("user", "staff_name"):
                 db.session.execute(text("ALTER TABLE \"user\" ADD COLUMN staff_name VARCHAR(150)"))
             db.session.commit()
@@ -271,7 +250,6 @@ def ensure_db():
             db.session.execute(text("ALTER TABLE leave_request ADD COLUMN IF NOT EXISTS end_time VARCHAR(5)"))
             db.session.execute(text("ALTER TABLE leave_request ADD COLUMN IF NOT EXISTS is_school_related BOOLEAN NOT NULL DEFAULT FALSE"))
             db.session.execute(text("ALTER TABLE leave_request ADD COLUMN IF NOT EXISTS substitute VARCHAR(120)"))
-            # NEW: staff_name on user (Postgres)
             db.session.execute(text("ALTER TABLE \"user\" ADD COLUMN IF NOT EXISTS staff_name VARCHAR(150)"))
             db.session.commit()
     except Exception:
@@ -289,7 +267,7 @@ def ensure_db():
             role=Role.admin,
             hours_balance=160.0,
             email=bootstrap_email or None,
-            staff_name="Administrator"  # NEW: default display name
+            staff_name="Administrator"
         ))
         db.session.commit()
 
@@ -309,6 +287,45 @@ def admin_emails() -> list[str]:
             result.append(e)
             seen.add(e)
     return result
+
+# ------------- Time helpers for 12h form -> "HH:MM" storage -------------
+def assemble_hhmm_from_12h(h_str: str, m_str: str, ampm: str) -> str | None:
+    """Build 'HH:MM' (24h) from 12h pieces. Returns None if bad input."""
+    try:
+        if not h_str or not m_str or not ampm:
+            return None
+        h = int(h_str)
+        m = int(m_str)
+        if h < 1 or h > 12 or m not in (0, 15, 30, 45):
+            return None
+        ampm = ampm.upper()
+        if ampm == "PM" and h != 12:
+            h += 12
+        if ampm == "AM" and h == 12:
+            h = 0
+        return f"{h:02d}:{m:02d}"
+    except Exception:
+        return None
+
+# ---- Time formatting filter (12-hour with AM/PM) for DISPLAY ----
+@app.template_filter("h12")
+def h12(time_str: str) -> str:
+    """
+    Convert 'HH:MM' (24h) to 'h:MM AM/PM'.
+    Returns the input if it can't be parsed or is empty.
+    """
+    try:
+        if not time_str:
+            return ""
+        hh, mm = time_str.split(":")
+        h = int(hh)
+        suffix = "AM" if h < 12 else "PM"
+        h12 = h % 12
+        if h12 == 0:
+            h12 = 12
+        return f"{h12}:{mm} {suffix}"
+    except Exception:
+        return time_str
 
 # Shared filter logic for list + exports
 def _filtered_requests_for(current_user_is_admin: bool):
@@ -451,6 +468,9 @@ def admin_email_test():
 @app.route("/request/new", methods=["GET", "POST"])
 @login_required
 def new_request():
+    minutes_opts = ["00", "15", "30", "45"]
+    hours12_opts = [str(i) for i in range(1, 13)]
+
     if request.method == "POST":
         mode = request.form.get("mode", RequestMode.hourly)
         kind = request.form.get("kind", "annual")
@@ -463,12 +483,26 @@ def new_request():
             ed = datetime.strptime(request.form["end_date"], "%Y-%m-%d").date()
         except Exception:
             flash("Invalid dates.", "warning")
-            return render_template("new_request.html", title="New Request", workday=WORKDAY_HOURS)
+            return render_template("new_request.html", title="New Request",
+                                   workday=WORKDAY_HOURS,
+                                   minutes_opts=minutes_opts, hours12_opts=hours12_opts)
 
         capacity_hours = workdays_between(sd, ed) * WORKDAY_HOURS
         if capacity_hours <= 0:
             flash("No working days in that range.", "warning")
-            return render_template("new_request.html", title="New Request", workday=WORKDAY_HOURS)
+            return render_template("new_request.html", title="New Request",
+                                   workday=WORKDAY_HOURS,
+                                   minutes_opts=minutes_opts, hours12_opts=hours12_opts)
+
+        # collect times: prefer the new 12h selects if present; else fallback to old fields
+        st_comp = assemble_hhmm_from_12h(
+            request.form.get("start_h", ""), request.form.get("start_m", ""), request.form.get("start_ampm", "")
+        )
+        et_comp = assemble_hhmm_from_12h(
+            request.form.get("end_h", ""), request.form.get("end_m", ""), request.form.get("end_ampm", "")
+        )
+        st_s = st_comp or (request.form.get("start_time") or "").strip()
+        et_s = et_comp or (request.form.get("end_time") or "").strip()
 
         # compute hours
         hours = 0.0
@@ -480,8 +514,6 @@ def new_request():
                 except Exception:
                     hours = 0.0
             else:
-                st_s = (request.form.get("start_time") or "").strip()
-                et_s = (request.form.get("end_time") or "").strip()
                 st = parse_quarter_time(st_s) if st_s else None
                 et = parse_quarter_time(et_s) if et_s else None
                 if st and et and sd == ed:
@@ -494,11 +526,15 @@ def new_request():
 
         if hours <= 0:
             flash("Requested hours must be greater than zero.", "warning")
-            return render_template("new_request.html", title="New Request", workday=WORKDAY_HOURS)
+            return render_template("new_request.html", title="New Request",
+                                   workday=WORKDAY_HOURS,
+                                   minutes_opts=minutes_opts, hours12_opts=hours12_opts)
 
         if hours > capacity_hours and mode != RequestMode.hourly:
             flash(f"Requested {hours:.2f} exceeds capacity {capacity_hours:.2f} for that range.", "warning")
-            return render_template("new_request.html", title="New Request", workday=WORKDAY_HOURS)
+            return render_template("new_request.html", title="New Request",
+                                   workday=WORKDAY_HOURS,
+                                   minutes_opts=minutes_opts, hours12_opts=hours12_opts)
 
         req = LeaveRequest(
             user_id=current_user.id,
@@ -506,8 +542,8 @@ def new_request():
             mode=mode,
             start_date=sd,
             end_date=ed,
-            start_time=request.form.get("start_time") or None,
-            end_time=request.form.get("end_time") or None,
+            start_time=st_s or None,
+            end_time=et_s or None,
             hours=hours,
             reason=reason,
             is_school_related=is_school
@@ -533,7 +569,10 @@ def new_request():
         flash("Request submitted.", "success")
         return redirect(url_for("my_requests"))
 
-    return render_template("new_request.html", title="New Request", workday=WORKDAY_HOURS)
+    # GET
+    return render_template("new_request.html", title="New Request",
+                           workday=WORKDAY_HOURS,
+                           minutes_opts=minutes_opts, hours12_opts=hours12_opts)
 
 # ---------- Requests list (admin sees all, staff sees own) ----------
 @app.get("/requests")
@@ -752,7 +791,7 @@ def admin_create_user():
         return redirect(url_for("manage_users"))
 
     username = (request.form.get("username") or "").strip()
-    staff_name = (request.form.get("staff_name") or "").strip()  # NEW
+    staff_name = (request.form.get("staff_name") or "").strip()
     email = (request.form.get("email") or "").strip()
     role = (request.form.get("role") or Role.staff).strip()
     hours_str = (request.form.get("hours_balance") or "").strip()
@@ -777,7 +816,7 @@ def admin_create_user():
         role=role if role in (Role.admin, Role.staff) else Role.staff,
         hours_balance=hours_balance,
         email=email or None,
-        staff_name=staff_name or None  # NEW
+        staff_name=staff_name or None
     )
     db.session.add(user)
     db.session.commit()
@@ -792,11 +831,10 @@ def admin_update_user(user_id):
         return redirect(url_for("manage_users"))
     u = User.query.get_or_404(user_id)
 
-    # Editable fields inline (username intentionally NOT changed via form now)
+    # username is not changed here
     email = (request.form.get("email") or "").strip()
     role = (request.form.get("role") or "").strip()
     hb = (request.form.get("hours_balance") or "").strip()
-    # Optional but harmless: accept staff_name if provided
     staff_name = (request.form.get("staff_name") or "").strip()
 
     u.email = email or None
@@ -840,40 +878,19 @@ def admin_delete_user(user_id):
         return redirect(url_for("manage_users"))
     u = User.query.get_or_404(user_id)
 
-    # don't let an admin delete themselves (safety)
     if u.id == current_user.id:
         flash("You cannot delete your own account.", "warning")
         return redirect(url_for("manage_users"))
 
-    # also, keep at least one admin in the system
     if u.role == Role.admin and User.query.filter_by(role=Role.admin).count() <= 1:
         flash("At least one admin must remain.", "warning")
         return redirect(url_for("manage_users"))
 
-    # delete user's requests first (or set cascade in model if preferred)
     LeaveRequest.query.filter_by(user_id=u.id).delete()
     db.session.delete(u)
     db.session.commit()
     flash("User deleted.", "success")
     return redirect(url_for("manage_users"))
-
-# ---------- Self-service password change ----------
-@app.route("/account/password", methods=["GET", "POST"])
-@login_required
-def update_password():
-    if request.method == "POST":
-        cur = request.form.get("current_password", "")
-        new = (request.form.get("new_password") or "").strip()
-        if not check_password_hash(current_user.password_hash, cur):
-            flash("Current password is incorrect.", "danger")
-        elif not new:
-            flash("New password cannot be empty.", "warning")
-        else:
-            current_user.password_hash = generate_password_hash(new)
-            db.session.commit()
-            flash("Password updated.", "success")
-            return redirect(url_for("dashboard"))
-    return render_template("update_password.html", title="Update Password")
 
 # ---------- Calendar ----------
 def sub_summary_text(subs, limit=2):
@@ -902,7 +919,6 @@ def calendar_data():
         if is_admin:
             title = f"{r.user.username} - {r.kind} ({r.hours:.1f}h)"
             sub_text = sub_summary_text(r.subs, limit=2)
-            # include legacy single substitute if no multi-subs saved
             if not sub_text and (r.substitute or "").strip():
                 sub_text = " – Sub: " + r.substitute.strip()
             title += sub_text
@@ -914,7 +930,7 @@ def calendar_data():
         events.append({
             "title": title,
             "start": r.start_date.isoformat(),
-            "end": (r.end_date + timedelta(days=1)).isoformat(),  # exclusive end for FullCalendar
+            "end": (r.end_date + timedelta(days=1)).isoformat(),  # exclusive end
         })
     return jsonify(events)
 
