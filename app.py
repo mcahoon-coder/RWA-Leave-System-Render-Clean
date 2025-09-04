@@ -36,6 +36,26 @@ app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {"pool_pre_ping": True}
 
 db = SQLAlchemy(app)
 
+# ---- Time formatting filter (12-hour with AM/PM) ----
+@app.template_filter("h12")
+def h12(time_str: str) -> str:
+    """
+    Convert 'HH:MM' (24h) to 'h:MM AM/PM'. 
+    Returns the input if it can't be parsed or is empty.
+    """
+    try:
+        if not time_str:
+            return ""
+        hh, mm = time_str.split(":")
+        h = int(hh)
+        suffix = "AM" if h < 12 else "PM"
+        h12 = h % 12
+        if h12 == 0:
+            h12 = 12
+        return f"{h12}:{mm} {suffix}"
+    except Exception:
+        return time_str
+
 login_manager = LoginManager(app)
 login_manager.login_view = "login"
 
