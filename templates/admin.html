@@ -2,128 +2,121 @@
 {% block title %}Admin{% endblock %}
 
 {% block content %}
-<!-- Summary row -->
-<div class="card" style="margin-bottom:12px;">
-  <div class="form-grid-3">
-    <!-- Admin's own balance -->
-    <div class="card" style="padding:.9rem 1rem;">
-      <h3 style="margin:.2rem 0 .4rem;">Your Leave Balance</h3>
-      {% set bal = (current_user.hours_balance if current_user else 0) %}
-      {% set is_neg = (bal or 0) < 0 %}
-      <div style="font-size:1.8rem; font-weight:800; line-height:1.1; color: {{ '#dc2626' if is_neg else '#065f46' }};">
-        {{ '%.2f'|format(bal or 0) }}h
-      </div>
-      <div class="muted" style="margin-top:.2rem;">{{ 'Negative balance' if is_neg else 'In good standing' }}</div>
-    </div>
-
-    <!-- Pending count -->
-    <div class="card" style="padding:.9rem 1rem;">
-      <h3 style="margin:.2rem 0 .4rem;">Pending Requests</h3>
-      <div style="font-size:1.8rem; font-weight:800; line-height:1.1;">
-        {{ pending|length if pending else 0 }}
-      </div>
-      <div class="muted" style="margin-top:.2rem;">Awaiting approval</div>
-    </div>
-
-    <!-- Quick Links -->
-    <div class="card" style="padding:.9rem 1rem;">
-      <h3 style="margin:.2rem 0 .4rem;">Quick Links</h3>
-      <div style="display:flex; gap:8px; flex-wrap:wrap;">
-        <a class="btn secondary sm" href="{{ url_for('manage_users') }}">User Management</a>
-        <a class="btn secondary sm" href="{{ NAV.team_calendar }}">Calendar</a>
-        <a class="btn secondary sm" href="{{ url_for('export_requests_csv') }}">Export CSV</a>
-        <a class="btn secondary sm" href="{{ url_for('export_requests_xlsx') }}">Export XLSX</a>
-        <a class="btn sm" href="{{ url_for('admin_email_test') }}">Test Email</a>
-      </div>
+<div class="card">
+  <div class="row">
+    <h2>Admin</h2>
+    <div class="right row">
+      <a class="btn ghost" href="{{ url_for('manage_users') }}">Manage Users</a>
+      <a class="btn ghost" href="{{ url_for('calendar') }}">Calendar</a>
+      <a class="btn" href="{{ url_for('admin_email_test') }}">Send Test Email</a>
     </div>
   </div>
+  <p class="muted" style="margin-top:.4rem">Approve/Disapprove pending requests. Add substitute(s) and hours as needed.</p>
 </div>
 
-<!-- Approvals -->
 <div class="card">
-  <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px;">
-    <h1 style="margin:.2rem 0;">Approvals</h1>
-    <div style="display:flex; gap:8px;">
-      <a class="btn secondary sm" href="{{ url_for('manage_users') }}">User Management</a>
-      <a class="btn secondary sm" href="{{ NAV.team_calendar }}">Calendar</a>
-      <a class="btn secondary sm" href="{{ url_for('export_requests_csv') }}">Export CSV</a>
-      <a class="btn secondary sm" href="{{ url_for('export_requests_xlsx') }}">Export XLSX</a>
-    </div>
+  <div class="row" style="margin-bottom:.5rem;">
+    <h3>Pending Requests</h3>
+    <div class="right muted">{{ pending|length }} pending</div>
   </div>
 
-  {% if pending and pending|length %}
-    <table class="table-tight" style="margin-top:.6rem; font-size:.95rem;">
-      <thead>
-        <tr>
-          <th>User</th>
-          <th>Kind</th>
-          <th>Mode</th>
-          <th>Dates</th>
-          <th>Hours</th>
-          <th>School</th>
-          <th>Substitutes</th>
-          <th style="width:1%;">Actions</th>
-        </tr>
-      </thead>
-      <tbody>
+  <table class="table-tight">
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>User</th>
+        <th>Kind/Mode</th>
+        <th>Dates</th>
+        <th>Hours</th>
+        <th>School</th>
+        <th>Subs</th>
+        <th style="width:320px">Actions (BUTTONS)</th>
+      </tr>
+    </thead>
+    <tbody>
       {% for r in pending %}
-        <tr>
-          <td style="white-space:nowrap;">{{ r.user.username }}</td>
-          <td>{{ r.kind|capitalize }}</td>
-          <td>{{ r.mode|capitalize }}</td>
-          <td style="white-space:nowrap;">
-            {{ r.start_date }} → {{ r.end_date }}
-            {% if r.start_time or r.end_time %}
-              <div class="muted" style="font-size:.8rem;">
-                {{ r.start_time or '-' }} – {{ r.end_time or '-' }}
-              </div>
-            {% endif %}
-          </td>
-          <td style="text-align:center;">{{ '%.2f'|format(r.hours or 0) }}</td>
-          <td style="text-align:center;">
-            {% if r.is_school_related %}
-              <span class="badge green">Yes</span>
+      <tr>
+        <td>{{ r.id }}</td>
+        <td>
+          {{ r.user.username }}
+          <div class="muted">
+            Bal:
+            {% if r.user.hours_balance < 0 %}
+              <span class="text-danger">{{ '%.2f'|format(r.user.hours_balance) }} h</span>
             {% else %}
-              <span class="badge amber">No</span>
+              <span class="text-success">{{ '%.2f'|format(r.user.hours_balance) }} h</span>
             {% endif %}
-          </td>
-          <td>
-            <!-- Compact Substitutes editor -->
-            <details>
-              <summary class="btn link sm">Edit Subs</summary>
-              <div style="margin-top:6px;">
-                {% for s in r.subs %}
-                  <form method="post" action="{{ url_for('update_substitute', req_id=r.id, sub_id=s.id) }}" style="display:flex; gap:6px; align-items:center; margin-bottom:6px;">
-                    <input class="input-sm" type="text" name="sub_name" value="{{ s.name }}" placeholder="Name" style="max-width:160px;">
-                    <input class="input-sm" type="number" step="0.25" min="0" name="sub_hours" value="{{ '%.2f'|format(s.hours or 0) }}" placeholder="Hours" style="width:80px;">
-                    <button class="btn sm" type="submit">Save</button>
-                    <form method="post" action="{{ url_for('delete_substitute', req_id=r.id, sub_id=s.id) }}">
-                      <button class="btn danger sm" formaction="{{ url_for('delete_substitute', req_id=r.id, sub_id=s.id) }}" type="submit">✕</button>
-                    </form>
+          </div>
+        </td>
+        <td>{{ r.kind|capitalize }} / {{ r.mode|capitalize }}</td>
+        <td>
+          {{ r.start_date.strftime('%Y-%m-%d') }}
+          {% if r.end_date != r.start_date %} → {{ r.end_date.strftime('%Y-%m-%d') }}{% endif %}
+          {% if r.start_time %}<div class="muted">Time: {{ r.start_time }}{% if r.end_time %}–{{ r.end_time }}{% endif %}</div>{% endif %}
+          {% if r.reason %}<div class="muted">Reason: {{ r.reason }}</div>{% endif %}
+        </td>
+        <td>{{ '%.2f'|format(r.hours) }}</td>
+        <td>{% if r.is_school_related %}Yes{% else %}No{% endif %}</td>
+
+        <td>
+          <!-- List existing subs -->
+          {% if r.subs %}
+            <div class="muted" style="margin-bottom:6px;">
+              {% for s in r.subs %}
+                • {{ s.name }} ({{ '%.2f'|format(s.hours) }}h)
+                <!-- inline tiny update/delete -->
+                <form method="post" action="{{ url_for('update_substitute', req_id=r.id, sub_id=s.id) }}" class="row" style="margin:.3rem 0;">
+                  <input class="input-sm" name="sub_name" placeholder="name" value="{{ s.name }}">
+                  <input class="input-sm" name="sub_hours" type="number" step="0.25" placeholder="hours" value="{{ '%.2f'|format(s.hours) }}">
+                  <button class="btn sm" type="submit">Update</button>
+                  <form method="post" action="{{ url_for('delete_substitute', req_id=r.id, sub_id=s.id) }}">
+                    <button class="btn sm danger" type="submit" onclick="return confirm('Remove substitute {{ s.name }}?')">Remove</button>
                   </form>
-                {% endfor %}
-                <form method="post" action="{{ url_for('add_substitute', req_id=r.id) }}" style="display:flex; gap:6px; align-items:center;">
-                  <input class="input-sm" type="text" name="sub_name" placeholder="Add substitute" style="max-width:160px;">
-                  <input class="input-sm" type="number" step="0.25" min="0" name="sub_hours" placeholder="Hours" style="width:80px;">
-                  <button class="btn sm" type="submit">Add</button>
                 </form>
-              </div>
-            </details>
-          </td>
-          <td style="white-space:nowrap;">
-            <form method="post" action="{{ url_for('approve', req_id=r.id) }}" style="display:inline;">
+              {% endfor %}
+            </div>
+          {% else %}
+            <div class="muted">No substitutes yet</div>
+          {% endif %}
+
+          <!-- Add new sub -->
+          <form method="post" action="{{ url_for('add_substitute', req_id=r.id) }}" class="row">
+            <input class="input-sm" name="sub_name" placeholder="Substitute name" required>
+            <input class="input-sm" name="sub_hours" type="number" step="0.25" placeholder="Hours">
+            <button class="btn sm" type="submit">Add</button>
+          </form>
+        </td>
+
+        <td>
+          <div class="row">
+            <form method="post" action="{{ url_for('approve', req_id=r.id) }}">
               <button class="btn sm" type="submit">Approve</button>
             </form>
-            <form method="post" action="{{ url_for('disapprove', req_id=r.id) }}" style="display:inline;">
-              <button class="btn danger sm" type="submit">Disapprove</button>
+            <form method="post" action="{{ url_for('disapprove', req_id=r.id) }}">
+              <button class="btn sm danger" type="submit">Disapprove</button>
             </form>
-          </td>
-        </tr>
+            {% if not r.is_school_related %}
+              <!-- Quick mark as school if admin wants to waive deduction -->
+              <form method="post" action="{{ url_for('mark_school_related', req_id=r.id) }}">
+                <button class="btn sm ghost" type="submit">Mark School</button>
+              </form>
+            {% else %}
+              <form method="post" action="{{ url_for('unmark_school_related', req_id=r.id) }}">
+                <button class="btn sm ghost" type="submit">Unmark School</button>
+              </form>
+            {% endif %}
+          </div>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="8" class="muted">Nothing pending right now.</td></tr>
       {% endfor %}
-      </tbody>
-    </table>
-  {% else %}
-    <p class="muted" style="margin:.8rem 0 0;">No pending requests.</p>
-  {% endif %}
+    </tbody>
+  </table>
+</div>
+
+<div class="row">
+  <a class="btn ghost" href="{{ url_for('export_requests_csv') }}">Export CSV</a>
+  <a class="btn ghost" href="{{ url_for('export_requests_xlsx') }}">Export Excel</a>
 </div>
 {% endblock %}
