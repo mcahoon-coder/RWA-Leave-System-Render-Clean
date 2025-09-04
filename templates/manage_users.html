@@ -2,107 +2,104 @@
 {% block title %}Manage Users{% endblock %}
 
 {% block content %}
+<!-- Header / search -->
 <div class="card">
   <div class="row">
-    <h2>Manage Users</h2>
-    <form class="right" method="get" action="{{ url_for('manage_users') }}">
+    <h1 style="margin:0;">Manage Users</h1>
+    <form class="right row" method="get" action="{{ url_for('manage_users') }}">
       <input class="input-sm" type="text" name="q" placeholder="Search username…" value="{{ q or '' }}">
       <button class="btn sm" type="submit">Search</button>
     </form>
   </div>
 </div>
 
+<!-- Create user (compact) -->
 <div class="card">
-  <h3 style="margin-bottom:.8rem;">Add User</h3>
+  <h3 style="margin:0 0 .6rem;">Add User</h3>
   <form method="post" action="{{ url_for('admin_create_user') }}">
-    <div class="form-grid-3">
-      <div>
+    <div class="row" style="gap:8px; flex-wrap:wrap;">
+      <div style="min-width:200px; flex:1 1 220px;">
         <label>Username</label>
-        <input name="username" required>
+        <input class="input-sm" name="username" required>
       </div>
-      <div>
+      <div style="min-width:180px; flex:1 1 200px;">
         <label>Password</label>
-        <input name="password" type="text" required>
+        <input class="input-sm" name="password" type="text" required>
       </div>
-      <div>
+      <div style="min-width:220px; flex:1 1 240px;">
         <label>Email (optional)</label>
-        <input name="email" type="email">
+        <input class="input-sm" name="email" type="email">
       </div>
-      <div>
+      <div style="min-width:160px;">
         <label>Role</label>
-        <select name="role">
+        <select class="input-sm" name="role">
           <option value="faculty_staff">Faculty/Staff</option>
           <option value="admin">Admin</option>
         </select>
       </div>
-      <div>
+      <div style="min-width:160px;">
         <label>Hours Balance</label>
-        <input name="hours_balance" type="number" step="0.01" placeholder="160.00">
+        <input class="input-sm" name="hours_balance" type="number" step="0.01" placeholder="160.00">
       </div>
-      <div class="row" style="align-items:end;">
-        <button class="btn" type="submit">Create</button>
+      <div style="align-self:end">
+        <button class="btn sm" type="submit">Create</button>
       </div>
     </div>
   </form>
 </div>
 
+<!-- Users table (tight) -->
 <div class="card">
-  <div class="row">
-    <h3 style="margin-bottom:.8rem;">Bulk CSV Import</h3>
-    <form method="post" action="{{ url_for('admin_import_users') }}" enctype="multipart/form-data" class="row">
-      <input type="file" name="file" accept=".csv" required>
-      <button class="btn" type="submit">Import</button>
-      <span class="muted">Columns: username (required), email, role, hours_balance, password</span>
-    </form>
-  </div>
-</div>
-
-<div class="card">
-  <h3 style="margin-bottom:.8rem;">All Users</h3>
-  <table class="table-tight">
+  <h3 style="margin:0 0 .6rem;">All Users</h3>
+  <table class="table-tight" style="font-size:.95rem;">
     <thead>
       <tr>
-        <th>Username</th>
+        <th>User</th>
         <th>Email</th>
         <th>Role</th>
         <th>Hours</th>
-        <th style="width:420px">Actions</th>
+        <th style="width:1%;">Actions</th>
       </tr>
     </thead>
     <tbody>
       {% for u in users %}
       <tr>
-        <td><span class="badge blue">{{ 'Admin' if u.role=='admin' else 'Staff' }}</span> {{ u.username }}</td>
+        <td>
+          {{ u.username }}
+          {% if u.role == 'admin' %}
+            <div class="muted">Admin</div>
+          {% else %}
+            <div class="muted">Faculty/Staff</div>
+          {% endif %}
+        </td>
         <td>{{ u.email or '—' }}</td>
         <td>{{ 'Admin' if u.role=='admin' else 'Faculty/Staff' }}</td>
         <td>{{ '%.2f'|format(u.hours_balance or 0) }}</td>
-        <td>
-          <div class="row">
-            <!-- Update inline -->
-            <form method="post" action="{{ url_for('admin_update_user', user_id=u.id) }}" class="row">
-              <input class="input-sm" name="username" placeholder="new username">
-              <input class="input-sm" name="email" placeholder="email">
-              <select class="input-sm" name="role">
-                <option value="">(keep)</option>
-                <option value="faculty_staff">Faculty/Staff</option>
-                <option value="admin">Admin</option>
-              </select>
-              <input class="input-sm" name="hours_balance" type="number" step="0.01" placeholder="hours">
-              <button class="btn sm" type="submit">Update</button>
-            </form>
+        <td style="white-space:nowrap;">
+          <!-- Inline update -->
+          <form method="post" action="{{ url_for('admin_update_user', user_id=u.id) }}" class="row" style="margin-bottom:6px;">
+            <input class="input-sm" name="username" placeholder="new username" style="max-width:160px;">
+            <input class="input-sm" name="email" placeholder="email" style="max-width:220px;">
+            <select class="input-sm" name="role" style="max-width:150px;">
+              <option value="">(keep)</option>
+              <option value="faculty_staff">Faculty/Staff</option>
+              <option value="admin">Admin</option>
+            </select>
+            <input class="input-sm" name="hours_balance" type="number" step="0.01" placeholder="hours" style="max-width:120px;">
+            <button class="btn sm" type="submit">Update</button>
+          </form>
 
-            <!-- Reset password -->
-            <form method="post" action="{{ url_for('admin_reset_password', user_id=u.id) }}" class="row">
-              <input class="input-sm" name="new_password" placeholder="new password" required>
-              <button class="btn sm secondary" type="submit">Reset PW</button>
-            </form>
+          <!-- Reset password -->
+          <form method="post" action="{{ url_for('admin_reset_password', user_id=u.id) }}" class="row" style="margin-bottom:6px;">
+            <input class="input-sm" name="new_password" placeholder="new password" required style="max-width:180px;">
+            <button class="btn sm" type="submit">Reset PW</button>
+          </form>
 
-            <!-- Delete -->
-            <form method="post" action="{{ url_for('admin_delete_user', user_id=u.id) }}"
-                  onsubmit="return confirm('Delete {{ u.username }}? This also deletes their requests.');">
-              <button class="btn sm danger" type="submit">Delete</button>
-            </form>
-          </div>
+          <!-- Delete (confirm) -->
+          <form method="post" action="{{ url_for('admin_delete_user', user_id=u.id) }}"
+                onsubmit="return confirm('Delete {{ u.username }}? This also deletes their requests.');">
+            <button class="btn sm danger" type="submit">Delete</button>
+          </form>
         </td>
       </tr>
       {% else %}
