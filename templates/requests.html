@@ -1,151 +1,73 @@
 {% extends "base.html" %}
-{% block title %}{{ 'Requests' if is_admin else 'My Requests' }}{% endblock %}
-
+{% block title %}My Requests{% endblock %}
 {% block content %}
-  <div class="card">
-    <h1 style="margin-top:0;">{{ 'Requests' if is_admin else 'My Requests' }}</h1>
-    <form method="get" action="{{ NAV.my_requests }}">
-      <div class="form-grid-2">
-        <div>
-          <label>Status</label>
-          <select name="status">
-            {% set s = (status or 'all')|lower %}
-            {% for x in ['all','Pending','Approved','Disapproved','Cancelled'] %}
-              <option value="{{ x }}" {% if x|lower == s %}selected{% endif %}>{{ x }}</option>
-            {% endfor %}
-          </select>
-        </div>
-        <div>
-          <label>Start (optional)</label>
-          <input type="date" name="start" value="{{ start or '' }}">
-        </div>
-        <div>
-          <label>End (optional)</label>
-          <input type="date" name="end" value="{{ end or '' }}">
-        </div>
-        <div class="full">
-          <button class="btn" type="submit">Apply</button>
-        </div>
-      </div>
-    </form>
+
+<div class="card" style="margin-bottom:12px;">
+  <h1 style="margin-top:0;">My Requests</h1>
+
+  <!-- Balance -->
+  <div style="margin-bottom:1rem;">
+    {% set bal = current_user.hours_balance or 0 %}
+    {% set is_neg = bal < 0 %}
+    <div style="font-size:1.4rem; font-weight:700; color: {{ '#dc2626' if is_neg else '#065f46' }};">
+      Balance: {{ '%.2f'|format(bal) }}h
+    </div>
   </div>
 
-  <div class="card">
-    <h2 style="margin-top:0;">Results</h2>
-
-    {% set items = reqs or requests %}
-    {% if items and items|length %}
-      <table>
-        <thead>
-          <tr>
-            <th>ID</th>
-            {% if is_admin %}<th>User</th>{% endif %}
-            <th>Kind</th>
-            <th>Mode</th>
-            <th>Hours</th>
-            <th>School</th>
-            {% if is_admin %}<th style="min-width:260px;">Substitutes</th>{% endif %}
-            <th>Status</th>
-            <th>Start</th>
-            <th>End</th>
-            <th>Reason</th>
-            <th>Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for r in items %}
-            <tr>
-              <td>{{ r.id }}</td>
-              {% if is_admin %}<td>{{ r.user.username }}</td>{% endif %}
-              <td>{{ r.kind }}</td>
-              <td>{{ r.mode }}</td>
-              <td>{{ '%.2f'|format(r.hours) }}</td>
-              <td>{{ 'Yes' if r.is_school_related else 'No' }}</td>
-
-              {% if is_admin %}
-                <td>
-                  {% if r.subs and r.subs|length %}
-                    <ul style="margin:0; padding-left:18px;">
-                      {% for s in r.subs %}
-                        <li>
-                          <form method="post" action="{{ url_for('update_substitute', req_id=r.id, sub_id=s.id) }}" style="display:inline-flex; gap:6px; align-items:center;">
-                            <input name="sub_name" value="{{ s.name }}" style="max-width:130px;">
-                            <input name="sub_hours" type="number" step="0.25" value="{{ '%.2f'|format(s.hours) }}" style="width:90px;">
-                            <button class="btn" type="submit">Save</button>
-                          </form>
-                          <form method="post" action="{{ url_for('delete_substitute', req_id=r.id, sub_id=s.id) }}" style="display:inline;">
-                            <button class="btn" type="submit">✕</button>
-                          </form>
-                        </li>
-                      {% endfor %}
-                    </ul>
-                  {% else %}
-                    <em>No subs yet</em>
-                  {% endif %}
-                  <form method="post" action="{{ url_for('add_substitute', req_id=r.id) }}" style="display:flex; gap:6px; align-items:center; margin-top:6px;">
-                    <input name="sub_name" placeholder="Name" required style="max-width:130px;">
-                    <input name="sub_hours" type="number" step="0.25" placeholder="Hours" style="width:90px;">
-                    <button class="btn" type="submit">Add</button>
-                  </form>
-                </td>
-              {% endif %}
-
-              <td>{{ r.status }}</td>
-              <td>{{ r.start_date }}</td>
-              <td>{{ r.end_date }}</td>
-              <td>{{ r.reason }}</td>
-
-              <td>
-                {% if is_admin %}
-                  {% if r.status == 'Pending' %}
-                    <form method="post" action="{{ url_for('approve', req_id=r.id) }}" style="display:inline;">
-                      <button class="btn" type="submit">Approve</button>
-                    </form>
-                    <form method="post" action="{{ url_for('disapprove', req_id=r.id) }}" style="display:inline;">
-                      <button class="btn" type="submit">Disapprove</button>
-                    </form>
-                    {% if not r.is_school_related %}
-                      <form method="post" action="{{ url_for('mark_school_related', req_id=r.id) }}" style="display:inline;">
-                        <button class="btn" type="submit">Mark School</button>
-                      </form>
-                    {% else %}
-                      <form method="post" action="{{ url_for('unmark_school_related', req_id=r.id) }}" style="display:inline;">
-                        <button class="btn" type="submit">Unmark School</button>
-                      </form>
-                    {% endif %}
-                  {% endif %}
-                  {% if r.status != 'Cancelled' %}
-                    <form method="post" action="{{ url_for('cancel', req_id=r.id) }}" style="display:inline;">
-                      <button class="btn" type="submit">Cancel</button>
-                    </form>
-                  {% endif %}
-                {% else %}
-                  {% if r.user_id == me.id and r.status == 'Pending' %}
-                    {% if not r.is_school_related %}
-                      <form method="post" action="{{ url_for('mark_school_related', req_id=r.id) }}" style="display:inline;">
-                        <button class="btn" type="submit">Mark School</button>
-                      </form>
-                    {% else %}
-                      <form method="post" action="{{ url_for('unmark_school_related', req_id=r.id) }}" style="display:inline;">
-                        <button class="btn" type="submit">Unmark School</button>
-                      </form>
-                    {% endif %}
-                  {% endif %}
-                  {% if r.user_id == me.id and r.status != 'Cancelled' %}
-                    <form method="post" action="{{ url_for('cancel', req_id=r.id) }}" style="display:inline;">
-                      <button class="btn" type="submit">Cancel</button>
-                    </form>
-                  {% else %}
-                    —
-                  {% endif %}
-                {% endif %}
-              </td>
-            </tr>
-          {% endfor %}
-        </tbody>
-      </table>
+  <!-- Results -->
+  <table class="table-tight" style="font-size:.95rem;">
+    <thead>
+      <tr>
+        <th>Kind</th>
+        <th>Mode</th>
+        <th>Dates</th>
+        <th>Hours</th>
+        <th>School</th>
+        <th>Status</th>
+        <th style="width:1%;">Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for r in reqs %}
+      <tr>
+        <td>{{ r.kind|capitalize }}</td>
+        <td>{{ r.mode|capitalize }}</td>
+        <td style="white-space:nowrap;">
+          {{ r.start_date }} → {{ r.end_date }}
+          {% if r.start_time or r.end_time %}
+            <div class="muted" style="font-size:.8rem;">
+              {{ r.start_time or '-' }} – {{ r.end_time or '-' }}
+            </div>
+          {% endif %}
+        </td>
+        <td style="text-align:center;">{{ '%.2f'|format(r.hours or 0) }}</td>
+        <td style="text-align:center;">
+          {% if r.is_school_related %}
+            <span class="badge green">Yes</span>
+          {% else %}
+            <span class="badge amber">No</span>
+          {% endif %}
+        </td>
+        <td>
+          {% set st = r.status %}
+          {% if st=='Approved' %}<span class="badge green">Approved</span>
+          {% elif st=='Pending' %}<span class="badge blue">Pending</span>
+          {% elif st=='Disapproved' %}<span class="badge red">Disapproved</span>
+          {% elif st=='Cancelled' %}<span class="badge">Cancelled</span>
+          {% else %}{{ st }}{% endif %}
+        </td>
+        <td style="white-space:nowrap;">
+          {% if r.status == 'Pending' %}
+            <form method="post" action="{{ url_for('cancel', req_id=r.id) }}" style="display:inline;">
+              <button class="btn secondary sm" type="submit">Cancel</button>
+            </form>
+          {% endif %}
+        </td>
+      </tr>
     {% else %}
-      <p>No requests match your filters.</p>
-    {% endif %}
-  </div>
+      <tr><td colspan="7" class="muted">No requests found.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
 {% endblock %}
