@@ -9,7 +9,7 @@ from flask_login import (
 )
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime, date, timedelta, time as dt_time
-import os, smtplib, ssl, io, csv, secrets
+import os, smtplib, ssl, io, csv
 from email.message import EmailMessage
 from sqlalchemy import text
 import xlsxwriter  # Excel export (in-memory, safe on Render)
@@ -124,6 +124,8 @@ class User(UserMixin, db.Model):
     role = db.Column(db.String(20), default=Role.staff, nullable=False)
     hours_balance = db.Column(db.Float, default=160.0, nullable=False)
     email = db.Column(db.String(255))  # for notifications
+    # NEW: optional display name
+    staff_name = db.Column(db.String(150))
 
 class LeaveRequest(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -240,12 +242,17 @@ def ensure_db():
                 db.session.execute(text("ALTER TABLE leave_request ADD COLUMN is_school_related BOOLEAN DEFAULT 0 NOT NULL"))
             if not _column_exists("leave_request", "substitute"):
                 db.session.execute(text("ALTER TABLE leave_request ADD COLUMN substitute VARCHAR(120)"))
+            # NEW: staff_name on user
+            if not _column_exists("user", "staff_name"):
+                db.session.execute(text("ALTER TABLE \"user\" ADD COLUMN staff_name VARCHAR(150)"))
             db.session.commit()
         else:
             db.session.execute(text("ALTER TABLE leave_request ADD COLUMN IF NOT EXISTS start_time VARCHAR(5)"))
             db.session.execute(text("ALTER TABLE leave_request ADD COLUMN IF NOT EXISTS end_time VARCHAR(5)"))
             db.session.execute(text("ALTER TABLE leave_request ADD COLUMN IF NOT EXISTS is_school_related BOOLEAN NOT NULL DEFAULT FALSE"))
             db.session.execute(text("ALTER TABLE leave_request ADD COLUMN IF NOT EXISTS substitute VARCHAR(120)"))
+            # NEW: staff_name on user (Postgres)
+            db.session.execute(text("ALTER TABLE \"user\" ADD COLUMN IF NOT EXISTS staff_name VARCHAR(150)"))
             db.session.commit()
     except Exception:
         db.session.rollback()
@@ -261,7 +268,8 @@ def ensure_db():
             password_hash=generate_password_hash(bootstrap_password),
             role=Role.admin,
             hours_balance=160.0,
-            email=bootstrap_email or None
+            email=bootstrap_email or None,
+            staff_name="Administrator"  # NEW: default display name
         ))
         db.session.commit()
 
@@ -387,7 +395,6 @@ def admin_hub():
         return redirect(url_for("dashboard"))
     pending = (LeaveRequest.query.filter_by(status=RequestStatus.pending)
                .order_by(LeaveRequest.created_at.desc()).all())
-    # Your templates/admin.html should render BUTTONS for actions
     return render_template("admin.html", title="Admin", pending=pending)
 
 # Admin email test endpoint
@@ -398,7 +405,6 @@ def admin_email_test():
         flash("Admins only.", "warning")
         return redirect(url_for("dashboard"))
 
-    # Recipients: current admin's email (if set) + ADMIN_EMAILS env + other admin emails
     recipients = []
     if current_user.email:
         recipients.append(current_user.email)
@@ -726,6 +732,7 @@ def admin_create_user():
         return redirect(url_for("manage_users"))
 
     username = (request.form.get("username") or "").strip()
+    staff_name = (request.form.get("staff_name") or "").strip()  # NEW
     email = (request.form.get("email") or "").strip()
     role = (request.form.get("role") or Role.staff).strip()
     hours_str = (request.form.get("hours_balance") or "").strip()
@@ -749,7 +756,8 @@ def admin_create_user():
         password_hash=generate_password_hash(pw),
         role=role if role in (Role.admin, Role.staff) else Role.staff,
         hours_balance=hours_balance,
-        email=email or None
+        email=email or None,
+        staff_name=staff_name or None  # NEW
     )
     db.session.add(user)
     db.session.commit()
@@ -764,19 +772,15 @@ def admin_update_user(user_id):
         return redirect(url_for("manage_users"))
     u = User.query.get_or_404(user_id)
 
-    new_username = (request.form.get("username") or "").strip()
+    # Editable fields inline (username intentionally NOT changed via form now)
     email = (request.form.get("email") or "").strip()
     role = (request.form.get("role") or "").strip()
     hb = (request.form.get("hours_balance") or "").strip()
-
-    if new_username and new_username.lower() != u.username.lower():
-        if User.query.filter(User.username.ilike(new_username)).first():
-            flash("Username already taken.", "danger")
-            return redirect(url_for("manage_users"))
-        u.username = new_username
+    # Optional but harmless: accept staff_name if provided
+    staff_name = (request.form.get("staff_name") or "").strip()
 
     u.email = email or None
-    if role in (Role.admin, Role.staff):
+    if role in (Role.admin, Role.staff) and role:
         u.role = role
 
     try:
@@ -784,6 +788,9 @@ def admin_update_user(user_id):
             u.hours_balance = float(hb)
     except Exception:
         flash("Invalid hours_balance value.", "warning")
+
+    if staff_name != "":
+        u.staff_name = staff_name
 
     db.session.commit()
     flash(f"Updated {u.username}.", "success")
@@ -828,104 +835,6 @@ def admin_delete_user(user_id):
     db.session.delete(u)
     db.session.commit()
     flash("User deleted.", "success")
-    return redirect(url_for("manage_users"))
-
-# ---------- Bulk CSV Import (admin) ----------
-@app.post("/admin/users/import")
-@login_required
-def admin_import_users():
-    if current_user.role != Role.admin:
-        flash("Admins only.", "warning")
-        return redirect(url_for("dashboard"))
-
-    f = request.files.get("file")
-    if not f or f.filename == "":
-        flash("Please choose a CSV file.", "warning")
-        return redirect(url_for("manage_users"))
-
-    # Read CSV text
-    try:
-        raw = f.read()
-        try:
-            text_csv = raw.decode("utf-8-sig")
-        except Exception:
-            text_csv = raw.decode("latin1")
-    except Exception as e:
-        flash(f"Could not read file: {e}", "danger")
-        return redirect(url_for("manage_users"))
-
-    created = 0
-    updated = 0
-    skipped = 0
-    errs = 0
-
-    reader = csv.DictReader(io.StringIO(text_csv))
-    required_col = "username"
-    if required_col not in (c or "" for c in (reader.fieldnames or [])):
-        flash("CSV must include a 'username' column.", "danger")
-        return redirect(url_for("manage_users"))
-
-    for i, row in enumerate(reader, start=2):  # start=2 because header is line 1
-        try:
-            username = (row.get("username") or "").strip()
-            if not username:
-                skipped += 1
-                continue
-
-            email = (row.get("email") or "").strip() or None
-            role = (row.get("role") or Role.staff).strip()
-            role = role if role in (Role.admin, Role.staff) else Role.staff
-
-            hb_val = None
-            hb_raw = (row.get("hours_balance") or "").strip()
-            if hb_raw != "":
-                try:
-                    hb_val = float(hb_raw)
-                except Exception:
-                    hb_val = None
-
-            pw_raw = (row.get("password") or "").strip()
-            if pw_raw == "":
-                # Generate a 12-char temp password if missing
-                pw_raw = secrets.token_urlsafe(9)  # ~12 chars
-
-            existing = User.query.filter(User.username.ilike(username)).first()
-            if existing:
-                # Update existing (email/role/hours if provided, password if provided)
-                if email is not None:
-                    existing.email = email
-                if role:
-                    existing.role = role
-                if hb_val is not None:
-                    existing.hours_balance = hb_val
-                if pw_raw:
-                    existing.password_hash = generate_password_hash(pw_raw)
-                updated += 1
-            else:
-                user = User(
-                    username=username,
-                    email=email,
-                    role=role,
-                    hours_balance=(hb_val if hb_val is not None else 160.0),
-                    password_hash=generate_password_hash(pw_raw),
-                )
-                db.session.add(user)
-                created += 1
-        except Exception:
-            errs += 1
-            continue
-
-    try:
-        db.session.commit()
-    except Exception as e:
-        db.session.rollback()
-        flash(f"Import failed: {e}", "danger")
-        return redirect(url_for("manage_users"))
-
-    msg = f"Import complete — created: {created}, updated: {updated}, skipped: {skipped}"
-    if errs:
-        msg += f", errors: {errs}"
-    flash(msg, "success")
     return redirect(url_for("manage_users"))
 
 # ---------- Self-service password change ----------
