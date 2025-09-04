@@ -2,93 +2,124 @@
 {% block title %}New Request{% endblock %}
 
 {% block content %}
-<div class="card" style="max-width:700px; margin:0 auto;">
-  <h1 style="margin-top:0; text-align:center;">New Leave Request</h1>
+<div class="card">
+  <div class="row">
+    <h2>New Leave Request</h2>
+    <div class="right muted">Workday = {{ '%.2f'|format(workday) }} h</div>
+  </div>
+  <p class="muted" style="margin:.25rem 0 1rem 0;">
+    For hourly requests, you may either enter total hours <em>or</em> pick start/end times (15-minute increments).
+  </p>
 
-  <form method="post" action="{{ url_for('new_request') }}" class="form-grid-2">
+  <form method="post" action="{{ url_for('new_request') }}">
+    <div class="form-grid-3">
+      <div>
+        <label for="kind">Kind</label>
+        <select id="kind" name="kind">
+          <option value="annual">Annual</option>
+          <option value="sick">Sick</option>
+          <option value="other">Other</option>
+        </select>
+      </div>
 
-    <!-- Kind -->
-    <div>
-      <label for="kind">Leave Type</label>
-      <select name="kind" id="kind" required>
-        <option value="annual">Annual</option>
-        <option value="sick">Sick</option>
-      </select>
+      <div>
+        <label for="mode">Mode</label>
+        <select id="mode" name="mode">
+          <option value="hourly">Hourly</option>
+          <option value="daily">Daily</option>
+        </select>
+      </div>
+
+      <div>
+        <label for="hours">Hours (optional for hourly)</label>
+        <input id="hours" name="hours" type="number" step="0.25" placeholder="e.g. 2.5">
+      </div>
+
+      <div>
+        <label for="start_date">Start date</label>
+        <input id="start_date" name="start_date" type="date" required>
+      </div>
+      <div>
+        <label for="end_date">End date</label>
+        <input id="end_date" name="end_date" type="date" required>
+      </div>
+      <div>
+        <label>&nbsp;</label>
+        <label style="display:flex;align-items:center;gap:.5rem;">
+          <input type="checkbox" name="school_related" value="1"> School-related (no deduction)
+        </label>
+      </div>
+
+      <!-- Quarter-hour time pickers -->
+      <div>
+        <label>Start time (optional)</label>
+        <div class="form-row" style="gap:6px;">
+          <select name="start_time_hour" class="input-sm" style="max-width:90px;">
+            <option value="">HH</option>
+            {% for h in range(0,24) %}
+              <option value="{{ '%02d' % h }}">{{ '%02d' % h }}</option>
+            {% endfor %}
+          </select>
+          <select name="start_time_min" class="input-sm" style="max-width:90px;">
+            <option value="">MM</option>
+            {% for m in ['00','15','30','45'] %}
+              <option value="{{ m }}">{{ m }}</option>
+            {% endfor %}
+          </select>
+          <input type="hidden" name="start_time" id="start_time_hidden">
+        </div>
+      </div>
+
+      <div>
+        <label>End time (optional)</label>
+        <div class="form-row" style="gap:6px;">
+          <select name="end_time_hour" class="input-sm" style="max-width:90px;">
+            <option value="">HH</option>
+            {% for h in range(0,24) %}
+              <option value="{{ '%02d' % h }}">{{ '%02d' % h }}</option>
+            {% endfor %}
+          </select>
+          <select name="end_time_min" class="input-sm" style="max-width:90px;">
+            <option value="">MM</option>
+            {% for m in ['00','15','30','45'] %}
+              <option value="{{ m }}">{{ m }}</option>
+            {% endfor %}
+          </select>
+          <input type="hidden" name="end_time" id="end_time_hidden">
+        </div>
+      </div>
+
+      <div style="grid-column: 1 / -1;">
+        <label for="reason">Reason (optional)</label>
+        <textarea id="reason" name="reason" placeholder="Add any notes for your admin…"></textarea>
+      </div>
     </div>
 
-    <!-- Mode -->
-    <div>
-      <label for="mode">Request Mode</label>
-      <select name="mode" id="mode" required>
-        <option value="daily">Daily</option>
-        <option value="hourly">Hourly</option>
-      </select>
-    </div>
-
-    <!-- Start Date -->
-    <div>
-      <label for="start_date">Start Date</label>
-      <input type="date" name="start_date" id="start_date" required>
-    </div>
-
-    <!-- End Date -->
-    <div>
-      <label for="end_date">End Date</label>
-      <input type="date" name="end_date" id="end_date" required>
-    </div>
-
-    <!-- Start Time -->
-    <div>
-      <label for="start_time">Start Time</label>
-      <select name="start_time" id="start_time">
-        <option value="">--</option>
-        {% for h in range(0,24) %}
-          {% for m in [0,15,30,45] %}
-            <option value="{{ "%02d:%02d"|format(h,m) }}">{{ "%02d:%02d"|format(h,m) }}</option>
-          {% endfor %}
-        {% endfor %}
-      </select>
-    </div>
-
-    <!-- End Time -->
-    <div>
-      <label for="end_time">End Time</label>
-      <select name="end_time" id="end_time">
-        <option value="">--</option>
-        {% for h in range(0,24) %}
-          {% for m in [0,15,30,45] %}
-            <option value="{{ "%02d:%02d"|format(h,m) }}">{{ "%02d:%02d"|format(h,m) }}</option>
-          {% endfor %}
-        {% endfor %}
-      </select>
-    </div>
-
-    <!-- Hours -->
-    <div>
-      <label for="hours">Hours (optional)</label>
-      <input type="number" step="0.25" min="0" name="hours" id="hours">
-    </div>
-
-    <!-- School related -->
-    <div>
-      <label for="is_school_related">School Related?</label>
-      <select name="is_school_related" id="is_school_related">
-        <option value="no">No</option>
-        <option value="yes">Yes</option>
-      </select>
-    </div>
-
-    <!-- Reason -->
-    <div class="full">
-      <label for="reason">Reason</label>
-      <textarea name="reason" id="reason" rows="3"></textarea>
-    </div>
-
-    <!-- Submit -->
-    <div class="full" style="text-align:right; margin-top:.5rem;">
+    <div class="row" style="margin-top:12px;">
       <button class="btn" type="submit">Submit Request</button>
+      <a class="btn ghost" href="{{ NAV.my_requests }}">Back to My Requests</a>
     </div>
-
   </form>
 </div>
+
+{% block extra_scripts %}
+<script>
+  // Build HH:MM hidden values from the two selects (quarter-minute)
+  function updateHidden(idPrefix) {
+    const hSel = document.querySelector(`select[name="${idPrefix}_hour"]`);
+    const mSel = document.querySelector(`select[name="${idPrefix}_min"]`);
+    const hidden = document.getElementById(`${idPrefix}_hidden`);
+    if (hSel && mSel && hidden) {
+      const h = hSel.value;
+      const m = mSel.value;
+      hidden.value = (h && m) ? `${h}:${m}` : "";
+    }
+  }
+  ['start_time','end_time'].forEach(prefix => {
+    const hSel = document.querySelector(`select[name="${prefix}_hour"]`);
+    const mSel = document.querySelector(`select[name="${prefix}_min"]`);
+    [hSel, mSel].forEach(el => el && el.addEventListener('change', () => updateHidden(prefix)));
+  });
+</script>
+{% endblock %}
 {% endblock %}
