@@ -9,7 +9,7 @@ from flask_login import (
 )
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime, date, timedelta, time as dt_time
-import os, smtplib, ssl, io, csv
+import os, smtplib, ssl, io, csv, secrets
 from email.message import EmailMessage
 from sqlalchemy import text
 import xlsxwriter  # Excel export (in-memory, safe on Render)
@@ -828,6 +828,104 @@ def admin_delete_user(user_id):
     db.session.delete(u)
     db.session.commit()
     flash("User deleted.", "success")
+    return redirect(url_for("manage_users"))
+
+# ---------- Bulk CSV Import (admin) ----------
+@app.post("/admin/users/import")
+@login_required
+def admin_import_users():
+    if current_user.role != Role.admin:
+        flash("Admins only.", "warning")
+        return redirect(url_for("dashboard"))
+
+    f = request.files.get("file")
+    if not f or f.filename == "":
+        flash("Please choose a CSV file.", "warning")
+        return redirect(url_for("manage_users"))
+
+    # Read CSV text
+    try:
+        raw = f.read()
+        try:
+            text_csv = raw.decode("utf-8-sig")
+        except Exception:
+            text_csv = raw.decode("latin1")
+    except Exception as e:
+        flash(f"Could not read file: {e}", "danger")
+        return redirect(url_for("manage_users"))
+
+    created = 0
+    updated = 0
+    skipped = 0
+    errs = 0
+
+    reader = csv.DictReader(io.StringIO(text_csv))
+    required_col = "username"
+    if required_col not in (c or "" for c in (reader.fieldnames or [])):
+        flash("CSV must include a 'username' column.", "danger")
+        return redirect(url_for("manage_users"))
+
+    for i, row in enumerate(reader, start=2):  # start=2 because header is line 1
+        try:
+            username = (row.get("username") or "").strip()
+            if not username:
+                skipped += 1
+                continue
+
+            email = (row.get("email") or "").strip() or None
+            role = (row.get("role") or Role.staff).strip()
+            role = role if role in (Role.admin, Role.staff) else Role.staff
+
+            hb_val = None
+            hb_raw = (row.get("hours_balance") or "").strip()
+            if hb_raw != "":
+                try:
+                    hb_val = float(hb_raw)
+                except Exception:
+                    hb_val = None
+
+            pw_raw = (row.get("password") or "").strip()
+            if pw_raw == "":
+                # Generate a 12-char temp password if missing
+                pw_raw = secrets.token_urlsafe(9)  # ~12 chars
+
+            existing = User.query.filter(User.username.ilike(username)).first()
+            if existing:
+                # Update existing (email/role/hours if provided, password if provided)
+                if email is not None:
+                    existing.email = email
+                if role:
+                    existing.role = role
+                if hb_val is not None:
+                    existing.hours_balance = hb_val
+                if pw_raw:
+                    existing.password_hash = generate_password_hash(pw_raw)
+                updated += 1
+            else:
+                user = User(
+                    username=username,
+                    email=email,
+                    role=role,
+                    hours_balance=(hb_val if hb_val is not None else 160.0),
+                    password_hash=generate_password_hash(pw_raw),
+                )
+                db.session.add(user)
+                created += 1
+        except Exception:
+            errs += 1
+            continue
+
+    try:
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        flash(f"Import failed: {e}", "danger")
+        return redirect(url_for("manage_users"))
+
+    msg = f"Import complete — created: {created}, updated: {updated}, skipped: {skipped}"
+    if errs:
+        msg += f", errors: {errs}"
+    flash(msg, "success")
     return redirect(url_for("manage_users"))
 
 # ---------- Self-service password change ----------
