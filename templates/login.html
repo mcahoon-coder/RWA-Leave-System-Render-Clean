@@ -2,23 +2,23 @@
 {% block title %}Login{% endblock %}
 
 {% block content %}
-  <div class="card">
-    <h1 style="margin-top:0;">Login</h1>
+<div class="card" style="max-width:500px; margin:0 auto;">
+  <h1 style="margin-top:0; text-align:center;">Login</h1>
 
-    <form method="post" action="{{ url_for('login') }}">
-      <div class="form-row">
-        <div>
-          <label for="username">Username</label>
-          <input id="username" type="text" name="username" required>
-        </div>
-        <div>
-          <label for="password">Password</label>
-          <input id="password" type="password" name="password" required>
-        </div>
+  <form method="post" action="{{ url_for('login') }}">
+    <div class="login-row">
+      <div>
+        <label for="username">Username</label>
+        <input type="text" name="username" id="username" required autofocus>
       </div>
-      <div style="margin-top:12px;">
-        <button class="btn" type="submit">Sign in</button>
+      <div>
+        <label for="password">Password</label>
+        <input type="password" name="password" id="password" required>
       </div>
-    </form>
-  </div>
+      <div style="align-self:end;">
+        <button class="btn" type="submit">Login</button>
+      </div>
+    </div>
+  </form>
+</div>
 {% endblock %}
