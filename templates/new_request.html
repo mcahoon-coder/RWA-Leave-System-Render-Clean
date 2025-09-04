@@ -1,68 +1,85 @@
 {% extends "base.html" %}
 {% block title %}New Request{% endblock %}
-
 {% block content %}
-  <div class="card">
-    <h1 style="margin-top:0;">New Leave Request</h1>
+<div class="card">
+  <h1 style="margin-top:0;">New Leave Request</h1>
+  <form method="post" action="{{ url_for('new_request') }}">
+    <div class="form-grid-3">
+      <div>
+        <label for="kind">Kind</label>
+        <select id="kind" name="kind" required>
+          <option value="annual">Annual</option>
+          <option value="sick">Sick</option>
+        </select>
+      </div>
 
-    <form method="post" action="{{ url_for('new_request') }}">
-      <div style="display:grid; grid-template-columns: 1fr 1fr; gap:16px;">
+      <div>
+        <label for="mode">Mode</label>
+        <select id="mode" name="mode" required>
+          <option value="hourly">Hourly</option>
+          <option value="daily">Daily</option>
+        </select>
+      </div>
+
+      <div>
+        <label>&nbsp;</label>
+        <label style="display:flex; align-items:center; gap:8px;">
+          <input type="checkbox" name="school_related" value="1">
+          <span>School-related (no deduction)</span>
+        </label>
+      </div>
+
+      <div>
+        <label for="start_date">Start date</label>
+        <input id="start_date" type="date" name="start_date" required>
+      </div>
+
+      <div>
+        <label for="end_date">End date</label>
+        <input id="end_date" type="date" name="end_date" required>
+      </div>
+
+      <div id="hourly-hours" class="full" style="display:none;">
+        <label for="hours">Hours (if entering a total)</label>
+        <input id="hours" type="number" step="0.25" min="0" name="hours" placeholder="e.g. 3.5">
+        <div class="muted">Leave blank to use start/end times below.</div>
+      </div>
+
+      <div id="hourly-times" class="form-grid-2 full">
         <div>
-          <label for="mode">Mode</label>
-          <select id="mode" name="mode">
-            <option value="hourly">Hourly</option>
-            <option value="daily">Daily</option>
-          </select>
-        </div>
-
-        <div>
-          <label for="kind">Kind</label>
-          <select id="kind" name="kind">
-            <option value="annual">Annual</option>
-            <option value="sick">Sick</option>
-          </select>
-        </div>
-
-        <div>
-          <label for="start_date">Start Date</label>
-          <input type="date" id="start_date" name="start_date" required>
+          <label for="start_time">Start time</label>
+          <input id="start_time" type="time" name="start_time" step="900"> <!-- 15-minute steps -->
         </div>
         <div>
-          <label for="end_date">End Date</label>
-          <input type="date" id="end_date" name="end_date" required>
-        </div>
-
-        <div>
-          <label for="hours">Hours (if hourly)</label>
-          <input type="number" step="0.25" id="hours" name="hours">
-          <small style="color:#555;">Default workday: {{ workday }} hours</small>
-        </div>
-
-        <div>
-          <label for="start_time">Start Time</label>
-          <input type="time" id="start_time" name="start_time" step="900">
-        </div>
-        <div>
-          <label for="end_time">End Time</label>
-          <input type="time" id="end_time" name="end_time" step="900">
-        </div>
-
-        <div style="grid-column:1/-1;">
-          <label for="reason">Reason</label>
-          <textarea id="reason" name="reason" rows="3" style="width:100%;"></textarea>
-        </div>
-
-        <div style="grid-column:1/-1;">
-          <label style="display:flex; align-items:center; gap:8px;">
-            <input type="checkbox" name="school_related" value="1">
-            This leave is <strong>school-related</strong> (no deduction to balance on approval)
-          </label>
-        </div>
-
-        <div style="grid-column:1/-1; margin-top:12px;">
-          <button class="btn" type="submit">Submit Request</button>
+          <label for="end_time">End time</label>
+          <input id="end_time" type="time" name="end_time" step="900">
         </div>
       </div>
-    </form>
-  </div>
+
+      <div class="full">
+        <label for="reason">Reason</label>
+        <textarea id="reason" name="reason" placeholder="Optional"></textarea>
+      </div>
+    </div>
+
+    <div style="display:flex; gap:10px; margin-top:10px;">
+      <button class="btn" type="submit">Submit Request</button>
+      <a class="btn secondary" href="{{ NAV.my_requests }}">Back to My Requests</a>
+    </div>
+
+    <p class="muted" style="margin-top:.8rem;">
+      A full workday is {{ workday }} hours. Hourly requests can use the 15-minute time selectors or a total hours number.
+    </p>
+  </form>
+</div>
+
+<script>
+  function toggleHourly() {
+    const mode = document.getElementById('mode').value;
+    document.getElementById('hourly-times').style.display = (mode === 'hourly') ? 'grid' : 'none';
+    document.getElementById('hourly-hours').style.display = (mode === 'hourly') ? 'block' : 'none';
+  }
+  document.getElementById('mode').addEventListener('change', toggleHourly);
+  toggleHourly();
+</script>
 {% endblock %}
