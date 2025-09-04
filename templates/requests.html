@@ -23,13 +23,13 @@
         {% for r in reqs %}
         <tr>
           <!-- Username -->
-          <td>{{ r.user.username }}</td>
+          <td>{{ r.user.staff_name or r.user.username }}</td>
 
-          <!-- Dates -->
+          <!-- Dates + Times (12h) -->
           <td>
             {{ r.start_date }}{% if r.end_date != r.start_date %} → {{ r.end_date }}{% endif %}
             {% if r.start_time and r.end_time %}
-              <div class="muted">{{ r.start_time }}–{{ r.end_time }}</div>
+              <div class="muted">{{ r.start_time|h12 }}–{{ r.end_time|h12 }}</div>
             {% endif %}
           </td>
 
@@ -37,7 +37,7 @@
           <td>{{ r.kind|capitalize }}</td>
           <td>{{ r.mode|capitalize }}</td>
 
-          <!-- Hours -->
+          <!-- Hours (balance color hint) -->
           <td>
             <span class="{{ 'text-danger' if (r.hours|float) > (me.hours_balance|float) else 'text-success' }}">
               {{ '%.2f'|format(r.hours) }}h
