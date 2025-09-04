@@ -3,77 +3,58 @@
 
 {% block content %}
 <div class="card">
-  <h1 style="margin-top:0;">Welcome, {{ me.username }}</h1>
-
-  <!-- Summary -->
-  <div class="form-grid-3">
-    <div class="card" style="padding:.9rem 1rem;">
-      <h3 style="margin:.2rem 0 .4rem;">Leave Balance</h3>
-      {% set is_neg = (me.hours_balance or 0) < 0 %}
-      <div style="font-size:1.8rem; font-weight:800; line-height:1.1; color: {{ '#dc2626' if is_neg else '#065f46' }};">
-        {{ '%.2f'|format(me.hours_balance or 0) }}h
-      </div>
-      <div class="muted" style="margin-top:.2rem;">{{ 'Negative balance' if is_neg else 'In good standing' }}</div>
-    </div>
-
-    <div class="card" style="padding:.9rem 1rem;">
-      <h3 style="margin:.2rem 0 .4rem;">Workday Hours</h3>
-      <div style="font-size:1.4rem; font-weight:800;">{{ '%.2f'|format(workday) }} h / day</div>
-      <div class="muted" style="margin-top:.2rem;">Used for daily requests</div>
-    </div>
-
-    <div class="card" style="padding:.9rem 1rem;">
-      <h3 style="margin:.2rem 0 .4rem;">Quick Actions</h3>
-      <div style="display:flex; gap:8px; flex-wrap:wrap;">
-        <a class="btn sm" href="{{ NAV.new_request }}">New Request</a>
-        <a class="btn secondary sm" href="{{ NAV.my_requests }}">My Requests</a>
-        {% if NAV.admin %}<a class="btn secondary sm" href="{{ NAV.admin }}">Admin</a>{% endif %}
-      </div>
-    </div>
-  </div>
-
-  <!-- Recent activity -->
-  <div class="card" style="padding:.9rem 1rem; margin-top:.6rem;">
-    <h3 style="margin:.2rem 0 .6rem;">Recent Requests</h3>
-    <table class="table-tight">
-      <thead>
-        <tr>
-          <th>Kind</th>
-          <th>Mode</th>
-          <th>Dates</th>
-          <th>Hours</th>
-          <th>School</th>
-          <th>Status</th>
-        </tr>
-      </thead>
-      <tbody>
-      {% for r in recent %}
-        <tr>
-          <td>{{ r.kind|capitalize }}</td>
-          <td>{{ r.mode|capitalize }}</td>
-          <td>
-            {{ r.start_date }} → {{ r.end_date }}
-            {% if r.start_time or r.end_time %}
-              <div class="muted" style="font-size:.85rem;">
-                {{ r.start_time or '-' }} – {{ r.end_time or '-' }}
-              </div>
-            {% endif %}
-          </td>
-          <td>{{ '%.2f'|format(r.hours or 0) }}</td>
-          <td>{% if r.is_school_related %}<span class="badge green">Yes</span>{% else %}<span class="badge amber">No</span>{% endif %}</td>
-          <td>
-            {% if r.status=='Approved' %}<span class="badge green">Approved</span>
-            {% elif r.status=='Pending' %}<span class="badge blue">Pending</span>
-            {% elif r.status=='Disapproved' %}<span class="badge red">Disapproved</span>
-            {% elif r.status=='Cancelled' %}<span class="badge">Cancelled</span>
-            {% else %}{{ r.status }}{% endif %}
-          </td>
-        </tr>
+  <div class="row">
+    <h2>Welcome, {{ me.username }}</h2>
+    <div class="right muted">
+      Current Balance:
+      {% if me.hours_balance < 0 %}
+        <span class="text-danger">{{ '%.2f'|format(me.hours_balance) }} h</span>
       {% else %}
-        <tr><td colspan="6" class="muted">No recent requests.</td></tr>
-      {% endfor %}
-      </tbody>
-    </table>
+        <span class="text-success">{{ '%.2f'|format(me.hours_balance) }} h</span>
+      {% endif %}
+    </div>
   </div>
+  <div class="row" style="margin-top:10px;">
+    <a class="btn" href="{{ NAV.new_request }}">New Request</a>
+    <a class="btn ghost" href="{{ NAV.my_requests }}">My Requests</a>
+    <a class="btn ghost" href="{{ NAV.team_calendar }}">Calendar</a>
+    {% if NAV.admin %}<a class="btn ghost" href="{{ NAV.admin }}">Admin</a>{% endif %}
+  </div>
+</div>
+
+<div class="card">
+  <h3 style="margin-bottom:.6rem;">Recent Activity</h3>
+  <table class="table-tight">
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>Kind</th>
+        <th>Mode</th>
+        <th>Dates</th>
+        <th>Hours</th>
+        <th>School</th>
+        <th>Status</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in recent %}
+      <tr>
+        <td>{{ r.id }}</td>
+        <td>{{ r.kind|capitalize }}</td>
+        <td>{{ r.mode|capitalize }}</td>
+        <td>
+          {{ r.start_date.strftime('%Y-%m-%d') }}
+          {% if r.end_date != r.start_date %} → {{ r.end_date.strftime('%Y-%m-%d') }}{% endif %}
+          {% if r.start_time %}<div class="muted">Time: {{ r.start_time }}{% if r.end_time %}–{{ r.end_time }}{% endif %}</div>{% endif %}
+        </td>
+        <td>{{ '%.2f'|format(r.hours) }}</td>
+        <td>{% if r.is_school_related %}Yes{% else %}No{% endif %}</td>
+        <td>{{ r.status }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="7" class="muted">No recent requests.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
 </div>
 {% endblock %}
