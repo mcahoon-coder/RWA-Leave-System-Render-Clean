@@ -9,6 +9,7 @@
     <table class="table-tight" style="font-size:.95rem;">
       <thead>
         <tr>
+          <th>User</th>
           <th>Date(s)</th>
           <th>Kind</th>
           <th>Mode</th>
@@ -21,14 +22,22 @@
       <tbody>
         {% for r in reqs %}
         <tr>
+          <!-- Username -->
+          <td>{{ r.user.username }}</td>
+
+          <!-- Dates -->
           <td>
             {{ r.start_date }}{% if r.end_date != r.start_date %} → {{ r.end_date }}{% endif %}
             {% if r.start_time and r.end_time %}
               <div class="muted">{{ r.start_time }}–{{ r.end_time }}</div>
             {% endif %}
           </td>
+
+          <!-- Kind / Mode -->
           <td>{{ r.kind|capitalize }}</td>
           <td>{{ r.mode|capitalize }}</td>
+
+          <!-- Hours -->
           <td>
             <span class="{{ 'text-danger' if (r.hours|float) > (me.hours_balance|float) else 'text-success' }}">
               {{ '%.2f'|format(r.hours) }}h
@@ -37,8 +46,14 @@
               <div class="badge" style="background:#fef9c3; color:#854d0e; font-size:.75rem; margin-top:2px;">School</div>
             {% endif %}
           </td>
+
+          <!-- Status -->
           <td>{{ r.status }}</td>
+
+          <!-- Reason -->
           <td>{{ r.reason or '—' }}</td>
+
+          <!-- Actions -->
           <td style="white-space:nowrap;">
             {% if r.status == 'Pending' %}
               <form method="post" action="{{ url_for('cancel', req_id=r.id) }}" style="display:inline;">
