@@ -1,72 +1,90 @@
 {% extends "base.html" %}
 {% block title %}My Requests{% endblock %}
+
 {% block content %}
-
-<div class="card" style="margin-bottom:12px;">
-  <h1 style="margin-top:0;">My Requests</h1>
-
-  <!-- Balance -->
-  <div style="margin-bottom:1rem;">
-    {% set bal = current_user.hours_balance or 0 %}
-    {% set is_neg = bal < 0 %}
-    <div style="font-size:1.4rem; font-weight:700; color: {{ '#dc2626' if is_neg else '#065f46' }};">
-      Balance: {{ '%.2f'|format(bal) }}h
-    </div>
+<div class="card">
+  <div class="row">
+    <h2 style="margin-right:8px">My Requests</h2>
+    <a class="btn ghost" href="{{ NAV.new_request }}">New Request</a>
+    <span class="right muted">Balance:
+      {% if me.hours_balance < 0 %}
+        <span class="text-danger">{{ '%.2f'|format(me.hours_balance) }} h</span>
+      {% else %}
+        <span class="text-success">{{ '%.2f'|format(me.hours_balance) }} h</span>
+      {% endif %}
+    </span>
   </div>
+</div>
 
-  <!-- Results -->
-  <table class="table-tight" style="font-size:.95rem;">
+<div class="card">
+  <table class="table-tight">
     <thead>
       <tr>
+        <th>#</th>
         <th>Kind</th>
         <th>Mode</th>
         <th>Dates</th>
         <th>Hours</th>
         <th>School</th>
         <th>Status</th>
-        <th style="width:1%;">Actions</th>
+        <th style="width:260px">Actions</th>
       </tr>
     </thead>
     <tbody>
-    {% for r in reqs %}
+      {% for r in reqs %}
       <tr>
+        <td>{{ r.id }}</td>
         <td>{{ r.kind|capitalize }}</td>
         <td>{{ r.mode|capitalize }}</td>
-        <td style="white-space:nowrap;">
-          {{ r.start_date }} → {{ r.end_date }}
-          {% if r.start_time or r.end_time %}
-            <div class="muted" style="font-size:.8rem;">
-              {{ r.start_time or '-' }} – {{ r.end_time or '-' }}
-            </div>
-          {% endif %}
-        </td>
-        <td style="text-align:center;">{{ '%.2f'|format(r.hours or 0) }}</td>
-        <td style="text-align:center;">
-          {% if r.is_school_related %}
-            <span class="badge green">Yes</span>
-          {% else %}
-            <span class="badge amber">No</span>
-          {% endif %}
-        </td>
         <td>
-          {% set st = r.status %}
-          {% if st=='Approved' %}<span class="badge green">Approved</span>
-          {% elif st=='Pending' %}<span class="badge blue">Pending</span>
-          {% elif st=='Disapproved' %}<span class="badge red">Disapproved</span>
-          {% elif st=='Cancelled' %}<span class="badge">Cancelled</span>
-          {% else %}{{ st }}{% endif %}
+          {{ r.start_date.strftime('%Y-%m-%d') }}
+          {% if r.end_date != r.start_date %} → {{ r.end_date.strftime('%Y-%m-%d') }}{% endif %}
+          {% if r.start_time %}<div class="muted">Time: {{ r.start_time }}{% if r.end_time %}–{{ r.end_time }}{% endif %}</div>{% endif %}
         </td>
-        <td style="white-space:nowrap;">
-          {% if r.status == 'Pending' %}
-            <form method="post" action="{{ url_for('cancel', req_id=r.id) }}" style="display:inline;">
-              <button class="btn secondary sm" type="submit">Cancel</button>
-            </form>
+        <td>{{ '%.2f'|format(r.hours) }}</td>
+        <td>{% if r.is_school_related %}Yes{% else %}No{% endif %}</td>
+        <td>{{ r.status }}</td>
+        <td>
+          <div class="row">
+            {% if r.status == 'Pending' %}
+              {% if is_admin or r.user_id == me.id %}
+                {% if not r.is_school_related %}
+                  <form method="post" action="{{ url_for('mark_school_related', req_id=r.id) }}">
+                    <button class="btn sm ghost" type="submit" title="Mark as school-related">Mark School</button>
+                  </form>
+                {% else %}
+                  <form method="post" action="{{ url_for('unmark_school_related', req_id=r.id) }}">
+                    <button class="btn sm ghost" type="submit" title="Remove school-related">Unmark School</button>
+                  </form>
+                {% endif %}
+              {% endif %}
+            {% endif %}
+
+            {% if r.user_id == me.id and r.status in ['Pending','Approved'] %}
+              <form method="post" action="{{ url_for('cancel', req_id=r.id) }}">
+                <button class="btn sm danger" type="submit" onclick="return confirm('Cancel this request?')">Cancel</button>
+              </form>
+            {% endif %}
+
+            {% if is_admin and r.status == 'Pending' %}
+              <form method="post" action="{{ url_for('approve', req_id=r.id) }}">
+                <button class="btn sm" type="submit">Approve</button>
+              </form>
+              <form method="post" action="{{ url_for('disapprove', req_id=r.id) }}">
+                <button class="btn sm danger" type="submit">Disapprove</button>
+              </form>
+            {% endif %}
+          </div>
+          {% if r.reason %}
+            <div class="muted" style="margin-top:6px;">Reason: {{ r.reason }}</div>
           {% endif %}
         </td>
       </tr>
-    {% else %}
-      <tr><td colspan="7" class="muted">No requests found.</td></tr>
-    {% endfor %}
+      {% else %}
+      <tr>
+        <td colspan="8" class="muted">No requests yet. Use “New Request”.</td>
+      </tr>
+      {% endfor %}
     </tbody>
   </table>
 </div>
