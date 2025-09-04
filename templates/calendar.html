@@ -1,55 +1,49 @@
 {% extends "base.html" %}
 {% block title %}Calendar{% endblock %}
 
-{% block head %}
-  <link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.css" rel="stylesheet">
+{% block extra_head %}
+  <!-- FullCalendar CSS/JS (global build) -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.css">
 {% endblock %}
 
 {% block content %}
-  <div class="card">
-    <h1 style="margin-top:0;">Calendar</h1>
-    {% if is_admin %}
-      <p style="margin:0 0 8px; color:#374151;">You are viewing <strong>all approved staff leave</strong>.</p>
-    {% else %}
-      <p style="margin:0 0 8px; color:#374151;">You are viewing <strong>only your approved leave</strong>.</p>
-    {% endif %}
-
-    <div id="cal-status" style="margin: 8px 0 12px;">Loading calendar…</div>
-    <div id="calendar" style="border:1px solid #e5e7eb; border-radius:8px; padding:8px; min-height:600px;"></div>
+<div class="card">
+  <div class="row">
+    <h2>Calendar</h2>
+    <span class="right muted">
+      {% if is_admin %}
+        Viewing: All approved leave
+      {% else %}
+        Viewing: Your approved leave
+      {% endif %}
+    </span>
   </div>
+</div>
+
+<div class="card">
+  <div id="calendar" style="background:#fff; border-radius:8px; overflow:hidden;"></div>
+</div>
 {% endblock %}
 
-{% block scripts %}
-  <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.js"></script>
-  <script>
-    document.addEventListener("DOMContentLoaded", function () {
-      const statusEl = document.getElementById("cal-status");
-      const el = document.getElementById("calendar");
-
-      const calendar = new FullCalendar.Calendar(el, {
-        initialView: "dayGridMonth",
-        headerToolbar: {
-          left: "prev,next today",
-          center: "title",
-          right: "dayGridMonth,timeGridWeek,timeGridDay,listWeek"
-        },
-        navLinks: true,
-        nowIndicator: true,
-        eventTimeFormat: { hour: '2-digit', minute: '2-digit', meridiem: false },
-        events: {
-          url: "{{ url_for('calendar_data') }}",
-          failure: function(err) {
-            console.error(err);
-            if (statusEl) statusEl.textContent = "Could not load events. Please try again.";
-          }
-        },
-        loading: function(isLoading) {
-          if (!statusEl) return;
-          statusEl.textContent = isLoading ? "Loading calendar…" : "";
-        },
-      });
-
-      calendar.render();
+{% block extra_scripts %}
+<script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.js"></script>
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    const el = document.getElementById('calendar');
+    const calendar = new FullCalendar.Calendar(el, {
+      initialView: 'dayGridMonth',
+      height: 'auto',
+      headerToolbar: {
+        left: 'prev,next today',
+        center: 'title',
+        right: 'dayGridMonth,timeGridWeek,timeGridDay'
+      },
+      events: {
+        url: '{{ url_for("calendar_data") }}',
+        failure: () => alert('Failed to load events.')
+      }
     });
-  </script>
+    calendar.render();
+  });
+</script>
 {% endblock %}
