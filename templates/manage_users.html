@@ -2,108 +2,127 @@
 {% block title %}Manage Users{% endblock %}
 
 {% block content %}
-<!-- Header / search -->
-<div class="card">
-  <div class="row">
-    <h1 style="margin:0;">Manage Users</h1>
-    <form class="right row" method="get" action="{{ url_for('manage_users') }}">
-      <input class="input-sm" type="text" name="q" placeholder="Search username…" value="{{ q or '' }}">
-      <button class="btn sm" type="submit">Search</button>
+<div class="grid-2">
+  <!-- Create User -->
+  <div class="card">
+    <h2 class="card-title">Add User</h2>
+    <form method="post" action="{{ url_for('admin_create_user') }}" class="form-grid">
+      <label>Username
+        <input type="text" name="username" required>
+      </label>
+
+      <!-- NEW: Staff Name -->
+      <label>Staff Name (display)
+        <input type="text" name="staff_name" placeholder="e.g., Jane Doe">
+      </label>
+
+      <label>Email
+        <input type="email" name="email" placeholder="name@example.com">
+      </label>
+
+      <label>Role
+        <select name="role">
+          <option value="faculty_staff">Faculty/Staff</option>
+          <option value="admin">Admin</option>
+        </select>
+      </label>
+
+      <label>Starting Hours Balance
+        <input type="number" step="0.01" name="hours_balance" placeholder="160.00">
+      </label>
+
+      <label>Password
+        <input type="text" name="password" required>
+      </label>
+
+      <div class="actions">
+        <button class="btn">Create</button>
+      </div>
+    </form>
+  </div>
+
+  <!-- Search -->
+  <div class="card">
+    <h2 class="card-title">Search</h2>
+    <form method="get" action="{{ url_for('manage_users') }}" class="form-inline">
+      <input type="text" name="q" placeholder="username contains…" value="{{ q or '' }}">
+      <button class="btn">Find</button>
     </form>
   </div>
 </div>
 
-<!-- Create user -->
+<!-- Users list -->
 <div class="card">
-  <h3 style="margin:0 0 .6rem;">Add User</h3>
-  <form method="post" action="{{ url_for('admin_create_user') }}">
-    <div class="row" style="gap:8px; flex-wrap:wrap;">
-      <div style="min-width:200px; flex:1 1 220px;">
-        <label>Username</label>
-        <input class="input-sm" name="username" required>
-      </div>
-      <div style="min-width:200px; flex:1 1 220px;">
-        <label>Staff Name</label>
-        <input class="input-sm" name="staff_name" placeholder="Full name">
-      </div>
-      <div style="min-width:180px; flex:1 1 200px;">
-        <label>Password</label>
-        <input class="input-sm" name="password" type="text" required>
-      </div>
-      <div style="min-width:220px; flex:1 1 240px;">
-        <label>Email (optional)</label>
-        <input class="input-sm" name="email" type="email">
-      </div>
-      <div style="min-width:160px;">
-        <label>Role</label>
-        <select class="input-sm" name="role">
-          <option value="faculty_staff">Faculty/Staff</option>
-          <option value="admin">Admin</option>
-        </select>
-      </div>
-      <div style="min-width:160px;">
-        <label>Hours Balance</label>
-        <input class="input-sm" name="hours_balance" type="number" step="0.01" placeholder="160.00">
-      </div>
-      <div style="align-self:end">
-        <button class="btn sm" type="submit">Create</button>
-      </div>
-    </div>
-  </form>
+  <h3 class="card-title">All Users</h3>
+  <div class="table-scroll">
+    <table class="table tight">
+      <thead>
+        <tr>
+          <th>Username</th>
+          <th>Staff Name</th> <!-- NEW: show staff name -->
+          <th>Email</th>
+          <th>Role</th>
+          <th>Hours</th>
+          <th style="width:1%">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for u in users %}
+        <tr>
+          <td><strong>@{{ u.username }}</strong></td>
+          <td>{{ u.staff_name or '—' }}</td> <!-- NEW -->
+          <td>{{ u.email or '—' }}</td>
+          <td>{{ 'Admin' if u.role=='admin' else 'Faculty/Staff' }}</td>
+          <td>{{ '%.2f'|format(u.hours_balance or 0) }}</td>
+          <td class="nowrap">
+            <!-- Inline update (NO username change field) -->
+            <form method="post" action="{{ url_for('admin_update_user', user_id=u.id) }}" class="inline form-mini">
+              <input type="text" name="staff_name" placeholder="Staff name" value="{{ u.staff_name or '' }}" class="w-12">
+              <input type="email" name="email" placeholder="email" value="{{ u.email or '' }}" class="w-12">
+              <select name="role" class="w-10">
+                <option value="faculty_staff" {{ 'selected' if u.role=='faculty_staff' else '' }}>Staff</option>
+                <option value="admin" {{ 'selected' if u.role=='admin' else '' }}>Admin</option>
+              </select>
+              <input type="number" step="0.01" name="hours_balance" value="{{ '%.2f'|format(u.hours_balance or 0) }}" class="w-10">
+              <button class="btn btn-soft btn-xs">Save</button>
+            </form>
+
+            <!-- Reset password -->
+            <form method="post" action="{{ url_for('admin_reset_password', user_id=u.id) }}" class="inline form-mini">
+              <input type="text" name="new_password" placeholder="new password" class="w-12" required>
+              <button class="btn btn-outline btn-xs">Set PW</button>
+            </form>
+
+            <!-- Delete (guard) -->
+            {% if u.id != current_user.id and not (u.role=='admin' and users|selectattr('role','equalto','admin')|list|length <= 1) %}
+              <form method="post" action="{{ url_for('admin_delete_user', user_id=u.id) }}" class="inline">
+                <button class="btn btn-danger btn-xs"
+                        onclick="return confirm('Delete {{ u.username }}? This also deletes their requests.')">
+                  Delete
+                </button>
+              </form>
+            {% else %}
+              <span class="subtle">Protected</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
 </div>
 
-<!-- Users table -->
-<div class="card">
-  <h3 style="margin:0 0 .6rem;">All Users</h3>
-  <table class="table-tight" style="font-size:.95rem;">
-    <thead>
-      <tr>
-        <th>User</th>
-        <th>Staff Name</th>
-        <th>Email</th>
-        <th>Role</th>
-        <th>Hours</th>
-        <th style="width:1%;">Actions</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for u in users %}
-      <tr>
-        <td>{{ u.username }}</td>
-        <td>{{ u.staff_name or '—' }}</td>
-        <td>{{ u.email or '—' }}</td>
-        <td>{{ 'Admin' if u.role=='admin' else 'Faculty/Staff' }}</td>
-        <td>{{ '%.2f'|format(u.hours_balance or 0) }}</td>
-        <td style="white-space:nowrap;">
-          <!-- Update (email / role / hours only) -->
-          <form method="post" action="{{ url_for('admin_update_user', user_id=u.id) }}" class="row" style="margin-bottom:6px;">
-            <input class="input-sm" name="email" placeholder="email" style="max-width:220px;">
-            <select class="input-sm" name="role" style="max-width:150px;">
-              <option value="">(keep)</option>
-              <option value="faculty_staff">Faculty/Staff</option>
-              <option value="admin">Admin</option>
-            </select>
-            <input class="input-sm" name="hours_balance" type="number" step="0.01" placeholder="hours" style="max-width:120px;">
-            <button class="btn sm" type="submit">Update</button>
-          </form>
-
-          <!-- Reset password -->
-          <form method="post" action="{{ url_for('admin_reset_password', user_id=u.id) }}" class="row" style="margin-bottom:6px;">
-            <input class="input-sm" name="new_password" placeholder="new password" required style="max-width:180px;">
-            <button class="btn sm" type="submit">Reset PW</button>
-          </form>
-
-          <!-- Delete -->
-          <form method="post" action="{{ url_for('admin_delete_user', user_id=u.id) }}"
-                onsubmit="return confirm('Delete {{ u.username }}? This also deletes their requests.');">
-            <button class="btn sm danger" type="submit">Delete</button>
-          </form>
-        </td>
-      </tr>
-      {% else %}
-      <tr><td colspan="6" class="muted">No users found.</td></tr>
-      {% endfor %}
-    </tbody>
-  </table>
-</div>
+<style>
+  .grid-2 { display:grid; grid-template-columns:1fr 1fr; gap:1rem; }
+  .table-scroll { overflow:auto; }
+  .table.tight th, .table.tight td { padding:.45rem .6rem; }
+  .nowrap { white-space: nowrap; }
+  .form-grid { display:grid; grid-template-columns:1fr 1fr; gap:.75rem; }
+  .form-grid label { display:flex; flex-direction:column; gap:.35rem; }
+  .form-inline { display:flex; gap:.5rem; align-items:center; }
+  .form-mini input, .form-mini select { margin-right:.25rem; height:2rem; }
+  .w-12 { width:12rem; } .w-10 { width:10rem; }
+  .btn-xs { padding:.25rem .5rem; font-size:.85em; }
+  .subtle { color:#555; font-size:.9em; }
+</style>
 {% endblock %}
