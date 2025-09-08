@@ -1,47 +1,27 @@
-body {
-  margin: 0;
-  font-family: Arial, Helvetica, sans-serif;
-  background-color: #f5f5f5;
-}
+/* ==== GLOBAL ==== */
+:root { --royal:#4169e1; --royal-dark:#1746a2; --card:#fff; --card-grad:#fff9d9; }
+*{box-sizing:border-box}
+body { margin: 0; font-family: Arial, Helvetica, sans-serif; background-color: #f5f5f5; }
 
 /* ==== NAVIGATION ==== */
 .nav {
-  background-color: royalblue;
+  background-color: var(--royal);
   color: white;
   padding: 0.8rem 1.2rem;
   display: flex;
   align-items: center;
   justify-content: space-between;
 }
-
-.brand {
-  font-weight: bold;
-  font-size: 1.3rem;
-  color: white;
-  text-decoration: none;
-}
-
-.nav-links {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  gap: 1rem;
-}
-
-.nav-links li a {
-  color: white;
-  text-decoration: none;
-  font-weight: 500;
-}
-
+.brand { font-weight: bold; font-size: 1.3rem; color: white; text-decoration: none; }
+.nav-links { list-style: none; margin: 0; padding: 0; display: flex; gap: 1rem; }
+.nav-links li a { color: white; text-decoration: none; font-weight: 500; }
 .nav-links li a:hover { text-decoration: underline; }
 
 /* ==== CONTENT WRAPPER ==== */
 .content-wrapper {
   min-height: 100vh;
   padding: 2rem;
-  background: linear-gradient(to bottom, royalblue 0%, #ffffff 100%);
+  background: linear-gradient(to bottom, var(--royal) 0%, #ffffff 100%);
   display: flex;
   justify-content: center;
 }
@@ -50,7 +30,7 @@ body {
 .container {
   max-width: 1000px;
   width: 100%;
-  background: linear-gradient(to bottom, #fff9d9 0%, #ffffff 100%);
+  background: linear-gradient(to bottom, var(--card-grad) 0%, #ffffff 100%);
   border-radius: 8px;
   box-shadow: 0 4px 8px rgba(0,0,0,0.1);
   padding: 2rem;
@@ -58,12 +38,7 @@ body {
 
 /* ==== FLASH MESSAGES ==== */
 .flash-stack { margin-bottom: 1rem; }
-.flash {
-  padding: 0.8rem;
-  margin-bottom: 0.5rem;
-  border-radius: 4px;
-  font-weight: bold;
-}
+.flash { padding: 0.8rem; margin-bottom: 0.5rem; border-radius: 4px; font-weight: bold; }
 .flash-success { background-color: #d4edda; color: #155724; }
 .flash-warning { background-color: #fff3cd; color: #856404; }
 .flash-danger  { background-color: #f8d7da; color: #721c24; }
@@ -71,42 +46,18 @@ body {
 .flash-secondary { background-color: #f3f4f6; color: #374151; }
 
 /* ==== CARDS ==== */
-.card {
-  background: white;
-  border-radius: 8px;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-  padding: 1.5rem;
-  margin-bottom: 1.5rem;
-}
+.card { background:#fff; border-radius:8px; box-shadow:0 2px 4px rgba(0,0,0,.1); padding:1.5rem; margin-bottom:1.5rem; }
 
-/* ==== LOGIN FORM ==== */
-.form-login {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 1rem;
-}
-.form-login label {
-  display: block;
-  font-weight: 500;
-  margin-bottom: 0.25rem;
-}
-.form-login .input {
-  width: 100%;
-  padding: 0.5rem;
-  border: 1px solid #ccc;
-  border-radius: 4px;
-}
-.form-login .full {
-  grid-column: 1 / -1;
-}
-.btn {
-  background-color: royalblue;
-  color: white;
-  border: none;
-  padding: 0.5rem 1rem;
-  border-radius: 4px;
-  cursor: pointer;
-}
-.btn:hover {
-  background-color: #1746a2;
+/* ==== FORMS & BUTTONS ==== */
+label{display:block;font-weight:500;margin:.25rem 0}
+.input{width:100%;padding:.5rem;border:1px solid #ccc;border-radius:4px}
+.btn{background:var(--royal);color:#fff;border:none;padding:.5rem 1rem;border-radius:4px;cursor:pointer}
+.btn:hover{background:var(--royal-dark)}
+
+/* ==== LOGIN LAYOUT ==== */
+.form-login{display:grid;grid-template-columns:1fr 1fr;gap:1rem}
+.form-login .full{grid-column:1 / -1}
+
+@media (max-width:720px){
+  .form-login{grid-template-columns:1fr}
 }
