@@ -18,7 +18,8 @@
         <label>Mode</label>
         <select name="mode" class="input" id="mode">
           <option value="hourly" selected>Hourly</option>
-          <option value="daily">Daily ({{ workday }}h/workday)</option>
+          <option value="daily">Daily ({{ workday }}h)</option>
+          <option value="halfday">Half Day ({{ '%.2f'|format(workday/2) }}h)</option> <!-- NEW -->
         </select>
       </div>
       <div class="col">
@@ -42,21 +43,20 @@
       </div>
     </div>
 
-    <!-- 12-hour time pickers (only for hourly mode) -->
+    <!-- 12-hour time pickers for hourly -->
     <div class="row only-hourly">
       <div class="col">
         <label>Start time</label>
         <div class="time-row">
           <select name="start_h" class="input-sm">
-            {% for h in hours12_opts %}<option value="{{ h }}">{{ h }}</option>{% endfor %}
+            {% for h in range(1,13) %}<option value="{{ h }}">{{ h }}</option>{% endfor %}
           </select>
           <span>:</span>
           <select name="start_m" class="input-sm">
-            {% for m in minutes_opts %}<option value="{{ m }}">{{ m }}</option>{% endfor %}
+            {% for m in ["00","15","30","45"] %}<option value="{{ m }}">{{ m }}</option>{% endfor %}
           </select>
           <select name="start_ampm" class="input-sm">
-            <option>AM</option>
-            <option>PM</option>
+            <option>AM</option><option>PM</option>
           </select>
         </div>
       </div>
@@ -64,18 +64,17 @@
         <label>End time</label>
         <div class="time-row">
           <select name="end_h" class="input-sm">
-            {% for h in hours12_opts %}<option value="{{ h }}">{{ h }}</option>{% endfor %}
+            {% for h in range(1,13) %}<option value="{{ h }}">{{ h }}</option>{% endfor %}
           </select>
           <span>:</span>
           <select name="end_m" class="input-sm">
-            {% for m in minutes_opts %}<option value="{{ m }}">{{ m }}</option>{% endfor %}
+            {% for m in ["00","15","30","45"] %}<option value="{{ m }}">{{ m }}</option>{% endfor %}
           </select>
           <select name="end_ampm" class="input-sm">
-            <option>AM</option>
-            <option>PM</option>
+            <option>AM</option><option>PM</option>
           </select>
         </div>
-        <div class="muted" style="margin-top:.25rem;">(Minutes are in 15-minute increments)</div>
+        <div class="muted" style="margin-top:.25rem;">(15-minute increments)</div>
       </div>
     </div>
 
@@ -105,7 +104,6 @@
 </style>
 
 <script>
-  // Hide/Show hourly-only rows based on mode
   const modeSel = document.getElementById('mode');
   const toggleHourly = () => {
     document.querySelectorAll('.only-hourly').forEach(el => {
