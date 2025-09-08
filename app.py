@@ -659,6 +659,32 @@ def admin_reset_password(user_id):
     flash(f"Password updated for {u.username}.", "success")
     return redirect(url_for("manage_users"))
 
+@app.post("/admin/users/<int:user_id>/delete")
+@login_required
+def admin_delete_user(user_id):
+    if current_user.role != Role.admin:
+        flash("Admins only.", "warning")
+        return redirect(url_for("manage_users"))
+
+    u = User.query.get_or_404(user_id)
+
+    # don't let an admin delete themselves (safety)
+    if u.id == current_user.id:
+        flash("You cannot delete your own account.", "warning")
+        return redirect(url_for("manage_users"))
+
+    # also, keep at least one admin in the system
+    if u.role == Role.admin and User.query.filter_by(role=Role.admin).count() <= 1:
+        flash("At least one admin must remain.", "warning")
+        return redirect(url_for("manage_users"))
+
+    # delete user's requests first (or set cascade in model if preferred)
+    LeaveRequest.query.filter_by(user_id=u.id).delete()
+    db.session.delete(u)
+    db.session.commit()
+    flash("User deleted.", "success")
+    return redirect(url_for("manage_users"))
+
 # ---------- Self-service password change ----------
 @app.route("/account/password", methods=["GET", "POST"])
 @login_required
