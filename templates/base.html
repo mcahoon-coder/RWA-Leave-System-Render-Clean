@@ -1,125 +1,71 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <title>{% block title %}RWA Leave System{% endblock %}</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-
-  <!-- Try external stylesheet first -->
-  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
-
-  <!-- INLINE FALLBACK so the site is styled even if /static/styles.css 404s -->
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>{% block title %}{% endblock %} · RWA Leave</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
   <style>
-    :root{
-      --blue:#4169e1;          /* royalblue */
-      --yellow-soft:#fff9d9;   /* pale yellow */
-      --ring:#cbd5e1;
-      --muted:#6b7280;
-      --danger:#dc2626;
-      --success:#065f46;
-      --shadow:0 4px 8px rgba(0,0,0,.08);
-      --shadow-sm:0 2px 4px rgba(0,0,0,.08);
-      --radius:10px;
-    }
-    *{box-sizing:border-box}
-    html,body{height:100%}
-    body{margin:0;font-family:Arial,Helvetica,sans-serif;color:#111827;background:#f5f5f5}
-
-    /* NAV across the top */
-    .nav{background:var(--blue);color:#fff;padding:.8rem 1.2rem;display:flex;align-items:center;justify-content:space-between}
-    .nav .brand{font-weight:700;font-size:1.2rem;color:#fff;text-decoration:none}
-    .nav-links{list-style:none;margin:0;padding:0;display:flex;gap:1rem}
-    .nav-links li a{color:#fff;text-decoration:none;font-weight:600;opacity:.95}
-    .nav-links li a:hover{text-decoration:underline}
-
-    /* Page background gradient */
-    .content-wrapper{min-height:calc(100vh - 56px);padding:2rem;background:linear-gradient(to bottom,var(--blue) 0%,#fff 100%);display:flex;justify-content:center}
-
-    /* Content container (pale yellow -> white) */
-    .container{max-width:1100px;width:100%;background:linear-gradient(to bottom,var(--yellow-soft) 0%,#fff 100%);border-radius:var(--radius);box-shadow:var(--shadow);padding:1.5rem}
-
-    /* Flash messages */
-    .flash-stack{margin-bottom:1rem}
-    .flash{padding:.75rem .85rem;margin-bottom:.5rem;border-radius:8px;font-weight:600;box-shadow:var(--shadow-sm);border:1px solid transparent}
-    .flash-success{background:#d1fae5;color:#065f46;border-color:#a7f3d0}
-    .flash-warning{background:#fff7ed;color:#9a3412;border-color:#fed7aa}
-    .flash-danger{background:#fee2e2;color:#991b1b;border-color:#fecaca}
-    .flash-secondary{background:#eef2ff;color:#3730a3;border-color:#c7d2fe}
-
-    /* Cards */
-    .card{background:#fff;border-radius:var(--radius);box-shadow:var(--shadow-sm);padding:1.25rem;margin-bottom:1rem}
-    h1,h2,h3{margin:0 0 .6rem}
-    .muted{color:var(--muted)}
-
-    /* Forms */
-    label{display:block;font-weight:700;margin-bottom:.35rem}
-    input[type=text],input[type=password],input[type=email],input[type=number],input[type=date],select,textarea{
-      width:100%;padding:.55rem .65rem;border:1px solid var(--ring);border-radius:8px;background:#fff;outline:none;
-      transition:box-shadow .15s,border-color .15s,background .15s
-    }
-    input:focus,select:focus,textarea:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(65,105,225,.18)}
-    .input-sm{padding:.45rem .55rem;font-size:.92rem}
-    .login-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-    @media (max-width:640px){.login-grid{grid-template-columns:1fr}}
-
-    /* Buttons */
-    .btn{display:inline-flex;align-items:center;justify-content:center;gap:.4rem;padding:.55rem .9rem;border:1px solid transparent;border-radius:8px;background:var(--blue);color:#fff;font-weight:700;cursor:pointer;text-decoration:none;box-shadow:var(--shadow-sm)}
-    .btn:hover{filter:brightness(.95)}
-    .btn.ghost{background:#fff;color:var(--blue);border:1px solid var(--ring)}
-    .btn.sm{padding:.4rem .7rem;font-size:.92rem}
-    .btn.danger{background:#ef4444}
-    .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+    body{margin:0;font-family:Arial,Helvetica,sans-serif;background-color:#f5f5f5;}
+    .nav{background-color:royalblue;color:white;padding:.8rem 1.2rem;display:flex;align-items:center;justify-content:space-between;}
+    .nav .brand{font-weight:bold;font-size:1.3rem;color:white;text-decoration:none;}
+    .nav-links{list-style:none;margin:0;padding:0;display:flex;gap:1rem;flex-wrap:wrap;}
+    .nav-links a{color:white;text-decoration:none;font-weight:500;}
+    .nav-links a:hover{text-decoration:underline;}
+    .content-wrapper{min-height:100vh;padding:2rem;background:linear-gradient(to bottom,royalblue 0%,#ffffff 100%);display:flex;justify-content:center;}
+    .container{max-width:1000px;width:100%;background:linear-gradient(to bottom,#fff9d9 0%,#ffffff 100%);border-radius:8px;box-shadow:0 4px 8px rgba(0,0,0,.1);padding:2rem;}
+    .flash-stack{margin-bottom:1rem;}
+    .flash{padding:.8rem;margin-bottom:.5rem;border-radius:4px;font-weight:bold;}
+    .flash-success{background:#d4edda;color:#155724;}
+    .flash-warning{background:#fff3cd;color:#856404;}
+    .flash-danger{background:#f8d7da;color:#721c24;}
+    .card{background:white;border-radius:8px;box-shadow:0 2px 4px rgba(0,0,0,.1);padding:1.5rem;margin-bottom:1.5rem;}
+    .table-tight{width:100%;border-collapse:collapse}
+    .table-tight th,.table-tight td{border-bottom:1px solid #e5e7eb;padding:.5rem .6rem}
+    .table-tight th{text-align:left;font-weight:600;background:#f8fafc}
+    .btn{background:royalblue;color:white;border:none;border-radius:8px;padding:.55rem .85rem;cursor:pointer}
+    .btn:hover{filter:brightness(0.95)}
+    .btn.sm{padding:.35rem .6rem;font-size:.9rem}
+    .btn.ghost{background:#eef2ff;color:#1e3a8a}
+    .btn.danger{background:#b91c1c}
+    .muted{color:#6b7280;font-size:.9rem}
+    .row{display:flex;gap:1rem;justify-content:space-between;flex-wrap:wrap}
     .right{margin-left:auto}
-
-    /* Tables (tight) */
-    .table-tight{width:100%;border-collapse:separate;border-spacing:0;background:#fff;border-radius:10px;overflow:hidden;box-shadow:var(--shadow-sm)}
-    .table-tight thead th{text-align:left;font-weight:800;padding:.6rem .7rem;background:#f8fafc;border-bottom:1px solid #e5e7eb;white-space:nowrap}
-    .table-tight tbody td{padding:.5rem .7rem;border-bottom:1px solid #eef2f7;vertical-align:middle}
-    .table-tight tbody tr:hover{background:#f9fafb}
-    .table-tight tbody tr:last-child td{border-bottom:none}
-
-    /* Balance colors */
-    .text-danger{color:#dc2626!important;font-weight:700}
-    .text-success{color:#065f46!important;font-weight:700}
+    .badge{display:inline-block;padding:.15rem .4rem;border-radius:6px}
+    .text-danger{color:#b91c1c}
+    .text-success{color:#166534}
   </style>
-
-  {% block extra_head %}{% endblock %}
 </head>
 <body>
-  <!-- Top Navigation (horizontal) -->
   <nav class="nav">
-    <a class="brand" href="{{ NAV.dashboard }}">RWA Leave System</a>
+    <a class="brand" href="{{ NAV.dashboard }}">RWA Leave</a>
     <ul class="nav-links">
       <li><a href="{{ NAV.dashboard }}">Dashboard</a></li>
       <li><a href="{{ NAV.my_requests }}">My Requests</a></li>
       <li><a href="{{ NAV.team_calendar }}">Calendar</a></li>
       <li><a href="{{ NAV.new_request }}">New Request</a></li>
       {% if NAV.admin %}<li><a href="{{ NAV.admin }}">Admin</a></li>{% endif %}
-      {% if current_user.is_authenticated %}<li><a href="{{ NAV.logout }}">Logout</a></li>{% endif %}
+    </ul>
+    <ul class="nav-links">
+      <li><a href="{{ NAV.account }}">Account</a></li> <!-- link to change password -->
+      <li><a href="{{ NAV.logout }}">Logout</a></li>
     </ul>
   </nav>
 
-  <!-- Blue -> white page background -->
   <div class="content-wrapper">
-    <!-- Pale-yellow content container -->
     <main class="container">
-      <!-- Flash messages -->
       <div class="flash-stack">
         {% with messages = get_flashed_messages(with_categories=true) %}
           {% if messages %}
-            {% for cat, msg in messages %}
-              <div class="flash {{ 'flash-' + cat|lower }}">{{ msg }}</div>
+            {% for category, message in messages %}
+              <div class="flash flash-{{ category }}">{{ message }}</div>
             {% endfor %}
           {% endif %}
         {% endwith %}
       </div>
 
       {% block content %}{% endblock %}
-
-      <footer class="muted" style="margin-top:1rem;font-size:.9rem;">&copy; {{ current_year }}</footer>
     </main>
   </div>
-
-  {% block extra_scripts %}{% endblock %}
 </body>
 </html>
