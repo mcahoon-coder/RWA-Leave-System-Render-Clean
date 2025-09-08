@@ -1,83 +1,115 @@
 {% extends "base.html" %}
-{% block title %}Admin{% endblock %}
-
 {% block content %}
-<div class="card">
-  <div class="row" style="align-items:center;">
-    <h1 style="margin:0;">Admin</h1>
-    <div class="right">
-      <a class="btn sm" href="{{ url_for('manage_users') }}">User Management</a>
-      <a class="btn sm ghost" href="{{ url_for('calendar') }}">Team Calendar</a>
-      <a class="btn sm ghost" href="{{ url_for('admin_email_test') }}">Send Test Email</a>
+
+<h1 style="margin-top:0;">Admin</h1>
+
+<div class="grid-2">
+  <!-- APPROVALS -->
+  <div class="card">
+    <h2 style="margin-top:0;">Approvals <small style="font-weight:normal; opacity:.8;">(BUTTONS)</small></h2>
+
+    {% if pending|length == 0 %}
+      <p>No pending requests right now.</p>
+    {% else %}
+      <div class="table-wrap">
+        <table class="table tight">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>User</th>
+              <th>Kind</th>
+              <th>Mode</th>
+              <th>Hours</th>
+              <th>School</th>
+              <th>Dates</th>
+              <th>Subs</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+          {% for r in pending %}
+            <tr>
+              <td>{{ r.id }}</td>
+              <td>{{ r.user.username }}</td>
+              <td>{{ r.kind }}</td>
+              <td>
+                {% if r.mode == 'daily' %}Daily{% elif r.mode == 'halfday' %}Half Day (4.0h){% else %}Hourly{% endif %}
+              </td>
+              <td>
+                {% set bal = r.user.hours_balance or 0 %}
+                {% set post = (bal - (0 if r.is_school_related else (r.hours or 0))) %}
+                <span class="{% if post < 0 %}text-red{% else %}text-green{% endif %}">
+                  {{ r.hours or 0 }}h
+                </span>
+              </td>
+              <td>{% if r.is_school_related %}Yes{% else %}No{% endif %}</td>
+              <td>{{ r.start_date }} → {{ r.end_date }}</td>
+              <td>
+                {% if r.subs and r.subs|length %}
+                  {{ r.subs|map(attribute='name')|join(', ') }}
+                {% elif r.substitute %}
+                  {{ r.substitute }}
+                {% else %}
+                  —
+                {% endif %}
+              </td>
+              <td class="nowrap">
+                <form method="post" action="{{ url_for('approve', req_id=r.id) }}" style="display:inline;">
+                  <button class="btn btn-success btn-sm" type="submit">Approve</button>
+                </form>
+                <form method="post" action="{{ url_for('disapprove', req_id=r.id) }}" style="display:inline; margin-left:.25rem;">
+                  <button class="btn btn-danger btn-sm" type="submit">Disapprove</button>
+                </form>
+              </td>
+            </tr>
+            <!-- quick sub add (optional) -->
+            <tr class="sub-row">
+              <td colspan="9">
+                <form method="post" action="{{ url_for('add_substitute', req_id=r.id) }}" class="inline-form">
+                  <label>Substitute:</label>
+                  <input name="sub_name" type="text" placeholder="Name" class="input input-sm">
+                  <input name="sub_hours" type="number" step="0.25" min="0" placeholder="Hours" class="input input-sm" style="width:7rem;">
+                  <button type="submit" class="btn btn-secondary btn-sm">Add</button>
+                </form>
+              </td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% endif %}
+  </div>
+
+  <!-- REPORTS -->
+  <div class="card">
+    <h2 style="margin-top:0;">Reports</h2>
+    <p>Download data for analysis.</p>
+    <div class="btn-row">
+      <a class="btn" href="{{ url_for('export_requests_csv') }}">All Requests (CSV)</a>
+      <a class="btn" href="{{ url_for('export_requests_xlsx') }}">All Requests (Excel)</a>
+      <!-- NEW: Monthly report button (Option 2) -->
+      <a class="btn btn-primary" href="{{ url_for('export_monthly') }}">Monthly Report (CSV)</a>
     </div>
+    <p style="margin-top:1rem; opacity:.8; font-size:.95rem;">
+      Tip: You can filter another month with <code>?start=YYYY-MM-DD&amp;end=YYYY-MM-DD</code>.
+    </p>
   </div>
 </div>
 
-<!-- Approvals (BUTTONS, no dropdowns) -->
-<div class="card">
-  <div class="row" style="align-items:center;">
-    <h3 style="margin:0;">Approvals <span class="muted">(BUTTONS)</span></h3>
+<div class="grid-2" style="margin-top:1.25rem;">
+  <!-- USER MANAGEMENT QUICK LINKS -->
+  <div class="card">
+    <h3 style="margin-top:0;">User Management</h3>
+    <p>Add or update users, reset passwords, adjust balances.</p>
+    <a class="btn" href="{{ url_for('manage_users') }}">Open Manage Users</a>
   </div>
 
-  {% if pending and pending|length > 0 %}
-  <table class="table-tight" style="font-size:.95rem;">
-    <thead>
-      <tr>
-        <th>User</th>
-        <th>Date(s)</th>
-        <th>Kind</th>
-        <th>Mode</th>
-        <th>Hours</th>
-        <th>School</th>
-        <th>Substitutes</th>
-        <th style="width:1%;">Actions</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for r in pending %}
-      <tr>
-        <td>{{ r.user.staff_name or r.user.username }}</td>
-        <td>
-          {{ r.start_date }}{% if r.end_date != r.start_date %} → {{ r.end_date }}{% endif %}
-          {% if r.start_time and r.end_time %}
-            <div class="muted">{{ r.start_time|h12 }}–{{ r.end_time|h12 }}</div>
-          {% endif %}
-        </td>
-        <td>{{ r.kind|capitalize }}</td>
-        <td>{{ r.mode|capitalize }}</td>
-        <td>{{ '%.2f'|format(r.hours) }}h</td>
-        <td>{{ 'Yes' if r.is_school_related else 'No' }}</td>
-        <td>
-          {% if r.subs and r.subs|length %}
-            {% for s in r.subs %}
-              <div class="muted">{{ s.name }} ({{ '%.2f'|format(s.hours) }}h)</div>
-            {% endfor %}
-          {% elif r.substitute %}
-            <div class="muted">{{ r.substitute }}</div>
-          {% else %}
-            <span class="muted">—</span>
-          {% endif %}
-        </td>
-        <td style="white-space:nowrap;">
-          <form method="post" action="{{ url_for('approve', req_id=r.id) }}" style="display:inline;">
-            <button class="btn sm" type="submit">Approve</button>
-          </form>
-          <form method="post" action="{{ url_for('disapprove', req_id=r.id) }}" style="display:inline;">
-            <button class="btn sm danger" type="submit">Disapprove</button>
-          </form>
-          <!-- Quick add sub (optional inline) -->
-          <form method="post" action="{{ url_for('add_substitute', req_id=r.id) }}" class="row" style="margin-top:6px;">
-            <input class="input-sm" name="sub_name" placeholder="Substitute name" style="max-width:160px;">
-            <input class="input-sm" name="sub_hours" type="number" step="0.25" placeholder="hrs" style="max-width:90px;">
-            <button class="btn sm ghost" type="submit">Add Sub</button>
-          </form>
-        </td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-  {% else %}
-    <p class="muted">No pending requests 🎉</p>
-  {% endif %}
+  <!-- UTILITIES -->
+  <div class="card">
+    <h3 style="margin-top:0;">Utilities</h3>
+    <p>Send yourself a test email using current SMTP settings.</p>
+    <a class="btn" href="{{ url_for('admin_email_test') }}">Send Test Email</a>
+  </div>
 </div>
+
 {% endblock %}
