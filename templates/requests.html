@@ -3,83 +3,137 @@
 
 {% block content %}
 <div class="card">
-  <h1 style="margin-top:0;">My Requests</h1>
+  <h2 class="card-title">My Requests</h2>
 
-  {% if reqs %}
-    <table class="table-tight" style="font-size:.95rem;">
+  <!-- Filters (unchanged) -->
+  <form method="get" class="filters-row">
+    <div class="filters">
+      <label>Status
+        <select name="status">
+          {% set cur = (status or 'all')|lower %}
+          <option value="all" {{ 'selected' if cur=='all' else '' }}>All</option>
+          <option value="pending" {{ 'selected' if cur=='pending' else '' }}>Pending</option>
+          <option value="approved" {{ 'selected' if cur=='approved' else '' }}>Approved</option>
+          <option value="disapproved" {{ 'selected' if cur=='disapproved' else '' }}>Disapproved</option>
+          <option value="cancelled" {{ 'selected' if cur=='cancelled' else '' }}>Cancelled</option>
+        </select>
+      </label>
+      <label>Start (optional)
+        <input type="date" name="start" value="{{ start or '' }}">
+      </label>
+      <label>End (optional)
+        <input type="date" name="end" value="{{ end or '' }}">
+      </label>
+    </div>
+    <button class="btn">Apply</button>
+  </form>
+</div>
+
+<div class="card">
+  <h3 class="card-title">Results</h3>
+
+  {% if reqs|length == 0 %}
+    <p>No requests found.</p>
+  {% else %}
+    <table class="table tight">
       <thead>
         <tr>
-          <th>User</th>
-          <th>Date(s)</th>
+          <th>Staff</th>  <!-- NEW: show staff on every row -->
           <th>Kind</th>
           <th>Mode</th>
+          <th>Dates / Times</th>
           <th>Hours</th>
+          <th>School</th>
           <th>Status</th>
           <th>Reason</th>
-          <th style="width:1%;">Actions</th>
+          <th style="width:1%">Actions</th>
         </tr>
       </thead>
       <tbody>
         {% for r in reqs %}
         <tr>
-          <!-- Username -->
-          <td>{{ r.user.staff_name or r.user.username }}</td>
-
-          <!-- Dates + Times (12h) -->
+          <!-- Staff name/username -->
           <td>
-            {{ r.start_date }}{% if r.end_date != r.start_date %} → {{ r.end_date }}{% endif %}
-            {% if r.start_time and r.end_time %}
-              <div class="muted">{{ r.start_time|h12 }}–{{ r.end_time|h12 }}</div>
+            {{ (r.user.staff_name or r.user.username) }}
+            {% if is_admin and r.user.username and r.user.staff_name %}
+              <div class="subtle">@{{ r.user.username }}</div>
             {% endif %}
           </td>
 
-          <!-- Kind / Mode -->
           <td>{{ r.kind|capitalize }}</td>
-          <td>{{ r.mode|capitalize }}</td>
-
-          <!-- Hours (balance color hint) -->
           <td>
-            <span class="{{ 'text-danger' if (r.hours|float) > (me.hours_balance|float) else 'text-success' }}">
-              {{ '%.2f'|format(r.hours) }}h
-            </span>
-            {% if r.is_school_related %}
-              <div class="badge" style="background:#fef9c3; color:#854d0e; font-size:.75rem; margin-top:2px;">School</div>
+            {% if r.mode == 'daily' %}Daily{% elif r.mode == 'halfday' %}Half Day{% else %}Hourly{% endif %}
+          </td>
+
+          <td>
+            {{ r.start_date }}{% if r.end_date and r.end_date != r.start_date %} → {{ r.end_date }}{% endif %}
+            {% if r.start_time or r.end_time %}
+              <div class="subtle">
+                {{ r.start_time|h12 if r.start_time else '-' }} - {{ r.end_time|h12 if r.end_time else '-' }}
+              </div>
             {% endif %}
           </td>
 
-          <!-- Status -->
+          <td>
+            <span class="{% if r.status == 'Approved' and not r.is_school_related and (r.user.hours_balance < 0) %}neg{% else %}pos{% endif %}">
+              {{ '%.2f'|format(r.hours or 0) }}
+            </span>
+          </td>
+
+          <td>{{ 'Yes' if r.is_school_related else 'No' }}</td>
+
           <td>{{ r.status }}</td>
 
-          <!-- Reason -->
-          <td>{{ r.reason or '—' }}</td>
+          <td>
+            {% if r.reason %}<span class="subtle">{{ r.reason }}</span>{% else %}<span class="subtle">—</span>{% endif %}
+          </td>
 
-          <!-- Actions -->
-          <td style="white-space:nowrap;">
+          <td class="nowrap">
             {% if r.status == 'Pending' %}
-              <form method="post" action="{{ url_for('cancel', req_id=r.id) }}" style="display:inline;">
-                <button class="btn sm danger" type="submit">Cancel</button>
-              </form>
-              {% if not r.is_school_related %}
-              <form method="post" action="{{ url_for('mark_school_related', req_id=r.id) }}" style="display:inline;">
-                <button class="btn sm ghost" type="submit">Mark School</button>
-              </form>
-              {% else %}
-              <form method="post" action="{{ url_for('unmark_school_related', req_id=r.id) }}" style="display:inline;">
-                <button class="btn sm ghost" type="submit">Unmark</button>
-              </form>
+              {% if (me.id == r.user_id) or is_admin %}
+                {% if not r.is_school_related %}
+                  <form method="post" action="{{ url_for('mark_school_related', req_id=r.id) }}" class="inline">
+                    <button class="btn btn-outline btn-xs" title="Mark school-related">School ✓</button>
+                  </form>
+                {% else %}
+                  <form method="post" action="{{ url_for('unmark_school_related', req_id=r.id) }}" class="inline">
+                    <button class="btn btn-outline btn-xs" title="Remove school-related">School ✕</button>
+                  </form>
+                {% endif %}
               {% endif %}
-            {% elif r.status == 'Approved' %}
-              <form method="post" action="{{ url_for('cancel', req_id=r.id) }}" style="display:inline;">
-                <button class="btn sm ghost" type="submit">Cancel</button>
-              </form>
+
+              {% if is_admin %}
+                <form method="post" action="{{ url_for('approve', req_id=r.id) }}" class="inline">
+                  <button class="btn btn-success btn-xs">Approve</button>
+                </form>
+                <form method="post" action="{{ url_for('disapprove', req_id=r.id) }}" class="inline">
+                  <button class="btn btn-danger btn-xs">Disapprove</button>
+                </form>
+              {% endif %}
+
+              {% if (me.id == r.user_id) or is_admin %}
+                <form method="post" action="{{ url_for('cancel', req_id=r.id) }}" class="inline">
+                  <button class="btn btn-soft btn-xs">Cancel</button>
+                </form>
+              {% endif %}
+            {% else %}
+              <span class="subtle">—</span>
             {% endif %}
           </td>
         </tr>
         {% endfor %}
       </tbody>
     </table>
-  {% else %}
-    <p class="muted">No leave requests submitted yet.</p>
   {% endif %}
 </div>
+
+<style>
+  .table.tight th, .table.tight td { padding: 0.45rem 0.6rem; }
+  .nowrap { white-space: nowrap; }
+  .inline { display: inline-block; margin-right: .25rem; }
+  .subtle { color:#555; font-size:.9em; }
+  .neg { color:#b00020; font-weight:600; }
+  .pos { color:#0a5; font-weight:600; }
+  .btn-xs { padding: .25rem .5rem; font-size:.85em; }
+</style>
 {% endblock %}
