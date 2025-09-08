@@ -17,7 +17,7 @@ import xlsxwriter  # Excel export (in-memory, safe on Render)
 # =========================================================
 # App & DB config
 # =========================================================
-app = Flask(__name__)
+app = Flask(__name__, static_folder="static", static_url_path="/static")
 app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "ChangeThisSecret123!")
 app.config["TEMPLATES_AUTO_RELOAD"] = True
 
