@@ -1,49 +1,44 @@
 {% extends "base.html" %}
 {% block title %}Calendar{% endblock %}
 
-{% block extra_head %}
-  <!-- FullCalendar CSS/JS (global build) -->
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.css">
-{% endblock %}
-
 {% block content %}
 <div class="card">
-  <div class="row">
-    <h2>Calendar</h2>
-    <span class="right muted">
-      {% if is_admin %}
-        Viewing: All approved leave
-      {% else %}
-        Viewing: Your approved leave
-      {% endif %}
+  <div class="card-title-row">
+    <h2 class="card-title">Calendar</h2>
+    <span class="muted">
+      Viewing: {{ 'All approved leave' if is_admin else 'Your approved leave' }}
     </span>
   </div>
 </div>
 
 <div class="card">
-  <div id="calendar" style="background:#fff; border-radius:8px; overflow:hidden;"></div>
+  <div id="fc"></div>
 </div>
-{% endblock %}
 
-{% block extra_scripts %}
-<script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/main.min.css">
+<script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.js"></script>
 <script>
-  document.addEventListener('DOMContentLoaded', function() {
-    const el = document.getElementById('calendar');
-    const calendar = new FullCalendar.Calendar(el, {
-      initialView: 'dayGridMonth',
-      height: 'auto',
-      headerToolbar: {
-        left: 'prev,next today',
-        center: 'title',
-        right: 'dayGridMonth,timeGridWeek,timeGridDay'
-      },
-      events: {
-        url: '{{ url_for("calendar_data") }}',
-        failure: () => alert('Failed to load events.')
-      }
-    });
-    calendar.render();
+document.addEventListener('DOMContentLoaded', function () {
+  const el = document.getElementById('fc');
+  const cal = new FullCalendar.Calendar(el, {
+    initialView: 'dayGridMonth',
+    height: 'auto',
+    expandRows: true,
+    headerToolbar: {
+      left: 'prev,next today',
+      center: 'title',
+      right: 'dayGridMonth,timeGridWeek,timeGridDay,listWeek'
+    },
+    events: '{{ url_for("calendar_data") }}',
+    eventTimeFormat: { hour: 'numeric', minute: '2-digit', meridiem: 'short' },
+    displayEventEnd: true
   });
+  cal.render();
+});
 </script>
+<style>
+  #fc { min-height: 700px; }
+  .card-title-row { display:flex; justify-content:space-between; align-items:center; }
+  .muted { color:#6b7280; font-size:.95em; }
+</style>
 {% endblock %}
