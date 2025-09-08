@@ -4,8 +4,8 @@
   <meta charset="utf-8">
   <title>{{ title or "RWA Leave System" }}</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <!-- Your global styles (royal blue → white background, pale yellow cards, etc.) -->
-  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+  <!-- Single source of truth for styling -->
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}?v=20250908">
 </head>
 <body>
   <!-- Top Nav -->
@@ -20,7 +20,6 @@
         {% if NAV.admin %}
           <li><a href="{{ NAV.admin }}">Admin</a></li>
         {% endif %}
-        <!-- Account menu: only Change Password for now -->
         <li><a href="{{ url_for('update_password') }}">Account</a></li>
         <li><a href="{{ NAV.logout }}">Logout</a></li>
       {% else %}
@@ -47,7 +46,7 @@
     </div>
   </div>
 
-  <footer style="text-align:center; padding: 1rem 0; opacity:.7;">
+  <footer class="footer">
     &copy; {{ current_year }} RWA
   </footer>
 </body>
