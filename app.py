@@ -19,7 +19,7 @@ import xlsxwriter  # Excel export (in-memory, safe on Render)
 # =========================================================
 app = Flask(__name__)
 app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "ChangeThisSecret123!")
-app.config["TEMPLATES_AUTO_RELOAD"] = True  # helps ensure new templates are used
+app.config["TEMPLATES_AUTO_RELOAD"] = True
 
 # Prefer Render DATABASE_URL; default to SQLite
 db_url = os.environ.get("DATABASE_URL", "sqlite:///leave_system.db")
@@ -116,7 +116,7 @@ class RequestStatus:
 class RequestMode:
     hourly = "hourly"
     daily = "daily"
-    # note: you said you added a half-day option elsewhere; keep templates/logic consistent if used
+    halfday = "halfday"  # 4.00 hr option
 
 class User(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -125,15 +125,14 @@ class User(UserMixin, db.Model):
     role = db.Column(db.String(20), default=Role.staff, nullable=False)
     hours_balance = db.Column(db.Float, default=160.0, nullable=False)
     email = db.Column(db.String(255))  # for notifications
-    # If you previously added staff_name, keep it; if not present, templates handle fallback gracefully.
-    # Uncomment the next line if you *do* maintain staff_name in your DB schema:
-    # staff_name = db.Column(db.String(150))
+    # Optional display name for staff
+    staff_name = db.Column(db.String(150))
 
 class LeaveRequest(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
     kind = db.Column(db.String(20), default="annual", nullable=False)    # annual/sick
-    mode = db.Column(db.String(10), default=RequestMode.hourly, nullable=False)  # hourly/daily
+    mode = db.Column(db.String(10), default=RequestMode.hourly, nullable=False)  # hourly/daily/halfday
     start_date = db.Column(db.Date, nullable=False)
     end_date = db.Column(db.Date, nullable=False)
 
@@ -147,7 +146,7 @@ class LeaveRequest(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     decided_at = db.Column(db.DateTime)
 
-    # New flags/extra
+    # Flags/extra
     is_school_related = db.Column(db.Boolean, default=False, nullable=False)
     substitute = db.Column(db.String(120))  # legacy single substitute text (optional)
 
@@ -244,14 +243,15 @@ def ensure_db():
                 db.session.execute(text("ALTER TABLE leave_request ADD COLUMN is_school_related BOOLEAN DEFAULT 0 NOT NULL"))
             if not _column_exists("leave_request", "substitute"):
                 db.session.execute(text("ALTER TABLE leave_request ADD COLUMN substitute VARCHAR(120)"))
-            # If you maintain staff_name on User, add it here similarly.
+            if not _column_exists("user", "staff_name"):
+                db.session.execute(text("ALTER TABLE user ADD COLUMN staff_name VARCHAR(150)"))
             db.session.commit()
         else:
             db.session.execute(text("ALTER TABLE leave_request ADD COLUMN IF NOT EXISTS start_time VARCHAR(5)"))
             db.session.execute(text("ALTER TABLE leave_request ADD COLUMN IF NOT EXISTS end_time VARCHAR(5)"))
             db.session.execute(text("ALTER TABLE leave_request ADD COLUMN IF NOT EXISTS is_school_related BOOLEAN NOT NULL DEFAULT FALSE"))
             db.session.execute(text("ALTER TABLE leave_request ADD COLUMN IF NOT EXISTS substitute VARCHAR(120)"))
-            # If you maintain staff_name on User, add it here similarly.
+            db.session.execute(text("ALTER TABLE \"user\" ADD COLUMN IF NOT EXISTS staff_name VARCHAR(150)"))
             db.session.commit()
     except Exception:
         db.session.rollback()
@@ -287,6 +287,19 @@ def admin_emails() -> list[str]:
             result.append(e)
             seen.add(e)
     return result
+
+# Jinja filter: 24h "HH:MM" -> "H:MM AM/PM"
+@app.template_filter("h12")
+def h12_filter(s):
+    try:
+        hh, mm = (s or "").split(":")
+        hh = int(hh); mm = int(mm)
+        ampm = "AM" if hh < 12 else "PM"
+        h = hh % 12
+        if h == 0: h = 12
+        return f"{h}:{mm:02d} {ampm}"
+    except Exception:
+        return s or ""
 
 # Shared filter logic for list + exports
 def _filtered_requests_for(current_user_is_admin: bool):
@@ -393,7 +406,6 @@ def admin_hub():
         return redirect(url_for("dashboard"))
     pending = (LeaveRequest.query.filter_by(status=RequestStatus.pending)
                .order_by(LeaveRequest.created_at.desc()).all())
-    # Your templates/admin.html should render BUTTONS for actions
     return render_template("admin.html", title="Admin", pending=pending)
 
 # Admin email test endpoint
@@ -468,7 +480,9 @@ def new_request():
                     hours = interval_hours(st, et)
                 else:
                     hours = 0.0
-        else:
+        elif mode == RequestMode.halfday:
+            hours = 4.0
+        else:  # daily
             wd = workdays_between(sd, ed)
             hours = wd * WORKDAY_HOURS
 
@@ -476,7 +490,7 @@ def new_request():
             flash("Requested hours must be greater than zero.", "warning")
             return render_template("new_request.html", title="New Request", workday=WORKDAY_HOURS)
 
-        if hours > capacity_hours and mode != RequestMode.hourly:
+        if hours > capacity_hours and mode not in (RequestMode.hourly, RequestMode.halfday):
             flash(f"Requested {hours:.2f} exceeds capacity {capacity_hours:.2f} for that range.", "warning")
             return render_template("new_request.html", title="New Request", workday=WORKDAY_HOURS)
 
@@ -732,12 +746,11 @@ def admin_create_user():
         return redirect(url_for("manage_users"))
 
     username = (request.form.get("username") or "").strip()
+    staff_name = (request.form.get("staff_name") or "").strip()
     email = (request.form.get("email") or "").strip()
     role = (request.form.get("role") or Role.staff).strip()
     hours_str = (request.form.get("hours_balance") or "").strip()
     pw = (request.form.get("password") or "").strip()
-    # Optional staff_name support (won't break if not used)
-    staff_name = (request.form.get("staff_name") or "").strip()
 
     if not username or not pw:
         flash("Username and password are required.", "warning")
@@ -754,11 +767,11 @@ def admin_create_user():
 
     user = User(
         username=username,
+        staff_name=staff_name or None,
         password_hash=generate_password_hash(pw),
         role=role if role in (Role.admin, Role.staff) else Role.staff,
         hours_balance=hours_balance,
-        email=email or None,
-        # staff_name=staff_name or None,  # uncomment if you have staff_name column
+        email=email or None
     )
     db.session.add(user)
     db.session.commit()
@@ -773,18 +786,16 @@ def admin_update_user(user_id):
         return redirect(url_for("manage_users"))
     u = User.query.get_or_404(user_id)
 
-    # NO username change here per your request
+    # Username change intentionally omitted (per your request)
+    staff_name = (request.form.get("staff_name") or "").strip()
     email = (request.form.get("email") or "").strip()
     role = (request.form.get("role") or "").strip()
     hb = (request.form.get("hours_balance") or "").strip()
-    staff_name = (request.form.get("staff_name") or "").strip()
 
-    # Optional fields
+    u.staff_name = staff_name or None
     u.email = email or None
     if role in (Role.admin, Role.staff):
         u.role = role
-    # if you have staff_name column:
-    # u.staff_name = staff_name or None
 
     try:
         if hb != "":
@@ -882,7 +893,6 @@ def calendar_data():
         if is_admin:
             title = f"{r.user.username} - {r.kind} ({r.hours:.1f}h)"
             sub_text = sub_summary_text(r.subs, limit=2)
-            # include legacy single substitute if no multi-subs saved
             if not sub_text and (r.substitute or "").strip():
                 sub_text = " – Sub: " + r.substitute.strip()
             title += sub_text
@@ -908,13 +918,14 @@ def export_requests_csv():
     output = io.StringIO()
     writer = csv.writer(output)
     writer.writerow([
-        "ID","Username","Kind","Mode","Hours","Status","Start","End",
+        "ID","Username","StaffName","Kind","Mode","Hours","Status","Start","End",
         "StartTime","EndTime","SchoolRelated","Substitutes","Created","Decided"
     ])
     for r in rows:
         subs_text = "; ".join([f"{s.name}({s.hours:.2f}h)" for s in r.subs]) or (r.substitute or "")
         writer.writerow([
-            r.id, r.user.username, r.kind, r.mode, f"{r.hours:.2f}", r.status,
+            r.id, r.user.username, (r.user.staff_name or ""),
+            r.kind, r.mode, f"{r.hours:.2f}", r.status,
             r.start_date.isoformat(), r.end_date.isoformat(),
             r.start_time or "", r.end_time or "",
             "Yes" if r.is_school_related else "No",
@@ -939,7 +950,7 @@ def export_requests_xlsx():
 
     # Sheet 1: Requests
     ws = wb.add_worksheet("Requests")
-    headers = ["ID","Username","Kind","Mode","Hours","Status","Start","End",
+    headers = ["ID","Username","StaffName","Kind","Mode","Hours","Status","Start","End",
                "StartTime","EndTime","SchoolRelated","Substitutes","Created","Decided"]
     hdr_fmt = wb.add_format({"bold": True, "bg_color": "#F1F5F9", "border": 1})
     cell_fmt = wb.add_format({"border": 1})
@@ -954,44 +965,59 @@ def export_requests_xlsx():
         subs_text = "; ".join([f"{s.name}({s.hours:.2f}h)" for s in r.subs]) or (r.substitute or "")
         ws.write(rix, 0, r.id, cell_fmt)
         ws.write(rix, 1, r.user.username, cell_fmt)
-        ws.write(rix, 2, r.kind, cell_fmt)
-        ws.write(rix, 3, r.mode, cell_fmt)
-        ws.write_number(rix, 4, float(r.hours or 0.0), cell_fmt)
-        ws.write(rix, 5, r.status, cell_fmt)
+        ws.write(rix, 2, (r.user.staff_name or ""), cell_fmt)
+        ws.write(rix, 3, r.kind, cell_fmt)
+        ws.write(rix, 4, r.mode, cell_fmt)
+        ws.write_number(rix, 5, float(r.hours or 0.0), cell_fmt)
+        ws.write(rix, 6, r.status, cell_fmt)
 
-        ws.write_datetime(rix, 6, datetime.combine(r.start_date, datetime.min.time()), date_fmt)
-        ws.write_datetime(rix, 7, datetime.combine(r.end_date, datetime.min.time()), date_fmt)
+        ws.write_datetime(rix, 7, datetime.combine(r.start_date, datetime.min.time()), date_fmt)
+        ws.write_datetime(rix, 8, datetime.combine(r.end_date, datetime.min.time()), date_fmt)
 
-        ws.write(rix, 8, r.start_time or "", cell_fmt)
-        ws.write(rix, 9, r.end_time or "", cell_fmt)
+        ws.write(rix, 9, r.start_time or "", cell_fmt)
+        ws.write(rix, 10, r.end_time or "", cell_fmt)
 
-        ws.write(rix, 10, "Yes" if r.is_school_related else "No", cell_fmt)
-        ws.write(rix, 11, subs_text, cell_fmt)
+        ws.write(rix, 11, "Yes" if r.is_school_related else "No", cell_fmt)
+        ws.write(rix, 12, subs_text, cell_fmt)
 
         if r.created_at:
-            ws.write_datetime(rix, 12, r.created_at, dt_fmt)
-        else:
-            ws.write(rix, 12, "", cell_fmt)
-        if r.decided_at:
-            ws.write_datetime(rix, 13, r.decided_at, dt_fmt)
+            ws.write_datetime(rix, 13, r.created_at, dt_fmt)
         else:
             ws.write(rix, 13, "", cell_fmt)
+        if r.decided_at:
+            ws.write_datetime(rix, 14, r.decided_at, dt_fmt)
+        else:
+            ws.write(rix, 14, "", cell_fmt)
 
         rix += 1
 
+    # autosize a bit
+    widths = [len(h) for h in headers]
+    for r in rows:
+        widths[1] = max(widths[1], len(r.user.username or ""))
+        widths[2] = max(widths[2], len(r.user.staff_name or ""))
+        widths[3] = max(widths[3], len(r.kind or ""))
+        widths[4] = max(widths[4], len(r.mode or ""))
+        widths[6] = max(widths[6], len(r.status or ""))
+
+    for c, w in enumerate(widths):
+        ws.set_column(c, c, min(max(w + 2, 10), 32))
+
     # Sheet 2: Substitutes (one row per sub assignment)
     ws2 = wb.add_worksheet("Substitutes")
-    ws2_headers = ["RequestID","Username","Start","End","Substitute","Hours"]
-    for c, h in enumerate(ws2_headers): ws2.write(0, c, h, hdr_fmt)
+    ws2_headers = ["RequestID","Username","StaffName","Start","End","Substitute","Hours"]
+    for c, h in enumerate(ws2_headers):
+        ws2.write(0, c, h, hdr_fmt)
     rix = 1
     for r in rows:
         for s in r.subs:
             ws2.write(rix, 0, r.id, cell_fmt)
             ws2.write(rix, 1, r.user.username, cell_fmt)
-            ws2.write_datetime(rix, 2, datetime.combine(r.start_date, datetime.min.time()), date_fmt)
-            ws2.write_datetime(rix, 3, datetime.combine(r.end_date, datetime.min.time()), date_fmt)
-            ws2.write(rix, 4, s.name, cell_fmt)
-            ws2.write_number(rix, 5, float(s.hours or 0.0), cell_fmt)
+            ws2.write(rix, 2, (r.user.staff_name or ""), cell_fmt)
+            ws2.write_datetime(rix, 3, datetime.combine(r.start_date, datetime.min.time()), date_fmt)
+            ws2.write_datetime(rix, 4, datetime.combine(r.end_date, datetime.min.time()), date_fmt)
+            ws2.write(rix, 5, s.name, cell_fmt)
+            ws2.write_number(rix, 6, float(s.hours or 0.0), cell_fmt)
             rix += 1
 
     wb.close()
@@ -1003,131 +1029,72 @@ def export_requests_xlsx():
         mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
 
-# ---------- Monthly Report (admin only) ----------
-def _month_bounds_from_query():
-    """
-    Resolve month start/end from query:
-      - ym=YYYY-MM  -> month bounds
-      - OR start=YYYY-MM-DD & end=YYYY-MM-DD
-      - else: current month
-    Returns (start_date, end_date)
-    """
-    ym = (request.args.get("ym") or "").strip()
-    start_s = (request.args.get("start") or "").strip()
-    end_s = (request.args.get("end") or "").strip()
+# ---------- Monthly Report (Option 2) ----------
+@app.get("/admin/export/monthly")
+@login_required
+def export_monthly():
+    if current_user.role != Role.admin:
+        abort(403)
 
-    def parse_d(s):
-        try:
-            return datetime.strptime(s, "%Y-%m-%d").date()
-        except Exception:
-            return None
-
-    if ym:
-        try:
-            y, m = ym.split("-")
-            y = int(y); m = int(m)
-            start = date(y, m, 1)
-            if m == 12:
-                end = date(y + 1, 1, 1) - timedelta(days=1)
-            else:
-                end = date(y, m + 1, 1) - timedelta(days=1)
-            return start, end
-        except Exception:
-            pass
-
-    sd = parse_d(start_s)
-    ed = parse_d(end_s)
-    if sd and ed:
-        return sd, ed
-
-    # default: current month
+    # Current month range
     today = date.today()
     start = date(today.year, today.month, 1)
     if today.month == 12:
         end = date(today.year + 1, 1, 1) - timedelta(days=1)
     else:
         end = date(today.year, today.month + 1, 1) - timedelta(days=1)
-    return start, end
 
-@app.get("/admin/export/monthly.<string:fmt>")
-@login_required
-def export_monthly(fmt: str):
-    """
-    Monthly leave report for admins.
-      - Path: /admin/export/monthly.csv  or  /admin/export/monthly.xlsx
-      - Query:
-          ym=YYYY-MM (optional) OR start/end
-          status=approved|all  (default: approved)
-    """
-    if current_user.role != Role.admin:
-        abort(403)
+    # Allow manual override via ?start=YYYY-MM-DD&end=YYYY-MM-DD (optional)
+    def parse_date_q(s):
+        try:
+            return datetime.strptime(s, "%Y-%m-%d").date()
+        except Exception:
+            return None
+    qstart = parse_date_q(request.args.get("start", ""))
+    qend = parse_date_q(request.args.get("end", ""))
+    if qstart: start = qstart
+    if qend: end = qend
 
-    start, end = _month_bounds_from_query()
-    status_q = (request.args.get("status") or "approved").strip().lower()
+    rows = (LeaveRequest.query
+            .filter(LeaveRequest.start_date >= start, LeaveRequest.end_date <= end)
+            .order_by(LeaveRequest.user_id, LeaveRequest.start_date)
+            .all())
 
-    q = LeaveRequest.query.filter(
-        LeaveRequest.start_date >= start,
-        LeaveRequest.end_date <= end
-    )
-    if status_q != "all":
-        q = q.filter_by(status=RequestStatus.approved)
-
-    rows = q.order_by(LeaveRequest.user_id, LeaveRequest.start_date).all()
-
-    # ---- CSV
-    if fmt.lower() == "csv":
-        output = io.StringIO()
-        w = csv.writer(output)
-        w.writerow([
-            "Username", "StaffName", "Kind", "Mode", "Hours",
-            "SchoolRelated", "Status", "Start", "End",
-            "StartTime", "EndTime", "Substitutes"
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["Username","StaffName","Kind","Mode","Hours","Status","Start","End","School Related","Substitutes"])
+    for r in rows:
+        subs = "; ".join([f"{s.name}({s.hours:.2f}h)" for s in r.subs]) or (r.substitute or "")
+        writer.writerow([
+            r.user.username,
+            (r.user.staff_name or ""),
+            r.kind,
+            r.mode,
+            f"{r.hours:.2f}",
+            r.status,
+            r.start_date.isoformat(),
+            r.end_date.isoformat(),
+            "Yes" if r.is_school_related else "No",
+            subs
         ])
-        for r in rows:
-            subs = "; ".join([f"{s.name}({s.hours:.2f}h)" for s in r.subs]) or (r.substitute or "")
-            staff_name = getattr(r.user, "staff_name", "") or ""
-            w.writerow([
-                r.user.username,
-                staff_name,
-                r.kind,
-                r.mode,
-                f"{r.hours:.2f}",
-                "Yes" if r.is_school_related else "No",
-                r.status,
-                r.start_date.isoformat(),
-                r.end_date.isoformat(),
-                r.start_time or "",
-                r.end_time or "",
-                subs
-            ])
-        resp = make_response(output.getvalue())
-        resp.headers["Content-Type"] = "text/csv"
-        ym_tag = request.args.get("ym") or f"{start.year}-{start.month:02}"
-        resp.headers["Content-Disposition"] = f"attachment; filename=leave_monthly_{ym_tag}.csv"
-        return resp
 
-    # ---- XLSX
-    if fmt.lower() == "xlsx":
-        buf = io.BytesIO()
-        wb = xlsxwriter.Workbook(buf, {"in_memory": True})
-        ws = wb.add_worksheet("Monthly")
+    resp = make_response(output.getvalue())
+    resp.headers["Content-Type"] = "text/csv"
+    resp.headers["Content-Disposition"] = f"attachment; filename=leave_report_{start.strftime('%Y_%m')}.csv"
+    return resp
 
-        headers = ["Username","StaffName","Kind","Mode","Hours",
-                   "SchoolRelated","Status","Start","End","StartTime","EndTime","Substitutes"]
-        hdr_fmt = wb.add_format({"bold": True, "bg_color": "#F1F5F9", "border": 1})
-        cell_fmt = wb.add_format({"border": 1})
-        date_fmt = wb.add_format({"num_format": "yyyy-mm-dd", "border": 1})
+# ---------- Errors ----------
+@app.errorhandler(404)
+def not_found(e):
+    return render_template("error.html", title="Not Found", message="The page you requested was not found."), 404
 
-        for c, h in enumerate(headers):
-            ws.write(0, c, h, hdr_fmt)
+@app.errorhandler(500)
+def internal_error(e):
+    try:
+        return render_template("error.html", title="Server Error", message=str(e)), 500
+    except Exception:
+        return "Internal Server Error", 500
 
-        rix = 1
-        for r in rows:
-            subs_text = "; ".join([f"{s.name}({s.hours:.2f}h)" for s in r.subs]) or (r.substitute or "")
-            staff_name = getattr(r.user, "staff_name", "") or ""
-            ws.write(rix, 0, r.user.username, cell_fmt)
-            ws.write(rix, 1, staff_name, cell_fmt)
-            ws.write(rix, 2, r.kind, cell_fmt)
-            ws.write(rix, 3, r.mode, cell_fmt)
-            ws.write_number(rix, 4, float(r.hours or 0.0), cell_fmt)
-            ws.write(
+# Dev server entry (ignored by gunicorn)
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5000, debug=True)
