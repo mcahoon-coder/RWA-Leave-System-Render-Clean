@@ -44,11 +44,11 @@
                              value="{{ s.name }}" style="width:160px;">
                       <input class="input" type="number" step="0.25" name="sub_hours"
                              value="{{ '%.2f'|format(s.hours) }}" style="width:90px;">
-                      {% if is_admin and r.status == 'Pending' %}
+                      {% if is_admin and r.status in ['Pending','Approved'] %}
                         <button type="submit" class="btn btn-sm">Update</button>
                       {% endif %}
                     </form>
-                    {% if is_admin and r.status == 'Pending' %}
+                    {% if is_admin and r.status in ['Pending','Approved'] %}
                       <form method="post"
                             action="{{ url_for('delete_substitute', req_id=r.id, sub_id=s.id) }}"
                             style="display:inline;">
@@ -65,8 +65,8 @@
               <div style="margin-bottom:.5rem;">–</div>
             {% endif %}
 
-            {# Add-new-sub form (admin + pending only) #}
-            {% if is_admin and r.status == "Pending" %}
+            {# Add-new-sub form (admin + pending/approved) #}
+            {% if is_admin and r.status in ['Pending','Approved'] %}
               <form method="post" action="{{ url_for('add_substitute', req_id=r.id) }}"
                     style="display:flex; gap:.25rem; flex-wrap:wrap;">
                 <input class="input" type="text" name="sub_name" placeholder="Substitute name" required style="flex:1 1 180px;">
