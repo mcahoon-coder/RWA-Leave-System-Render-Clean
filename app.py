@@ -533,14 +533,40 @@ def new_request():
 @app.get("/requests")
 @login_required
 def my_requests():
-    q = _filtered_requests_for(current_user.role == Role.admin)
+    is_admin = (current_user.role == Role.admin)
+
+    q = _filtered_requests_for(is_admin)
+
+    # Admin: show a "daily" slice in America/New_York timezone
+    selected_day_str = None
+    if is_admin:
+        tz = ZoneInfo("America/New_York")
+        # If ?day=all → no filter; otherwise default to "today" in local tz
+        selected_day_str = request.args.get("day") or datetime.now(tz).date().isoformat()
+
+        if selected_day_str != "all":
+            try:
+                d = datetime.strptime(selected_day_str, "%Y-%m-%d").date()
+            except Exception:
+                d = datetime.now(tz).date()
+                selected_day_str = d.isoformat()
+
+            # Use local midnight boundaries
+            start_dt = datetime.combine(d, datetime.min.time(), tzinfo=tz)
+            end_dt = start_dt + timedelta(days=1)
+
+            # Convert to UTC before filtering DB (assuming DB stores naive/UTC timestamps)
+            start_utc = start_dt.astimezone(ZoneInfo("UTC")).replace(tzinfo=None)
+            end_utc = end_dt.astimezone(ZoneInfo("UTC")).replace(tzinfo=None)
+
+            q = q.filter(LeaveRequest.created_at >= start_utc,
+                         LeaveRequest.created_at < end_utc)
+
     reqs = q.all()
 
     staff_overview = None
-    if current_user.role == Role.admin:
-        # Build a lightweight overview for ALL users:
+    if is_admin:
         users = User.query.order_by(User.username.asc()).all()
-        # Precompute who has any pending request
         pending_user_ids = {
             r.user_id for r in LeaveRequest.query.with_entities(LeaveRequest.user_id)
             .filter(LeaveRequest.status == RequestStatus.pending).all()
@@ -560,11 +586,12 @@ def my_requests():
         title="Requests",
         reqs=reqs,
         me=current_user,
-        is_admin=(current_user.role == Role.admin),
+        is_admin=is_admin,
         status=request.args.get("status", "all"),
         start=request.args.get("start", ""),
         end=request.args.get("end", ""),
         staff_overview=staff_overview,
+        selected_day=selected_day_str,
     )
 
 # ---------- School-related toggles ----------
