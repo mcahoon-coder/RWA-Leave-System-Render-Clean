@@ -535,6 +535,26 @@ def new_request():
 def my_requests():
     q = _filtered_requests_for(current_user.role == Role.admin)
     reqs = q.all()
+
+    staff_overview = None
+    if current_user.role == Role.admin:
+        # Build a lightweight overview for ALL users:
+        users = User.query.order_by(User.username.asc()).all()
+        # Precompute who has any pending request
+        pending_user_ids = {
+            r.user_id for r in LeaveRequest.query.with_entities(LeaveRequest.user_id)
+            .filter(LeaveRequest.status == RequestStatus.pending).all()
+        }
+        staff_overview = [
+            {
+                "id": u.id,
+                "username": u.username,
+                "hours_balance": float(u.hours_balance or 0.0),
+                "has_pending": (u.id in pending_user_ids),
+            }
+            for u in users
+        ]
+
     return render_template(
         "requests.html",
         title="Requests",
@@ -543,7 +563,8 @@ def my_requests():
         is_admin=(current_user.role == Role.admin),
         status=request.args.get("status", "all"),
         start=request.args.get("start", ""),
-        end=request.args.get("end", "")
+        end=request.args.get("end", ""),
+        staff_overview=staff_overview,
     )
 
 # ---------- School-related toggles ----------
