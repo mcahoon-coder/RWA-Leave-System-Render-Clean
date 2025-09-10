@@ -940,7 +940,8 @@ def calendar_data():
     for r in q.all():
         if is_admin:
             title = f"{r.user.username} - {r.kind} ({r.hours:.1f}h)"
-            sub_text = sub_summary_text(r.subs, limit=2)
+            # compact sub summary (if you already have sub_summary_text helper, use it)
+            sub_text = " – " + ", ".join([f"{s.name}({s.hours:.1f}h)" for s in r.subs[:2]]) if r.subs else ""
             if not sub_text and (r.substitute or "").strip():
                 sub_text = " – Sub: " + r.substitute.strip()
             title += sub_text
@@ -949,10 +950,12 @@ def calendar_data():
         if r.is_school_related:
             title = "[School] " + title
 
+        # Send plain date strings; FullCalendar will render as all-day in local tz
         events.append({
             "title": title,
-            "start": r.start_date.isoformat(),
-            "end": (r.end_date + timedelta(days=1)).isoformat(),  # exclusive end for FullCalendar
+            "start": r.start_date.isoformat(),                         # e.g. "2025-09-10"
+            "end":   (r.end_date + timedelta(days=1)).isoformat(),     # exclusive end
+            "allDay": True,
         })
     return jsonify(events)
 
