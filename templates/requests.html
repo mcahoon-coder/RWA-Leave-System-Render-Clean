@@ -2,6 +2,7 @@
 {% block content %}
 <h2>My Requests</h2>
 
+{# ==== ADMIN "At a Glance" tiles (unchanged) ==== #}
 {% if is_admin and staff_overview %}
   <div class="card" style="padding:1rem 1rem 0.5rem;">
     <h3 style="margin-top:0;margin-bottom:.5rem;">Employees at a Glance</h3>
@@ -29,12 +30,44 @@
         </div>
       {% endfor %}
     </div>
-    <div style="font-size:.9rem;opacity:.8;margin-top:.5rem;">
-      Tip: Use the table below to review/approve pending requests.
-    </div>
   </div>
 {% endif %}
 
+{# ==== ADMIN "Daily Controls" (new, minimal) ==== #}
+{% if is_admin %}
+  <div class="card" style="padding:1rem; margin-top:1rem;">
+    <form method="get" action="{{ url_for('my_requests') }}" style="display:flex; gap:.5rem; align-items:end; flex-wrap:wrap;">
+      {# Preserve existing filters from the URL so nothing else changes #}
+      <input type="hidden" name="status" value="{{ status }}">
+      <input type="hidden" name="start" value="{{ start }}">
+      <input type="hidden" name="end" value="{{ end }}">
+
+      <div>
+        <label for="day">Show submissions for day</label>
+        <input class="input" id="day" name="day" type="date"
+               value="{{ selected_day if selected_day and selected_day != 'all' else ('' if not selected_day else selected_day) }}"
+               style="min-width: 180px;">
+      </div>
+      <div>
+        <button type="submit" class="btn">Apply</button>
+      </div>
+      <div>
+        <a class="btn" href="{{ url_for('my_requests', status=status, start=start, end=end, day='all') }}">Show All</a>
+      </div>
+      {% if selected_day and selected_day != 'all' %}
+        <div style="margin-left:auto; opacity:.75;">
+          Viewing: {{ selected_day }}
+        </div>
+      {% else %}
+        <div style="margin-left:auto; opacity:.75;">
+          Viewing: All submissions
+        </div>
+      {% endif %}
+    </form>
+  </div>
+{% endif %}
+
+{# ==== Requests Table (unchanged except substitute controls now support Pending/Approved) ==== #}
 <div class="card">
   {% if reqs %}
     <table class="table">
