@@ -2,6 +2,39 @@
 {% block content %}
 <h2>My Requests</h2>
 
+{% if is_admin and staff_overview %}
+  <div class="card" style="padding:1rem 1rem 0.5rem;">
+    <h3 style="margin-top:0;margin-bottom:.5rem;">Employees at a Glance</h3>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:.75rem;">
+      {% for s in staff_overview %}
+        <div style="background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:.75rem;box-shadow:0 1px 2px rgba(0,0,0,.04);display:flex;align-items:center;justify-content:space-between;">
+          <div>
+            <div style="font-weight:600;">{{ s.username }}</div>
+            <div style="font-size:.9rem;opacity:.8;">
+              Balance:
+              <span style="font-weight:700; color: {{ '#16a34a' if s.hours_balance >= 0 else '#b91c1c' }};">
+                {{ '%.2f'|format(s.hours_balance) }}h
+              </span>
+            </div>
+          </div>
+          {% if s.has_pending %}
+            <div style="background:#f59e0b;color:#111827;font-weight:700;border-radius:999px;padding:.25rem .5rem;font-size:.8rem;white-space:nowrap;">
+              Pending
+            </div>
+          {% else %}
+            <div style="background:#e5e7eb;color:#374151;border-radius:999px;padding:.25rem .5rem;font-size:.8rem;white-space:nowrap;">
+              Clear
+            </div>
+          {% endif %}
+        </div>
+      {% endfor %}
+    </div>
+    <div style="font-size:.9rem;opacity:.8;margin-top:.5rem;">
+      Tip: Use the table below to review/approve pending requests.
+    </div>
+  </div>
+{% endif %}
+
 <div class="card">
   {% if reqs %}
     <table class="table">
@@ -32,7 +65,6 @@
           <td>{{ "Yes" if r.is_school_related else "No" }}</td>
 
           <td>
-            {# Existing substitutes list #}
             {% if r.subs and r.subs|length > 0 %}
               <ul style="margin:.25rem 0 .5rem 1rem; padding:0;">
                 {% for s in r.subs %}
@@ -65,7 +97,6 @@
               <div style="margin-bottom:.5rem;">–</div>
             {% endif %}
 
-            {# Add-new-sub form (admin + pending/approved) #}
             {% if is_admin and r.status in ['Pending','Approved'] %}
               <form method="post" action="{{ url_for('add_substitute', req_id=r.id) }}"
                     style="display:flex; gap:.25rem; flex-wrap:wrap;">
