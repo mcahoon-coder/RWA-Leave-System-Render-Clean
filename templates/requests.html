@@ -1,4 +1,15 @@
 {% extends "base.html" %}
+{% macro fmt12(hhmm) -%}
+  {# Converts "HH:MM" to "h:MM AM/PM" #}
+  {% if not hhmm %}—{% else %}
+    {% set parts = hhmm.split(':') %}
+    {% set HH = parts[0]|int %}
+    {% set MM = parts[1] %}
+    {% set ampm = 'AM' if HH < 12 else 'PM' %}
+    {% set h12 = 12 if HH == 0 or HH == 12 else HH - 12 if HH > 12 else HH %}
+    {{ h12 }}:{{ MM }} {{ ampm }}
+  {% endif %}
+{%- endmacro %}
 {% block content %}
 <h2>My Requests</h2>
 
