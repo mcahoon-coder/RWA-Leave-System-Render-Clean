@@ -106,8 +106,7 @@
           <td>{{ "%.2f"|format(r.hours) }}</td>
 
           {# >>> ONLY CHANGE: show hourly window under Status when present <<< #}
-         
-<td>
+ <td>{{ r.status }}</td>
   {{ r.start_date }} → {{ r.end_date }}
   {% if r.mode == 'hourly' and r.start_time and r.end_time %}
     <span style="opacity:.8; margin-left:.35rem;">
