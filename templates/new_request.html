@@ -1,116 +1,120 @@
+{# templates/new_request.html #}
 {% extends "base.html" %}
 {% block title %}New Request{% endblock %}
 
 {% block content %}
-<div class="card">
-  <h1 style="margin-top:0;">New Leave Request</h1>
+<h2>New Request</h2>
 
-  <form method="post" class="form-grid">
-    <div class="row">
-      <div class="col">
-        <label>Kind</label>
-        <select name="kind" class="input">
-          <option value="annual">Annual</option>
-          <option value="sick">Sick</option>
-        </select>
-      </div>
-      <div class="col">
-        <label>Mode</label>
-        <select name="mode" class="input" id="mode">
-          <option value="hourly" selected>Hourly</option>
-          <option value="daily">Daily ({{ workday }}h)</option>
-          <option value="halfday">Half Day ({{ '%.2f'|format(workday/2) }}h)</option> <!-- NEW -->
-        </select>
-      </div>
-      <div class="col">
-        <label>School-related (no deduction)</label>
-        <input type="checkbox" name="school_related" value="1" style="transform:scale(1.2); margin-top:.5rem;">
-      </div>
+<div class="card" style="padding:1rem;">
+  <form method="post" action="{{ url_for('new_request') }}" id="leave-form"
+        style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:0.75rem;align-items:end;">
+
+    <!-- Kind -->
+    <div>
+      <label for="kind">Kind</label>
+      <select class="input" name="kind" id="kind" required>
+        <option value="annual">Annual</option>
+        <option value="sick">Sick</option>
+      </select>
     </div>
 
-    <div class="row">
-      <div class="col">
-        <label>Start date</label>
-        <input class="input" type="date" name="start_date" required>
-      </div>
-      <div class="col">
-        <label>End date</label>
-        <input class="input" type="date" name="end_date" required>
-      </div>
-      <div class="col only-hourly">
-        <label>Hours (optional)</label>
-        <input class="input" type="number" step="0.25" name="hours" placeholder="e.g. 3.5">
-      </div>
+    <!-- Mode -->
+    <div>
+      <label for="mode">Mode</label>
+      <select class="input" name="mode" id="mode" required>
+        <option value="hourly" selected>Hourly (uses Start/End times)</option>
+        <option value="daily">Daily (full workdays)</option>
+        <option value="halfday">Half Day (4.00h)</option>
+      </select>
     </div>
 
-    <!-- 12-hour time pickers for hourly -->
-    <div class="row only-hourly">
-      <div class="col">
-        <label>Start time</label>
-        <div class="time-row">
-          <select name="start_h" class="input-sm">
-            {% for h in range(1,13) %}<option value="{{ h }}">{{ h }}</option>{% endfor %}
-          </select>
-          <span>:</span>
-          <select name="start_m" class="input-sm">
-            {% for m in ["00","15","30","45"] %}<option value="{{ m }}">{{ m }}</option>{% endfor %}
-          </select>
-          <select name="start_ampm" class="input-sm">
-            <option>AM</option><option>PM</option>
-          </select>
-        </div>
-      </div>
-      <div class="col">
-        <label>End time</label>
-        <div class="time-row">
-          <select name="end_h" class="input-sm">
-            {% for h in range(1,13) %}<option value="{{ h }}">{{ h }}</option>{% endfor %}
-          </select>
-          <span>:</span>
-          <select name="end_m" class="input-sm">
-            {% for m in ["00","15","30","45"] %}<option value="{{ m }}">{{ m }}</option>{% endfor %}
-          </select>
-          <select name="end_ampm" class="input-sm">
-            <option>AM</option><option>PM</option>
-          </select>
-        </div>
-        <div class="muted" style="margin-top:.25rem;">(15-minute increments)</div>
-      </div>
+    <!-- Dates -->
+    <div>
+      <label for="start_date">Start Date</label>
+      <input class="input" type="date" name="start_date" id="start_date" required>
+    </div>
+    <div>
+      <label for="end_date">End Date</label>
+      <input class="input" type="date" name="end_date" id="end_date" required>
     </div>
 
-    <div class="row">
-      <div class="col-full">
-        <label>Reason</label>
-        <textarea class="input" name="reason" rows="3" placeholder="Optional"></textarea>
-      </div>
+    <!-- Time range (only for Hourly) -->
+    <div class="hourly-only">
+      <label for="start_time">Start Time</label>
+      <select class="input" name="start_time" id="start_time">
+        {% for hh in range(0,24) %}
+          {% for mm in [0,15,30,45] %}
+            {% set HH = "%02d"|format(hh) %}
+            {% set MM = "%02d"|format(mm) %}
+            <option value="{{ HH }}:{{ MM }}">{{ (HH ~ ":" ~ MM)|h12 }}</option>
+          {% endfor %}
+        {% endfor %}
+      </select>
+    </div>
+    <div class="hourly-only">
+      <label for="end_time">End Time</label>
+      <select class="input" name="end_time" id="end_time">
+        {% for hh in range(0,24) %}
+          {% for mm in [0,15,30,45] %}
+            {% set HH = "%02d"|format(hh) %}
+            {% set MM = "%02d"|format(mm) %}
+            <option value="{{ HH }}:{{ MM }}">{{ (HH ~ ":" ~ MM)|h12 }}</option>
+          {% endfor %}
+        {% endfor %}
+      </select>
     </div>
 
-    <div class="row">
-      <div class="right">
-        <button class="btn" type="submit">Submit Request</button>
-      </div>
+    <!-- School related -->
+    <div>
+      <label for="school_related">School Related?</label><br>
+      <input type="checkbox" name="school_related" id="school_related" value="1">
+    </div>
+
+    <!-- Reason -->
+    <div style="grid-column:1/-1">
+      <label for="reason">Reason (optional)</label>
+      <textarea class="input" name="reason" id="reason" rows="3" placeholder="Optional"></textarea>
+    </div>
+
+    <!-- Submit -->
+    <div style="grid-column:1/-1;display:flex;gap:.5rem;justify-content:flex-end;">
+      <button type="submit" class="btn">Submit Request</button>
+      <a class="btn" href="{{ url_for('my_requests') }}">Cancel</a>
     </div>
   </form>
+
+  <p style="margin-top:.75rem;opacity:.7;">
+    <strong>Note:</strong> For <em>Hourly</em> requests, hours will be calculated automatically from the selected Start and End times and shown on the “My Requests” page.
+  </p>
 </div>
 
-<style>
-.form-grid .row { display:flex; gap:1rem; margin-bottom:1rem; align-items:flex-end; flex-wrap:wrap; }
-.form-grid .col { flex:1 1 220px; min-width:220px; }
-.form-grid .col-full { flex:1 1 100%; }
-.input { width:100%; padding:.6rem .7rem; border:1px solid #d0d7de; border-radius:8px; }
-.input-sm { padding:.4rem .5rem; border:1px solid #d0d7de; border-radius:8px; width:auto; }
-.time-row { display:flex; gap:.4rem; align-items:center; }
-.only-hourly { display:block; }
-</style>
-
 <script>
-  const modeSel = document.getElementById('mode');
-  const toggleHourly = () => {
-    document.querySelectorAll('.only-hourly').forEach(el => {
-      el.style.display = modeSel.value === 'hourly' ? 'block' : 'none';
-    });
-  };
-  modeSel.addEventListener('change', toggleHourly);
-  toggleHourly();
+  (function () {
+    const modeSel = document.getElementById('mode');
+    const hourlyBlocks = document.querySelectorAll('.hourly-only');
+    const startTime = document.getElementById('start_time');
+    const endTime   = document.getElementById('end_time');
+    const startDate = document.getElementById('start_date');
+    const endDate   = document.getElementById('end_date');
+
+    function toggleHourly() {
+      const hourly = modeSel.value === 'hourly';
+      hourlyBlocks.forEach(el => el.style.display = hourly ? '' : 'none');
+
+      // When switching away from hourly, clear times; when switching to hourly, ensure same-day by default
+      if (!hourly) {
+        if (startTime) startTime.value = '';
+        if (endTime) endTime.value = '';
+      } else {
+        // default end date to start date if empty/different
+        if (startDate && endDate && startDate.value && endDate.value !== startDate.value) {
+          endDate.value = startDate.value;
+        }
+      }
+    }
+
+    modeSel.addEventListener('change', toggleHourly);
+    toggleHourly();
+  })();
 </script>
 {% endblock %}
