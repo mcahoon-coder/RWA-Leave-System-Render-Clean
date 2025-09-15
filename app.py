@@ -25,7 +25,7 @@ app.config["TEMPLATES_AUTO_RELOAD"] = True
 # Prefer Render DATABASE_URL; default to SQLite
 db_url = os.environ.get("DATABASE_URL", "sqlite:///leave_system.db")
 
-# Normalize old Heroku-style scheme and ensure SQLAlchemy uses psycopg (v3)
+# Normalize postgres URI
 if db_url.startswith("postgres://"):
     db_url = db_url.replace("postgres://", "postgresql+psycopg://", 1)
 elif db_url.startswith("postgresql://") and "+psycopg" not in db_url:
@@ -40,7 +40,7 @@ db = SQLAlchemy(app)
 login_manager = LoginManager(app)
 login_manager.login_view = "login"
 
-# Avoid stale template caching by proxies/browsers
+# Avoid stale template caching
 @app.after_request
 def add_no_cache_headers(resp):
     if resp.mimetype == "text/html":
@@ -48,32 +48,28 @@ def add_no_cache_headers(resp):
     return resp
 
 # =========================================================
-# Email settings (env vars)
+# Email settings
 # =========================================================
-MAIL_HOST = os.environ.get("MAIL_HOST", "")          # e.g. smtp.gmail.com
+MAIL_HOST = os.environ.get("MAIL_HOST", "")
 MAIL_PORT = int(os.environ.get("MAIL_PORT", "587"))
 MAIL_USER = os.environ.get("MAIL_USER", "")
 MAIL_PASSWORD = os.environ.get("MAIL_PASSWORD", "")
 MAIL_USE_TLS = os.environ.get("MAIL_USE_TLS", "true").lower() == "true"
 MAIL_FROM = os.environ.get("MAIL_FROM", MAIL_USER or "no-reply@example.com")
 
-# comma-separated list of admin emails for notifications
 ADMIN_EMAILS_ENV = [
     e.strip() for e in os.environ.get("ADMIN_EMAILS", "").split(",") if e.strip()
 ]
 
 def send_email(to_addrs, subject, body):
-    """Send plain-text email. Returns (ok: bool, msg: str). Safe no-op if not configured."""
     try:
         if not to_addrs:
-            app.logger.warning("Email skipped: no recipients provided.")
             return False, "No recipients"
         if isinstance(to_addrs, str):
             to_addrs = [to_addrs]
         to_addrs = [a for a in to_addrs if a]
 
         if not MAIL_HOST or not MAIL_FROM:
-            app.logger.warning("Email skipped: MAIL_HOST or MAIL_FROM not set.")
             return False, "SMTP not configured"
 
         msg = EmailMessage()
@@ -98,15 +94,14 @@ def send_email(to_addrs, subject, body):
                 server.send_message(msg)
         return True, "Sent"
     except Exception as e:
-        app.logger.error(f"Email send failed: {e}")
-        return False, f"Failed: {e}"
+        return False, str(e)
 
 # =========================================================
-# Models & constants
+# Models
 # =========================================================
 class Role:
     admin = "admin"
-    staff = "faculty_staff"  # requested label
+    staff = "faculty_staff"
 
 class RequestStatus:
     pending = "Pending"
@@ -117,7 +112,7 @@ class RequestStatus:
 class RequestMode:
     hourly = "hourly"
     daily = "daily"
-    halfday = "halfday"  # 4.00 hr option
+    halfday = "halfday"  # 4h option
 
 class User(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -125,42 +120,28 @@ class User(UserMixin, db.Model):
     password_hash = db.Column(db.String(255), nullable=False)
     role = db.Column(db.String(20), default=Role.staff, nullable=False)
     hours_balance = db.Column(db.Float, default=160.0, nullable=False)
-    email = db.Column(db.String(255))  # for notifications
-    # Optional display name for staff
+    email = db.Column(db.String(255))
     staff_name = db.Column(db.String(150))
 
 class LeaveRequest(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
-    kind = db.Column(db.String(20), default="annual", nullable=False)    # annual/sick
-    mode = db.Column(db.String(10), default=RequestMode.hourly, nullable=False)  # hourly/daily/halfday
+    kind = db.Column(db.String(20), default="annual", nullable=False)
+    mode = db.Column(db.String(10), default=RequestMode.hourly, nullable=False)
     start_date = db.Column(db.Date, nullable=False)
     end_date = db.Column(db.Date, nullable=False)
-
-    # Optional quarter-hour times (when mode == hourly and hours not provided)
-    start_time = db.Column(db.String(5))  # "HH:MM"
-    end_time   = db.Column(db.String(5))  # "HH:MM"
-
+    start_time = db.Column(db.String(5))
+    end_time = db.Column(db.String(5))
     hours = db.Column(db.Float, nullable=False)
     reason = db.Column(db.String(500), default="")
     status = db.Column(db.String(20), default=RequestStatus.pending, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     decided_at = db.Column(db.DateTime)
-
-    # Flags/extra
     is_school_related = db.Column(db.Boolean, default=False, nullable=False)
-    substitute = db.Column(db.String(120))  # legacy single substitute text (optional)
-
-    # eager-load user to avoid DetachedInstanceError in templates
+    substitute = db.Column(db.String(120))
     user = db.relationship("User", backref="leave_requests", lazy="joined")
-
-    # Multiple substitutes
-    subs = db.relationship(
-        "SubAssignment",
-        backref="request",
-        cascade="all, delete-orphan",
-        lazy="joined"
-    )
+    subs = db.relationship("SubAssignment", backref="request",
+                           cascade="all, delete-orphan", lazy="joined")
 
 class SubAssignment(db.Model):
     __tablename__ = "sub_assignment"
@@ -178,159 +159,45 @@ def load_user(user_id):
 # Helpers
 # =========================================================
 WORKDAY_HOURS = float(os.environ.get("WORKDAY_HOURS", "8"))
-HOLIDAYS: set[date] = set()  # add date(...) objects here if you want static holidays
 
 def is_workday(d: date) -> bool:
-    return d.weekday() < 5 and d not in HOLIDAYS  # Mon–Fri & not holiday
+    return d.weekday() < 5
 
 def workdays_between(start: date, end: date) -> int:
-    """Inclusive range, counts only Mon–Fri not in HOLIDAYS."""
     if end < start:
         start, end = end, start
     n, cur = 0, start
     while cur <= end:
         if is_workday(cur):
             n += 1
-        cur = cur + timedelta(days=1)
+        cur += timedelta(days=1)
     return n
 
-def parse_quarter_time(s: str) -> dt_time | None:
-    """Parse 'HH:MM' 24h where MM in {00,15,30,45}."""
+def parse_quarter_time(s: str):
     try:
         hh, mm = s.split(":")
-        hh_i = int(hh); mm_i = int(mm)
-        if 0 <= hh_i <= 23 and mm_i in (0, 15, 30, 45):
-            return dt_time(hh_i, mm_i)
-    except Exception:
+        hh, mm = int(hh), int(mm)
+        if 0 <= hh <= 23 and mm in (0, 15, 30, 45):
+            return dt_time(hh, mm)
+    except:
         return None
-    return None
 
-def interval_hours(t1: dt_time, t2: dt_time) -> float:
-    """Compute hours between two times on same day; if t2 < t1, swap."""
-    dt1 = datetime.combine(date.today(), t1)
-    dt2 = datetime.combine(date.today(), t2)
+def interval_hours(t1, t2):
+    dt1, dt2 = datetime.combine(date.today(), t1), datetime.combine(date.today(), t2)
     if dt2 < dt1:
         dt1, dt2 = dt2, dt1
-    delta = dt2 - dt1
-    return delta.total_seconds() / 3600.0
+    return (dt2 - dt1).total_seconds() / 3600.0
 
-def _column_exists(table_name: str, column_name: str) -> bool:
-    """Check column existence (SQLite + Postgres)."""
-    bind = db.engine
-    dialect = bind.dialect.name
-    if dialect == "sqlite":
-        res = db.session.execute(text(f"PRAGMA table_info({table_name})")).fetchall()
-        return any(row[1] == column_name for row in res)
-    else:
-        q = text("""
-            SELECT 1 FROM information_schema.columns
-            WHERE table_name = :t AND column_name = :c
-            LIMIT 1
-        """)
-        return db.session.execute(q, {"t": table_name, "c": column_name}).first() is not None
-
-def ensure_db():
-    # Create tables (including sub_assignment)
-    db.create_all()
-
-    # Add newly introduced columns if missing
-    try:
-        if db.engine.dialect.name == "sqlite":
-            if not _column_exists("leave_request", "start_time"):
-                db.session.execute(text("ALTER TABLE leave_request ADD COLUMN start_time VARCHAR(5)"))
-            if not _column_exists("leave_request", "end_time"):
-                db.session.execute(text("ALTER TABLE leave_request ADD COLUMN end_time VARCHAR(5)"))
-            if not _column_exists("leave_request", "is_school_related"):
-                db.session.execute(text("ALTER TABLE leave_request ADD COLUMN is_school_related BOOLEAN DEFAULT 0 NOT NULL"))
-            if not _column_exists("leave_request", "substitute"):
-                db.session.execute(text("ALTER TABLE leave_request ADD COLUMN substitute VARCHAR(120)"))
-            if not _column_exists("user", "staff_name"):
-                db.session.execute(text("ALTER TABLE user ADD COLUMN staff_name VARCHAR(150)"))
-            db.session.commit()
-        else:
-            db.session.execute(text("ALTER TABLE leave_request ADD COLUMN IF NOT EXISTS start_time VARCHAR(5)"))
-            db.session.execute(text("ALTER TABLE leave_request ADD COLUMN IF NOT EXISTS end_time VARCHAR(5)"))
-            db.session.execute(text("ALTER TABLE leave_request ADD COLUMN IF NOT EXISTS is_school_related BOOLEAN NOT NULL DEFAULT FALSE"))
-            db.session.execute(text("ALTER TABLE leave_request ADD COLUMN IF NOT EXISTS substitute VARCHAR(120)"))
-            db.session.execute(text("ALTER TABLE \"user\" ADD COLUMN IF NOT EXISTS staff_name VARCHAR(150)"))
-            db.session.commit()
-    except Exception:
-        db.session.rollback()
-
-    # Seed admin ONLY if there are no users at all (first boot)
-    if User.query.count() == 0:
-        bootstrap_username = os.environ.get("BOOTSTRAP_ADMIN_USERNAME", "mc-admin")
-        bootstrap_password = os.environ.get("BOOTSTRAP_ADMIN_PASSWORD", "RWAadmin2")
-        bootstrap_email    = os.environ.get("BOOTSTRAP_ADMIN_EMAIL", (ADMIN_EMAILS_ENV[0] if ADMIN_EMAILS_ENV else ""))
-
-        db.session.add(User(
-            username=bootstrap_username,
-            password_hash=generate_password_hash(bootstrap_password),
-            role=Role.admin,
-            hours_balance=160.0,
-            email=bootstrap_email or None
-        ))
-        db.session.commit()
-
-with app.app_context():
-    ensure_db()
-
-def admin_emails() -> list[str]:
-    """All admin notification recipients from env + admin users' emails."""
-    env_list = ADMIN_EMAILS_ENV[:]
-    user_list = [u.email for u in User.query.filter_by(role=Role.admin).all() if u.email]
-    combined = env_list + user_list
-    # de-dupe while preserving order
-    seen = set()
-    result = []
-    for e in combined:
-        if e and e not in seen:
-            result.append(e)
-            seen.add(e)
-    return result
-
-# Jinja filter: 24h "HH:MM" -> "H:MM AM/PM"
 @app.template_filter("h12")
 def h12_filter(s):
     try:
         hh, mm = (s or "").split(":")
-        hh = int(hh); mm = int(mm)
+        hh, mm = int(hh), int(mm)
         ampm = "AM" if hh < 12 else "PM"
-        h = hh % 12
-        if h == 0: h = 12
+        h = hh % 12 or 12
         return f"{h}:{mm:02d} {ampm}"
-    except Exception:
+    except:
         return s or ""
-
-# Shared filter logic for list + exports
-def _filtered_requests_for(current_user_is_admin: bool):
-    status = request.args.get("status", "all").strip().lower()
-    start_s = request.args.get("start", "").strip()
-    end_s = request.args.get("end", "").strip()
-
-    q = LeaveRequest.query
-    if not current_user_is_admin:
-        q = q.filter_by(user_id=current_user.id)
-
-    if status and status != "all":
-        q = q.filter_by(status=status.capitalize())
-
-    def parse_date(s):
-        try:
-            return datetime.strptime(s, "%Y-%m-%d").date()
-        except Exception:
-            return None
-
-    sd = parse_date(start_s)
-    ed = parse_date(end_s)
-
-    if sd:
-        q = q.filter(LeaveRequest.start_date >= sd)
-    if ed:
-        q = q.filter(LeaveRequest.end_date <= ed)
-
-    return q.order_by(LeaveRequest.created_at.desc())
-
 # =========================================================
 # Nav + globals in templates
 # =========================================================
@@ -408,37 +275,6 @@ def admin_hub():
     pending = (LeaveRequest.query.filter_by(status=RequestStatus.pending)
                .order_by(LeaveRequest.created_at.desc()).all())
     return render_template("admin.html", title="Admin", pending=pending)
-
-# Admin email test endpoint
-@app.get("/admin/email-test")
-@login_required
-def admin_email_test():
-    if current_user.role != Role.admin:
-        flash("Admins only.", "warning")
-        return redirect(url_for("dashboard"))
-
-    # Recipients: current admin's email (if set) + ADMIN_EMAILS env + other admin emails
-    recipients = []
-    if current_user.email:
-        recipients.append(current_user.email)
-    recipients += admin_emails()
-    # de-duplicate
-    seen = set(); recipients = [r for r in recipients if r and not (r in seen or seen.add(r))]
-
-    subject = "RWA Leave System – Test Email"
-    body = (
-        "This is a test email from the RWA Leave System.\n\n"
-        f"Time: {datetime.utcnow().isoformat()}Z\n"
-        f"From: {MAIL_FROM}\nHost: {MAIL_HOST}:{MAIL_PORT} TLS={MAIL_USE_TLS}\n"
-        f"Recipients: {', '.join(recipients) if recipients else '(none)'}\n"
-    )
-
-    ok, msg = send_email(recipients, subject, body)
-    if ok:
-        flash(f"Test email sent to: {', '.join(recipients)}", "success")
-    else:
-        flash(f"Test email failed: {msg}", "danger")
-    return redirect(url_for("admin_hub"))
 
 # ---------- New Request ----------
 @app.route("/request/new", methods=["GET", "POST"])
@@ -521,15 +357,12 @@ def new_request():
             f"Reason: {reason or '(none)'}\n"
             f"Status: {req.status}\n"
         )
-        ok, emsg = send_email(admin_emails(), subj, body)
-        if not ok:
-            flash(f"Notice: admin email not sent ({emsg}). Check SMTP settings.", "warning")
+        send_email([a.email for a in User.query.filter_by(role=Role.admin).all() if a.email], subj, body)
 
         flash("Request submitted.", "success")
         return redirect(url_for("my_requests"))
 
     return render_template("new_request.html", title="New Request", workday=WORKDAY_HOURS)
-
 # ---------- Requests list (admin sees all, staff sees own) ----------
 @app.get("/requests")
 @login_required
@@ -772,7 +605,6 @@ def cancel(req_id):
 
     flash("Cancelled.", "secondary")
     return redirect(request.referrer or url_for("my_requests"))
-
 # ---------- Manage Users (admin) ----------
 @app.route("/admin/users", methods=["GET"])
 @login_required
@@ -835,7 +667,7 @@ def admin_update_user(user_id):
         return redirect(url_for("manage_users"))
     u = User.query.get_or_404(user_id)
 
-    # Username change intentionally omitted (per your request)
+    # Username change intentionally omitted
     staff_name = (request.form.get("staff_name") or "").strip()
     email = (request.form.get("email") or "").strip()
     role = (request.form.get("role") or "").strip()
@@ -880,17 +712,14 @@ def admin_delete_user(user_id):
         return redirect(url_for("manage_users"))
     u = User.query.get_or_404(user_id)
 
-    # don't let an admin delete themselves (safety)
     if u.id == current_user.id:
         flash("You cannot delete your own account.", "warning")
         return redirect(url_for("manage_users"))
 
-    # also, keep at least one admin in the system
     if u.role == Role.admin and User.query.filter_by(role=Role.admin).count() <= 1:
         flash("At least one admin must remain.", "warning")
         return redirect(url_for("manage_users"))
 
-    # delete user's requests first (or set cascade in model if preferred)
     LeaveRequest.query.filter_by(user_id=u.id).delete()
     db.session.delete(u)
     db.session.commit()
@@ -941,8 +770,7 @@ def calendar_data():
     for r in q.all():
         if is_admin:
             title = f"{r.user.username} - {r.kind} ({r.hours:.1f}h)"
-            # compact sub summary (if you already have sub_summary_text helper, use it)
-            sub_text = " – " + ", ".join([f"{s.name}({s.hours:.1f}h)" for s in r.subs[:2]]) if r.subs else ""
+            sub_text = sub_summary_text(r.subs, limit=2)
             if not sub_text and (r.substitute or "").strip():
                 sub_text = " – Sub: " + r.substitute.strip()
             title += sub_text
@@ -951,11 +779,10 @@ def calendar_data():
         if r.is_school_related:
             title = "[School] " + title
 
-        # Send plain date strings; FullCalendar will render as all-day in local tz
         events.append({
             "title": title,
-            "start": r.start_date.isoformat(),                         # e.g. "2025-09-10"
-            "end":   (r.end_date + timedelta(days=1)).isoformat(),     # exclusive end
+            "start": r.start_date.isoformat(),
+            "end": (r.end_date + timedelta(days=1)).isoformat(),  # exclusive end
             "allDay": True,
         })
     return jsonify(events)
@@ -1043,7 +870,7 @@ def export_requests_xlsx():
 
         rix += 1
 
-    # autosize a bit
+    # autosize some columns
     widths = [len(h) for h in headers]
     for r in rows:
         widths[1] = max(widths[1], len(r.user.username or ""))
@@ -1055,7 +882,7 @@ def export_requests_xlsx():
     for c, w in enumerate(widths):
         ws.set_column(c, c, min(max(w + 2, 10), 32))
 
-    # Sheet 2: Substitutes (one row per sub assignment)
+    # Sheet 2: Substitutes
     ws2 = wb.add_worksheet("Substitutes")
     ws2_headers = ["RequestID","Username","StaffName","Start","End","Substitute","Hours"]
     for c, h in enumerate(ws2_headers):
@@ -1096,7 +923,7 @@ def export_monthly():
     else:
         end = date(today.year, today.month + 1, 1) - timedelta(days=1)
 
-    # Allow manual override via ?start=YYYY-MM-DD&end=YYYY-MM-DD (optional)
+    # Optional override via ?start=YYYY-MM-DD&end=YYYY-MM-DD
     def parse_date_q(s):
         try:
             return datetime.strptime(s, "%Y-%m-%d").date()
