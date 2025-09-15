@@ -467,66 +467,71 @@ def new_request():
             return render_template("new_request.html", title="New Request", workday=WORKDAY_HOURS)
 
         # ---------- compute hours ----------
-     # ---------- compute hours ----------
-hours = 0.0
-start_time_str = (request.form.get("start_time") or "").strip() or None
-end_time_str   = (request.form.get("end_time") or "").strip() or None
+        hours = 0.0
+        start_time_str = (request.form.get("start_time") or "").strip() or None
+        end_time_str = (request.form.get("end_time") or "").strip() or None
 
-if mode == RequestMode.hourly:
-    # Require same-day hourly window
-    if not start_time_str or not end_time_str:
-        flash("Please select Start and End times for an hourly request.", "warning")
-        return render_template("new_request.html", title="New Request", workday=WORKDAY_HOURS)
+        if mode == RequestMode.hourly:
+            # Require times and same-day range
+            if not start_time_str or not end_time_str:
+                flash("Please select Start and End times for an hourly request.", "warning")
+                return render_template("new_request.html", title="New Request", workday=WORKDAY_HOURS)
 
-    if sd != ed:
-        flash("Hourly requests must start and end on the same day.", "warning")
-        return render_template("new_request.html", title="New Request", workday=WORKDAY_HOURS)
+            if sd != ed:
+                flash("Hourly requests must start and end on the same day.", "warning")
+                return render_template("new_request.html", title="New Request", workday=WORKDAY_HOURS)
 
-    st = parse_quarter_time(start_time_str)
-    et = parse_quarter_time(end_time_str)
-    if not st or not et:
-        flash("Times must be in 15-minute increments.", "warning")
-        return render_template("new_request.html", title="New Request", workday=WORKDAY_HOURS)
+            st = parse_quarter_time(start_time_str)  # accepts :00/:15/:30/:45
+            et = parse_quarter_time(end_time_str)
+            if not st or not et:
+                flash("Times must be in 15-minute increments.", "warning")
+                return render_template("new_request.html", title="New Request", workday=WORKDAY_HOURS)
 
-    computed = interval_hours(st, et)
-    if computed <= 0:
-        flash("End time must be after start time.", "warning")
-        return render_template("new_request.html", title="New Request", workday=WORKDAY_HOURS)
+            computed = interval_hours(st, et)
+            if computed <= 0:
+                flash("End time must be after start time.", "warning")
+                return render_template("new_request.html", title="New Request", workday=WORKDAY_HOURS)
 
-    # Round to nearest quarter hour and store
-    hours = round(computed * 4) / 4.0
+            # Round to nearest quarter hour and store
+            hours = round(computed * 4) / 4.0
 
-elif mode == RequestMode.halfday:
-    hours = 4.0
+        elif mode == RequestMode.halfday:
+            hours = 4.0
 
-else:  # daily
-    wd = workdays_between(sd, ed)
-    hours = wd * WORKDAY_HOURS
+        else:  # daily
+            wd = workdays_between(sd, ed)
+            hours = wd * WORKDAY_HOURS
+            if hours > capacity_hours:
+                flash(
+                    f"Requested {hours:.2f} exceeds capacity {capacity_hours:.2f} for that range.",
+                    "warning",
+                )
+                return render_template("new_request.html", title="New Request", workday=WORKDAY_HOURS)
 
-# Guard: require a positive hours value after all logic above
-if hours <= 0:
-    flash("Requested hours must be greater than zero.", "warning")
-    return render_template("new_request.html", title="New Request", workday=WORKDAY_HOURS)
+        # Guard: require a positive hours value after all logic above
+        if hours <= 0:
+            flash("Requested hours must be greater than zero.", "warning")
+            return render_template("new_request.html", title="New Request", workday=WORKDAY_HOURS)
 
-# Normalize stored time strings to "HH:MM" or None
-def _norm(t):
-    if not t:
-        return None
-    t = t.strip()
-    return t[:5] if len(t) >= 5 else t
+        # Normalize stored time strings to "HH:MM" (or None when not hourly)
+        def _norm(t: str | None) -> str | None:
+            if not t:
+                return None
+            t = t.strip()
+            return t[:5] if len(t) >= 5 else t
 
-req = LeaveRequest(
-    user_id=current_user.id,
-    kind=kind,
-    mode=mode,
-    start_date=sd,
-    end_date=ed,
-    start_time=_norm(start_time_str) if mode == RequestMode.hourly else None,
-    end_time=_norm(end_time_str) if mode == RequestMode.hourly else None,
-    hours=hours,
-    reason=reason,
-    is_school_related=is_school
-)
+        req = LeaveRequest(
+            user_id=current_user.id,
+            kind=kind,
+            mode=mode,
+            start_date=sd,
+            end_date=ed,
+            start_time=_norm(start_time_str) if mode == RequestMode.hourly else None,
+            end_time=_norm(end_time_str) if mode == RequestMode.hourly else None,
+            hours=hours,
+            reason=reason,
+            is_school_related=is_school,
+        )
         db.session.add(req)
         db.session.commit()
 
