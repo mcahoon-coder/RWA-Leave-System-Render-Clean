@@ -107,13 +107,14 @@
 
           {# >>> ONLY CHANGE: show hourly window under Status when present <<< #}
           <td>
-            {{ r.status }}
-            {% if r.mode == 'hourly' and r.start_time and r.end_time %}
-              <div style="font-size:.85em; opacity:.75; margin-top:.15rem;">
-                {{ r.start_time|h12 }} – {{ r.end_time|h12 }}
-              </div>
-            {% endif %}
-          </td>
+  {{ r.status }}
+  {% if r.mode == 'hourly' and r.start_time and r.end_time %}
+    <span style="opacity:.8; margin-left:.35rem;">
+      ({{ r.start_time|h12 }} – {{ r.end_time|h12 }})
+    </span>
+  {% endif %}
+</td>
+
           {# >>> END OF TINY CHANGE <<< #}
 
           <td>{{ "Yes" if r.is_school_related else "No" }}</td>
