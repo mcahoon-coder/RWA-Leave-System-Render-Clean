@@ -77,7 +77,7 @@
   </div>
 {% endif %}
 
-{# ==== Requests Table (unchanged, except a tiny addition under Status) ==== #}
+{# ==== Requests Table (unchanged, except one tiny addition in Dates cell) ==== #}
 <div class="card">
   {% if reqs %}
     <table class="table">
@@ -102,19 +102,33 @@
           {% if is_admin %}<td>{{ r.user.username }}</td>{% endif %}
           <td>{{ r.kind }}</td>
           <td>{{ r.mode }}</td>
-          <td>{{ r.start_date }} → {{ r.end_date }}</td>
+
+          {# >>> ONLY ADDITION: show time frame beside the dates when present <<< #}
+          <td>
+            {{ r.start_date }} → {{ r.end_date }}
+            {% if r.mode == 'hourly' and r.start_time and r.end_time %}
+              {# Normalize to "HH:MM" regardless of object or string input #}
+              {% set _st = (r.start_time.strftime("%H:%M") if r.start_time.strftime is defined else (r.start_time|string)[:5]) %}
+              {% set _et = (r.end_time.strftime("%H:%M") if r.end_time.strftime is defined else (r.end_time|string)[:5]) %}
+              &nbsp;({{ fmt12(_st) }} – {{ fmt12(_et) }})
+            {% endif %}
+          </td>
+          {# >>> END ADDITION <<< #}
+
           <td>{{ "%.2f"|format(r.hours) }}</td>
 
-          {# >>> ONLY CHANGE: show hourly window under Status when present <<< #}
+          {# (kept exactly as you had it) show hourly window under Status when present #}
           <td>
             {{ r.status }}
             {% if r.mode == 'hourly' and r.start_time and r.end_time %}
               <div style="font-size:.85em; opacity:.75; margin-top:.15rem;">
-                {{ r.start_time|h12 }} – {{ r.end_time|h12 }}
+                {# If you prefer to avoid any custom filter, use fmt12 here too: #}
+                {% set _st2 = (r.start_time.strftime("%H:%M") if r.start_time.strftime is defined else (r.start_time|string)[:5]) %}
+                {% set _et2 = (r.end_time.strftime("%H:%M") if r.end_time.strftime is defined else (r.end_time|string)[:5]) %}
+                {{ fmt12(_st2) }} – {{ fmt12(_et2) }}
               </div>
             {% endif %}
           </td>
-          {# >>> END OF TINY CHANGE <<< #}
 
           <td>{{ "Yes" if r.is_school_related else "No" }}</td>
 
