@@ -77,7 +77,7 @@
   </div>
 {% endif %}
 
-{# ==== Requests Table (unchanged, except one tiny addition in Dates cell) ==== #}
+{# ==== Requests Table ==== #}
 <div class="card">
   {% if reqs %}
     <table class="table">
@@ -103,26 +103,23 @@
           <td>{{ r.kind }}</td>
           <td>{{ r.mode }}</td>
 
-          {# >>> ONLY ADDITION: show time frame beside the dates when present <<< #}
+          {# Dates with time frame (when hourly times exist) #}
           <td>
             {{ r.start_date }} → {{ r.end_date }}
-            {% if r.mode == 'hourly' and r.start_time and r.end_time %}
-              {# Normalize to "HH:MM" regardless of object or string input #}
+            {% if r.mode|lower == 'hourly' and r.start_time and r.end_time %}
               {% set _st = (r.start_time.strftime("%H:%M") if r.start_time.strftime is defined else (r.start_time|string)[:5]) %}
               {% set _et = (r.end_time.strftime("%H:%M") if r.end_time.strftime is defined else (r.end_time|string)[:5]) %}
               &nbsp;({{ fmt12(_st) }} – {{ fmt12(_et) }})
             {% endif %}
           </td>
-          {# >>> END ADDITION <<< #}
 
           <td>{{ "%.2f"|format(r.hours) }}</td>
 
-          {# (kept exactly as you had it) show hourly window under Status when present #}
+          {# Keep the little status subline with times, too #}
           <td>
             {{ r.status }}
-            {% if r.mode == 'hourly' and r.start_time and r.end_time %}
+            {% if r.mode|lower == 'hourly' and r.start_time and r.end_time %}
               <div style="font-size:.85em; opacity:.75; margin-top:.15rem;">
-                {# If you prefer to avoid any custom filter, use fmt12 here too: #}
                 {% set _st2 = (r.start_time.strftime("%H:%M") if r.start_time.strftime is defined else (r.start_time|string)[:5]) %}
                 {% set _et2 = (r.end_time.strftime("%H:%M") if r.end_time.strftime is defined else (r.end_time|string)[:5]) %}
                 {{ fmt12(_st2) }} – {{ fmt12(_et2) }}
@@ -175,8 +172,9 @@
             {% endif %}
           </td>
 
+          {# Actions — case-insensitive status checks so Cancel reliably shows #}
           <td>
-            {% if r.status == "Pending" %}
+            {% if r.status and r.status|lower == "pending" %}
               {% if is_admin %}
                 <form method="post" action="{{ url_for('approve', req_id=r.id) }}" style="display:inline;">
                   <button type="submit" class="btn btn-sm">Approve</button>
@@ -189,7 +187,7 @@
                   <button type="submit" class="btn btn-sm">Cancel</button>
                 </form>
               {% endif %}
-            {% elif r.status == "Approved" and (r.user_id == me.id or is_admin) %}
+            {% elif r.status and r.status|lower == "approved" and (r.user_id == me.id or is_admin) %}
               <form method="post" action="{{ url_for('cancel', req_id=r.id) }}" style="display:inline;">
                 <button type="submit" class="btn btn-sm">Cancel</button>
               </form>
