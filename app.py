@@ -467,82 +467,66 @@ def new_request():
             return render_template("new_request.html", title="New Request", workday=WORKDAY_HOURS)
 
         # ---------- compute hours ----------
-        hours = 0.0
-        start_time_str = (request.form.get("start_time") or "").strip() or None
-        end_time_str   = (request.form.get("end_time") or "").strip() or None
+     # ---------- compute hours ----------
+hours = 0.0
+start_time_str = (request.form.get("start_time") or "").strip() or None
+end_time_str   = (request.form.get("end_time") or "").strip() or None
 
-        if mode == RequestMode.hourly:
-            hours_str = (request.form.get("hours") or "").strip()
+if mode == RequestMode.hourly:
+    # Require same-day hourly window
+    if not start_time_str or not end_time_str:
+        flash("Please select Start and End times for an hourly request.", "warning")
+        return render_template("new_request.html", title="New Request", workday=WORKDAY_HOURS)
 
-            # If times are provided on the same day, compute hours (and round to quarter hour).
-            if start_time_str and end_time_str and sd == ed:
-                st = parse_quarter_time(start_time_str)  # expects 00/15/30/45
-                et = parse_quarter_time(end_time_str)
-                if st and et:
-                    computed = interval_hours(st, et)
-                    computed = round_quarter(computed)
+    if sd != ed:
+        flash("Hourly requests must start and end on the same day.", "warning")
+        return render_template("new_request.html", title="New Request", workday=WORKDAY_HOURS)
 
-                    # Use computed hours if Hours box is blank or non-positive
-                    if not hours_str:
-                        hours = computed
-                    else:
-                        try:
-                            hours = float(hours_str)
-                            if hours <= 0:
-                                hours = computed
-                        except Exception:
-                            hours = computed
-                # If parsing failed, fall back to Hours box (if any)
-                else:
-                    if hours_str:
-                        try:
-                            hours = float(hours_str)
-                        except Exception:
-                            hours = 0.0
-            else:
-                # no valid time window; rely on Hours box
-                if hours_str:
-                    try:
-                        hours = float(hours_str)
-                    except Exception:
-                        hours = 0.0
+    st = parse_quarter_time(start_time_str)
+    et = parse_quarter_time(end_time_str)
+    if not st or not et:
+        flash("Times must be in 15-minute increments.", "warning")
+        return render_template("new_request.html", title="New Request", workday=WORKDAY_HOURS)
 
-        elif mode == RequestMode.halfday:
-            hours = 4.0
+    computed = interval_hours(st, et)
+    if computed <= 0:
+        flash("End time must be after start time.", "warning")
+        return render_template("new_request.html", title="New Request", workday=WORKDAY_HOURS)
 
-        else:  # daily
-            wd = workdays_between(sd, ed)
-            hours = wd * WORKDAY_HOURS
+    # Round to nearest quarter hour and store
+    hours = round(computed * 4) / 4.0
 
-        # Guard: require a positive hours value after all logic above
-        if hours <= 0:
-            flash("Requested hours must be greater than zero, or provide a valid Start and End time.", "warning")
-            return render_template("new_request.html", title="New Request", workday=WORKDAY_HOURS)
+elif mode == RequestMode.halfday:
+    hours = 4.0
 
-        # Capacity check only for day/half-day (original behavior preserved)
-        if hours > capacity_hours and mode not in (RequestMode.hourly, RequestMode.halfday):
-            flash(f"Requested {hours:.2f} exceeds capacity {capacity_hours:.2f} for that range.", "warning")
-            return render_template("new_request.html", title="New Request", workday=WORKDAY_HOURS)
+else:  # daily
+    wd = workdays_between(sd, ed)
+    hours = wd * WORKDAY_HOURS
 
-        # Normalize stored time strings to "HH:MM" or None
-        def _norm(t):
-            if not t:
-                return None
-            t = t.strip()
-            return t[:5] if len(t) >= 5 else t
+# Guard: require a positive hours value after all logic above
+if hours <= 0:
+    flash("Requested hours must be greater than zero.", "warning")
+    return render_template("new_request.html", title="New Request", workday=WORKDAY_HOURS)
 
-        req = LeaveRequest(
-            user_id=current_user.id,
-            kind=kind,
-            mode=mode,
-            start_date=sd,
-            end_date=ed,
-            start_time=_norm(start_time_str) if mode == RequestMode.hourly else None,
-            end_time=_norm(end_time_str) if mode == RequestMode.hourly else None,
-            hours=hours,
-            reason=reason,
-            is_school_related=is_school
-        )
+# Normalize stored time strings to "HH:MM" or None
+def _norm(t):
+    if not t:
+        return None
+    t = t.strip()
+    return t[:5] if len(t) >= 5 else t
+
+req = LeaveRequest(
+    user_id=current_user.id,
+    kind=kind,
+    mode=mode,
+    start_date=sd,
+    end_date=ed,
+    start_time=_norm(start_time_str) if mode == RequestMode.hourly else None,
+    end_time=_norm(end_time_str) if mode == RequestMode.hourly else None,
+    hours=hours,
+    reason=reason,
+    is_school_related=is_school
+)
         db.session.add(req)
         db.session.commit()
 
