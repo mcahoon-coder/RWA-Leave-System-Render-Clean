@@ -106,15 +106,15 @@
           <td>{{ "%.2f"|format(r.hours) }}</td>
 
           {# >>> ONLY CHANGE: show hourly window under Status when present <<< #}
-          <td>
-  {{ r.status }}
+         
+<td>
+  {{ r.start_date }} → {{ r.end_date }}
   {% if r.mode == 'hourly' and r.start_time and r.end_time %}
     <span style="opacity:.8; margin-left:.35rem;">
-      ({{ r.start_time|h12 }} – {{ r.end_time|h12 }})
+      ({{ fmt12(r.start_time) }} – {{ fmt12(r.end_time) }})
     </span>
   {% endif %}
 </td>
-
           {# >>> END OF TINY CHANGE <<< #}
 
           <td>{{ "Yes" if r.is_school_related else "No" }}</td>
