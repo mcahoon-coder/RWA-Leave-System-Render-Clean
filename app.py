@@ -214,6 +214,10 @@ def interval_hours(t1: dt_time, t2: dt_time) -> float:
     delta = dt2 - dt1
     return delta.total_seconds() / 3600.0
 
+def round_quarter(h: float) -> float:
+    """Round to the nearest 0.25 hour."""
+    return round(h * 4) / 4.0
+
 def _column_exists(table_name: str, column_name: str) -> bool:
     """Check column existence (SQLite + Postgres)."""
     bind = db.engine
@@ -462,37 +466,70 @@ def new_request():
             flash("No working days in that range.", "warning")
             return render_template("new_request.html", title="New Request", workday=WORKDAY_HOURS)
 
-        # compute hours
+        # ---------- compute hours ----------
         hours = 0.0
+        start_time_str = (request.form.get("start_time") or "").strip() or None
+        end_time_str   = (request.form.get("end_time") or "").strip() or None
+
         if mode == RequestMode.hourly:
             hours_str = (request.form.get("hours") or "").strip()
-            if hours_str:
-                try:
-                    hours = float(hours_str)
-                except Exception:
-                    hours = 0.0
-            else:
-                st_s = (request.form.get("start_time") or "").strip()
-                et_s = (request.form.get("end_time") or "").strip()
-                st = parse_quarter_time(st_s) if st_s else None
-                et = parse_quarter_time(et_s) if et_s else None
-                if st and et and sd == ed:
-                    hours = interval_hours(st, et)
+
+            # If times are provided on the same day, compute hours (and round to quarter hour).
+            if start_time_str and end_time_str and sd == ed:
+                st = parse_quarter_time(start_time_str)  # expects 00/15/30/45
+                et = parse_quarter_time(end_time_str)
+                if st and et:
+                    computed = interval_hours(st, et)
+                    computed = round_quarter(computed)
+
+                    # Use computed hours if Hours box is blank or non-positive
+                    if not hours_str:
+                        hours = computed
+                    else:
+                        try:
+                            hours = float(hours_str)
+                            if hours <= 0:
+                                hours = computed
+                        except Exception:
+                            hours = computed
+                # If parsing failed, fall back to Hours box (if any)
                 else:
-                    hours = 0.0
+                    if hours_str:
+                        try:
+                            hours = float(hours_str)
+                        except Exception:
+                            hours = 0.0
+            else:
+                # no valid time window; rely on Hours box
+                if hours_str:
+                    try:
+                        hours = float(hours_str)
+                    except Exception:
+                        hours = 0.0
+
         elif mode == RequestMode.halfday:
             hours = 4.0
+
         else:  # daily
             wd = workdays_between(sd, ed)
             hours = wd * WORKDAY_HOURS
 
+        # Guard: require a positive hours value after all logic above
         if hours <= 0:
-            flash("Requested hours must be greater than zero.", "warning")
+            flash("Requested hours must be greater than zero, or provide a valid Start and End time.", "warning")
             return render_template("new_request.html", title="New Request", workday=WORKDAY_HOURS)
 
+        # Capacity check only for day/half-day (original behavior preserved)
         if hours > capacity_hours and mode not in (RequestMode.hourly, RequestMode.halfday):
             flash(f"Requested {hours:.2f} exceeds capacity {capacity_hours:.2f} for that range.", "warning")
             return render_template("new_request.html", title="New Request", workday=WORKDAY_HOURS)
+
+        # Normalize stored time strings to "HH:MM" or None
+        def _norm(t):
+            if not t:
+                return None
+            t = t.strip()
+            return t[:5] if len(t) >= 5 else t
 
         req = LeaveRequest(
             user_id=current_user.id,
@@ -500,8 +537,8 @@ def new_request():
             mode=mode,
             start_date=sd,
             end_date=ed,
-            start_time=request.form.get("start_time") or None,
-            end_time=request.form.get("end_time") or None,
+            start_time=_norm(start_time_str) if mode == RequestMode.hourly else None,
+            end_time=_norm(end_time_str) if mode == RequestMode.hourly else None,
             hours=hours,
             reason=reason,
             is_school_related=is_school
