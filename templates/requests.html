@@ -1,10 +1,17 @@
 {% extends "base.html" %}
 {% macro fmt12(hhmm) -%}
-  {# Converts "HH:MM" to "h:MM AM/PM" #}
-  {% if not hhmm %}—{% else %}
-    {% set parts = hhmm.split(':') %}
-    {% set HH = parts[0]|int %}
-    {% set MM = parts[1] %}
+  {# Accepts "HH:MM" string or datetime.time and renders "h:MM AM/PM" #}
+  {% if not hhmm %}
+    —
+  {% else %}
+    {% if hhmm.strftime is defined %}
+      {% set HH = hhmm.hour %}
+      {% set MM = "%02d"|format(hhmm.minute) %}
+    {% else %}
+      {% set parts = (hhmm|string).split(':') %}
+      {% set HH = parts[0]|int %}
+      {% set MM = parts[1] %}
+    {% endif %}
     {% set ampm = 'AM' if HH < 12 else 'PM' %}
     {% set h12 = 12 if HH == 0 or HH == 12 else HH - 12 if HH > 12 else HH %}
     {{ h12 }}:{{ MM }} {{ ampm }}
@@ -13,7 +20,6 @@
 {% block content %}
 <h2>My Requests</h2>
 
-{# ==== ADMIN "At a Glance" tiles (unchanged) ==== #}
 {% if is_admin and staff_overview %}
   <div class="card" style="padding:1rem 1rem 0.5rem;">
     <h3 style="margin-top:0;margin-bottom:.5rem;">Employees at a Glance</h3>
@@ -44,40 +50,29 @@
   </div>
 {% endif %}
 
-{# ==== ADMIN "Daily Controls" (kept as-is) ==== #}
 {% if is_admin %}
   <div class="card" style="padding:1rem; margin-top:1rem;">
     <form method="get" action="{{ url_for('my_requests') }}" style="display:flex; gap:.5rem; align-items:end; flex-wrap:wrap;">
       <input type="hidden" name="status" value="{{ status }}">
       <input type="hidden" name="start" value="{{ start }}">
       <input type="hidden" name="end" value="{{ end }}">
-
       <div>
         <label for="day">Show submissions for day</label>
         <input class="input" id="day" name="day" type="date"
                value="{{ selected_day if selected_day and selected_day != 'all' else ('' if not selected_day else selected_day) }}"
                style="min-width: 180px;">
       </div>
-      <div>
-        <button type="submit" class="btn">Apply</button>
-      </div>
-      <div>
-        <a class="btn" href="{{ url_for('my_requests', status=status, start=start, end=end, day='all') }}">Show All</a>
-      </div>
+      <div><button type="submit" class="btn">Apply</button></div>
+      <div><a class="btn" href="{{ url_for('my_requests', status=status, start=start, end=end, day='all') }}">Show All</a></div>
       {% if selected_day and selected_day != 'all' %}
-        <div style="margin-left:auto; opacity:.75;">
-          Viewing: {{ selected_day }}
-        </div>
+        <div style="margin-left:auto; opacity:.75;">Viewing: {{ selected_day }}</div>
       {% else %}
-        <div style="margin-left:auto; opacity:.75;">
-          Viewing: All submissions
-        </div>
+        <div style="margin-left:auto; opacity:.75;">Viewing: All submissions</div>
       {% endif %}
     </form>
   </div>
 {% endif %}
 
-{# ==== Requests Table ==== #}
 <div class="card">
   {% if reqs %}
     <table class="table">
@@ -103,26 +98,20 @@
           <td>{{ r.kind }}</td>
           <td>{{ r.mode }}</td>
 
-          {# Dates with time frame (when hourly times exist) #}
           <td>
             {{ r.start_date }} → {{ r.end_date }}
             {% if r.mode|lower == 'hourly' and r.start_time and r.end_time %}
-              {% set _st = (r.start_time.strftime("%H:%M") if r.start_time.strftime is defined else (r.start_time|string)[:5]) %}
-              {% set _et = (r.end_time.strftime("%H:%M") if r.end_time.strftime is defined else (r.end_time|string)[:5]) %}
-              &nbsp;({{ fmt12(_st) }} – {{ fmt12(_et) }})
+              &nbsp;({{ fmt12(r.start_time) }} – {{ fmt12(r.end_time) }})
             {% endif %}
           </td>
 
           <td>{{ "%.2f"|format(r.hours) }}</td>
 
-          {# Keep the little status subline with times, too #}
           <td>
             {{ r.status }}
             {% if r.mode|lower == 'hourly' and r.start_time and r.end_time %}
               <div style="font-size:.85em; opacity:.75; margin-top:.15rem;">
-                {% set _st2 = (r.start_time.strftime("%H:%M") if r.start_time.strftime is defined else (r.start_time|string)[:5]) %}
-                {% set _et2 = (r.end_time.strftime("%H:%M") if r.end_time.strftime is defined else (r.end_time|string)[:5]) %}
-                {{ fmt12(_st2) }} – {{ fmt12(_et2) }}
+                {{ fmt12(r.start_time) }} – {{ fmt12(r.end_time) }}
               </div>
             {% endif %}
           </td>
@@ -134,23 +123,17 @@
               <ul style="margin:.25rem 0 .5rem 1rem; padding:0;">
                 {% for s in r.subs %}
                   <li style="margin-bottom:.25rem;">
-                    <form method="post"
-                          action="{{ url_for('update_substitute', req_id=r.id, sub_id=s.id) }}"
+                    <form method="post" action="{{ url_for('update_substitute', req_id=r.id, sub_id=s.id) }}"
                           style="display:inline-flex; gap:.25rem; align-items:center; flex-wrap:wrap;">
-                      <input class="input" type="text" name="sub_name"
-                             value="{{ s.name }}" style="width:160px;">
-                      <input class="input" type="number" step="0.25" name="sub_hours"
-                             value="{{ '%.2f'|format(s.hours) }}" style="width:90px;">
+                      <input class="input" type="text" name="sub_name" value="{{ s.name }}" style="width:160px;">
+                      <input class="input" type="number" step="0.25" name="sub_hours" value="{{ '%.2f'|format(s.hours) }}" style="width:90px;">
                       {% if is_admin and r.status in ['Pending','Approved'] %}
                         <button type="submit" class="btn btn-sm">Update</button>
                       {% endif %}
                     </form>
                     {% if is_admin and r.status in ['Pending','Approved'] %}
-                      <form method="post"
-                            action="{{ url_for('delete_substitute', req_id=r.id, sub_id=s.id) }}"
-                            style="display:inline;">
-                        <button type="submit" class="btn btn-sm"
-                                style="background:#9b1c1c;">Delete</button>
+                      <form method="post" action="{{ url_for('delete_substitute', req_id=r.id, sub_id=s.id) }}" style="display:inline;">
+                        <button type="submit" class="btn btn-sm" style="background:#9b1c1c;">Delete</button>
                       </form>
                     {% endif %}
                   </li>
@@ -163,8 +146,7 @@
             {% endif %}
 
             {% if is_admin and r.status in ['Pending','Approved'] %}
-              <form method="post" action="{{ url_for('add_substitute', req_id=r.id) }}"
-                    style="display:flex; gap:.25rem; flex-wrap:wrap;">
+              <form method="post" action="{{ url_for('add_substitute', req_id=r.id) }}" style="display:flex; gap:.25rem; flex-wrap:wrap;">
                 <input class="input" type="text" name="sub_name" placeholder="Substitute name" required style="flex:1 1 180px;">
                 <input class="input" type="number" step="0.25" name="sub_hours" placeholder="Hours" style="width:100px;">
                 <button type="submit" class="btn btn-sm">Add Sub</button>
@@ -172,22 +154,25 @@
             {% endif %}
           </td>
 
-          {# Actions — case-insensitive status checks so Cancel reliably shows #}
+          {# Actions – owner can always Cancel pending, even if admin #}
           <td>
-            {% if r.status and r.status|lower == "pending" %}
-              {% if is_admin %}
+            {% set st = (r.status or '')|lower %}
+            {% set is_owner = (me is defined and me.id is defined and r.user_id == me.id) or (me is defined and r.user is defined and r.user.username == me.username) %}
+
+            {% if st == "pending" %}
+              {% if is_owner %}
+                <form method="post" action="{{ url_for('cancel', req_id=r.id) }}" style="display:inline;">
+                  <button type="submit" class="btn btn-sm">Cancel</button>
+                </form>
+              {% elif is_admin %}
                 <form method="post" action="{{ url_for('approve', req_id=r.id) }}" style="display:inline;">
                   <button type="submit" class="btn btn-sm">Approve</button>
                 </form>
                 <form method="post" action="{{ url_for('disapprove', req_id=r.id) }}" style="display:inline;">
                   <button type="submit" class="btn btn-sm" style="background:#9b1c1c;">Disapprove</button>
                 </form>
-              {% else %}
-                <form method="post" action="{{ url_for('cancel', req_id=r.id) }}" style="display:inline;">
-                  <button type="submit" class="btn btn-sm">Cancel</button>
-                </form>
               {% endif %}
-            {% elif r.status and r.status|lower == "approved" and (r.user_id == me.id or is_admin) %}
+            {% elif st == "approved" and (is_owner or is_admin) %}
               <form method="post" action="{{ url_for('cancel', req_id=r.id) }}" style="display:inline;">
                 <button type="submit" class="btn btn-sm">Cancel</button>
               </form>
