@@ -38,7 +38,7 @@
       <input class="input" type="date" name="end_date" id="end_date" required>
     </div>
 
-    <!-- Time range (only for Hourly) -->
+    <!-- Time range (Hourly only) -->
     <div class="hourly-only">
       <label for="start_time">Start Time</label>
       <select class="input" name="start_time" id="start_time">
@@ -84,7 +84,7 @@
   </form>
 
   <p style="margin-top:.75rem;opacity:.7;">
-    <strong>Note:</strong> For <em>Hourly</em> requests, hours will be calculated automatically from the selected Start and End times and shown on the “My Requests” page.
+    <strong>Note:</strong> For <em>Hourly</em> requests, hours are calculated automatically from the selected Start and End times and shown on the “My Requests” page.
   </p>
 </div>
 
@@ -106,7 +106,6 @@
         if (startTime) startTime.value = '';
         if (endTime) endTime.value = '';
       } else {
-        // default end date to start date if empty/different
         if (startDate && endDate && startDate.value && endDate.value !== startDate.value) {
           endDate.value = startDate.value;
         }
