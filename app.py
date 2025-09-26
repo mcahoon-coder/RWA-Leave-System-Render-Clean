@@ -61,7 +61,6 @@ MAIL_USERNAME = os.environ.get("MAIL_USERNAME")
 MAIL_PASSWORD = os.environ.get("MAIL_PASSWORD")
 MAIL_DEFAULT_SENDER = os.environ.get("MAIL_USERNAME")
 
-
 # comma-separated list of admin emails for notifications
 ADMIN_EMAILS_ENV = [
     e.strip() for e in os.environ.get("ADMIN_EMAILS", "").split(",") if e.strip()
@@ -77,35 +76,35 @@ def send_email(to_addrs, subject, body):
             to_addrs = [to_addrs]
         to_addrs = [a for a in to_addrs if a]
 
-        if not MAIL_HOST or not MAIL_FROM:
-            app.logger.warning("Email skipped: MAIL_HOST or MAIL_FROM not set.")
+        if not MAIL_SERVER or not MAIL_USERNAME:
+            app.logger.warning("Email skipped: MAIL_SERVER or MAIL_USERNAME not set.")
             return False, "SMTP not configured"
 
         msg = EmailMessage()
-        msg["From"] = MAIL_FROM
+        msg["From"] = MAIL_DEFAULT_SENDER
         msg["To"] = ", ".join(to_addrs)
         msg["Subject"] = subject
         msg.set_content(body)
 
         if MAIL_USE_TLS:
             context = ssl.create_default_context()
-            with smtplib.SMTP(MAIL_HOST, MAIL_PORT) as server:
+            with smtplib.SMTP(MAIL_SERVER, MAIL_PORT) as server:
                 server.ehlo()
                 server.starttls(context=context)
                 server.ehlo()
-                if MAIL_USER:
-                    server.login(MAIL_USER, MAIL_PASSWORD)
+                if MAIL_USERNAME and MAIL_PASSWORD:
+                    server.login(MAIL_USERNAME, MAIL_PASSWORD)
                 server.send_message(msg)
         else:
-            with smtplib.SMTP(MAIL_HOST, MAIL_PORT) as server:
-                if MAIL_USER:
-                    server.login(MAIL_USER, MAIL_PASSWORD)
+            with smtplib.SMTP(MAIL_SERVER, MAIL_PORT) as server:
+                if MAIL_USERNAME and MAIL_PASSWORD:
+                    server.login(MAIL_USERNAME, MAIL_PASSWORD)
                 server.send_message(msg)
+
         return True, "Sent"
     except Exception as e:
         app.logger.error(f"Email send failed: {e}")
         return False, f"Failed: {e}"
-
 # =========================================================
 # Models & constants
 # =========================================================
