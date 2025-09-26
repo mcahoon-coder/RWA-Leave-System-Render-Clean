@@ -53,13 +53,13 @@ def add_no_cache_headers(resp):
 # =========================================================
 # Email settings (env vars)
 # =========================================================
-MAIL_SERVER = "smtp.gmail.com"
-MAIL_PORT = 587
-MAIL_USE_TLS = True
+MAIL_SERVER = os.environ.get("MAIL_HOST", "smtp.gmail.com")
+MAIL_PORT = int(os.environ.get("MAIL_PORT", 587))
+MAIL_USE_TLS = os.environ.get("MAIL_USE_TLS", "TRUE").lower() in ("true", "1", "yes")
 MAIL_USE_SSL = False
-MAIL_USERNAME = os.environ.get("MAIL_USERNAME")
+MAIL_USERNAME = os.environ.get("MAIL_USER")
 MAIL_PASSWORD = os.environ.get("MAIL_PASSWORD")
-MAIL_DEFAULT_SENDER = os.environ.get("MAIL_USERNAME")
+MAIL_DEFAULT_SENDER = os.environ.get("MAIL_USER")
 
 # comma-separated list of admin emails for notifications
 ADMIN_EMAILS_ENV = [
