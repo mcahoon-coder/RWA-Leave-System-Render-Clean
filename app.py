@@ -34,6 +34,8 @@ elif db_url.startswith("postgresql://") and "+psycopg" not in db_url:
 app.config["SQLALCHEMY_DATABASE_URI"] = db_url
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {"pool_pre_ping": True}
+"pool_recycle": 300      # recycle connections every 5 minutes
+    }
 
 db = SQLAlchemy(app)
 
@@ -50,12 +52,13 @@ def add_no_cache_headers(resp):
 # =========================================================
 # Email settings (env vars)
 # =========================================================
-MAIL_HOST = os.environ.get("MAIL_HOST", "")          # e.g. smtp.gmail.com
-MAIL_PORT = int(os.environ.get("MAIL_PORT", "587"))
-MAIL_USER = os.environ.get("MAIL_USER", "")
-MAIL_PASSWORD = os.environ.get("MAIL_PASSWORD", "")
-MAIL_USE_TLS = os.environ.get("MAIL_USE_TLS", "true").lower() == "true"
-MAIL_FROM = os.environ.get("MAIL_FROM", MAIL_USER or "no-reply@example.com")
+ MAIL_SERVER = 'smtp.gmail.com'
+    MAIL_PORT = 587
+    MAIL_USE_TLS = True
+    MAIL_USE_SSL = False
+    MAIL_USERNAME = os.environ.get('MAIL_USERNAME')
+    MAIL_PASSWORD = os.environ.get('MAIL_PASSWORD')
+    MAIL_DEFAULT_SENDER = os.environ.get('MAIL_USERNAME')
 
 # comma-separated list of admin emails for notifications
 ADMIN_EMAILS_ENV = [
