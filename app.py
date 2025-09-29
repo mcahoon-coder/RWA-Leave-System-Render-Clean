@@ -67,44 +67,29 @@ ADMIN_EMAILS_ENV = [
 ]
 
 def send_email(to_addrs, subject, body):
-    """Send plain-text email. Returns (ok: bool, msg: str). Safe no-op if not configured."""
+    """Send an email via SMTP using app config."""
     try:
-        if not to_addrs:
-            app.logger.warning("Email skipped: no recipients provided.")
-            return False, "No recipients"
-        if isinstance(to_addrs, str):
-            to_addrs = [to_addrs]
-        to_addrs = [a for a in to_addrs if a]
-
         if not MAIL_SERVER or not MAIL_USERNAME:
             app.logger.warning("Email skipped: MAIL_SERVER or MAIL_USERNAME not set.")
             return False, "SMTP not configured"
 
-        msg = EmailMessage()
+        msg = MIMEText(body)
+        msg["Subject"] = subject
         msg["From"] = MAIL_DEFAULT_SENDER
         msg["To"] = ", ".join(to_addrs)
-        msg["Subject"] = subject
-        msg.set_content(body)
 
-        if MAIL_USE_TLS:
-            context = ssl.create_default_context()
-            with smtplib.SMTP(MAIL_SERVER, MAIL_PORT) as server:
-                server.ehlo()
-                server.starttls(context=context)
-                server.ehlo()
-                if MAIL_USERNAME and MAIL_PASSWORD:
-                    server.login(MAIL_USERNAME, MAIL_PASSWORD)
-                server.send_message(msg)
-        else:
-            with smtplib.SMTP(MAIL_SERVER, MAIL_PORT) as server:
-                if MAIL_USERNAME and MAIL_PASSWORD:
-                    server.login(MAIL_USERNAME, MAIL_PASSWORD)
-                server.send_message(msg)
+        with smtplib.SMTP(MAIL_SERVER, MAIL_PORT) as server:
+            if MAIL_USE_TLS:
+                server.starttls()
+            server.login(MAIL_USERNAME, MAIL_PASSWORD)
+            server.sendmail(MAIL_DEFAULT_SENDER, to_addrs, msg.as_string())
 
-        return True, "Sent"
+        app.logger.info(f"Email sent to {to_addrs}")
+        return True, "sent"
+
     except Exception as e:
         app.logger.error(f"Email send failed: {e}")
-        return False, f"Failed: {e}"
+        return False, str(e)
 # =========================================================
 # Models & constants
 # =========================================================
