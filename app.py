@@ -826,6 +826,40 @@ def user_requests(user_id):
     requests = LeaveRequest.query.filter_by(user_id=user_id).order_by(LeaveRequest.start_date.desc()).all()
     return render_template("user_requests.html", user=user, requests=requests)
 
+
+@app.route("/user/<int:user_id>/requests/export")
+@login_required
+def export_user_requests(user_id):
+    if not current_user.is_admin:
+        abort(403)
+
+    from io import StringIO
+    import csv
+
+    user = User.query.get_or_404(user_id)
+    reqs = LeaveRequest.query.filter_by(user_id=user.id).order_by(LeaveRequest.start_date).all()
+
+    # Create CSV in memory
+    output = StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["ID", "Kind", "Mode", "Start Date", "End Date", "Start Time", "End Time", "Hours", "Status", "School Related", "Substitutes"])
+
+    for r in reqs:
+        subs = ", ".join([f"{s.name} ({s.hours}h)" for s in r.subs]) if r.subs else (r.substitute or "")
+        writer.writerow([
+            r.id, r.kind, r.mode, r.start_date, r.end_date,
+            r.start_time.strftime("%I:%M %p") if r.start_time else "",
+            r.end_time.strftime("%I:%M %p") if r.end_time else "",
+            f"{r.hours:.2f}", r.status, "Yes" if r.is_school_related else "No", subs
+        ])
+
+    output.seek(0)
+    filename = f"{user.username}_leave_history.csv"
+    return Response(
+        output.getvalue(),
+        mimetype="text/csv",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
 # ---------- Manage Users (admin) ----------
 @app.route("/admin/users", methods=["GET"])
 @login_required
