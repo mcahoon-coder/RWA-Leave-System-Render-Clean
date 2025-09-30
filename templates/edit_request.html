@@ -4,37 +4,44 @@
     <h2>Edit Request #{{ r.id }}</h2>
 
     <form method="post" class="form-grid">
-        <div class="form-row">
-            <label class="label" for="start_date">Start Date</label>
-            <input type="date" id="start_date" name="start_date" class="input"
-                   value="{{ r.start_date }}">
+
+        <!-- Dates side by side -->
+        <div class="form-row" style="display:flex; gap:1rem; flex-wrap:wrap;">
+            <div style="flex:1; min-width:180px;">
+                <label class="label" for="start_date">Start Date</label>
+                <input type="date" id="start_date" name="start_date" class="input"
+                       value="{{ r.start_date }}">
+            </div>
+            <div style="flex:1; min-width:180px;">
+                <label class="label" for="end_date">End Date</label>
+                <input type="date" id="end_date" name="end_date" class="input"
+                       value="{{ r.end_date }}">
+            </div>
         </div>
 
-        <div class="form-row">
-            <label class="label" for="end_date">End Date</label>
-            <input type="date" id="end_date" name="end_date" class="input"
-                   value="{{ r.end_date }}">
+        <!-- Times side by side -->
+        <div class="form-row" style="display:flex; gap:1rem; flex-wrap:wrap; margin-top:1rem;">
+            <div style="flex:1; min-width:180px;">
+                <label class="label" for="start_time">Start Time</label>
+                <input type="time" id="start_time" name="start_time" class="input"
+                       value="{{ r.start_time }}">
+            </div>
+            <div style="flex:1; min-width:180px;">
+                <label class="label" for="end_time">End Time</label>
+                <input type="time" id="end_time" name="end_time" class="input"
+                       value="{{ r.end_time }}">
+            </div>
         </div>
 
-        <div class="form-row">
-            <label class="label" for="start_time">Start Time</label>
-            <input type="time" id="start_time" name="start_time" class="input"
-                   value="{{ r.start_time }}">
-        </div>
-
-        <div class="form-row">
-            <label class="label" for="end_time">End Time</label>
-            <input type="time" id="end_time" name="end_time" class="input"
-                   value="{{ r.end_time }}">
-        </div>
-
-        <div class="form-row">
-            <label class="label" for="hours">Hours</label>
+        <!-- Hours field (fixed layout) -->
+        <div class="form-row" style="display:flex; align-items:center; gap:.5rem; max-width:240px; margin-top:1rem;">
+            <label class="label" for="hours" style="margin:0; white-space:nowrap;">Hours</label>
             <input type="number" step="0.25" id="hours" name="hours" class="input"
-                   value="{{ r.hours }}">
+                   value="{{ r.hours }}" style="flex:1; min-width:80px;">
         </div>
 
-        <div class="form-row mt-3">
+        <!-- Buttons side by side -->
+        <div class="form-row mt-3" style="display:flex; gap:.75rem; align-items:center;">
             <button type="submit" class="btn btn-success">Save Changes</button>
             <a href="{{ url_for('my_requests') }}" class="btn btn-secondary">Cancel</a>
         </div>
