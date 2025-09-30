@@ -38,7 +38,7 @@
                     <th>Kind</th>
                     <th>Mode</th>
                     <th class="date-col">Dates</th>
-                    <th>Times</th>
+                    <th class="date-col">Times</th>
                     <th>Hours</th>
                     <th>Status</th>
                     <th>School?</th>
@@ -54,7 +54,7 @@
                     <td>{{ r.kind }}</td>
                     <td>{{ r.mode }}</td>
                     <td class="date-col">{{ r.start_date }} → {{ r.end_date }}</td>
-                    <td>
+                    <td class="date-col">
                         {% if r.start_time %}{{ r.start_time|h12 }}{% else %}-{% endif %}
                         →
                         {% if r.end_time %}{{ r.end_time|h12 }}{% else %}-{% endif %}
