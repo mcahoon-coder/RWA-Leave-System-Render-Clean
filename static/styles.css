@@ -209,3 +209,10 @@ body {
 .mb-1 { margin-bottom: .5rem; }
 .mb-2 { margin-bottom: 1rem; }
 .center { display:flex; justify-content:center; align-items:center; }
+
+/* ==== NEW: Smaller date columns ==== */
+.date-col {
+  font-size: 0.8rem;
+  white-space: nowrap;
+  color: #444;
+}
