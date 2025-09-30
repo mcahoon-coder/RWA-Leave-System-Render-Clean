@@ -421,7 +421,7 @@ def admin_email_test():
     body = (
         "This is a test email from the RWA Leave System.\n\n"
         f"Time: {datetime.utcnow().isoformat()}Z\n"
-        f"From: {MAIL_FROM}\nHost: {MAIL_HOST}:{MAIL_PORT} TLS={MAIL_USE_TLS}\n"
+        f"From: {MAIL_DEFAULT_SENDER}\nHost: {MAIL_SERVER}:{MAIL_PORT} TLS={MAIL_USE_TLS}\n"
         f"Recipients: {', '.join(recipients) if recipients else '(none)'}\n"
     )
 
@@ -697,7 +697,6 @@ def approve(req_id):
     if r.status != RequestStatus.pending:
         flash("Request not pending.", "warning"); return redirect(url_for("my_requests"))
     u = User.query.get(r.user_id)
-    # If not school-related, deduct from balance
     if not r.is_school_related:
         u.hours_balance = float(u.hours_balance or 0.0) - float(r.hours or 0.0)
     r.status = RequestStatus.approved
@@ -715,6 +714,7 @@ def approve(req_id):
         f"Dates: {r.start_date} to {r.end_date}\n\n"
         f"Remaining balance: {u.hours_balance:.2f} hours\n"
     )
+
     ok, emsg = send_email([u.email] + admin_emails(), subj, body)
     if not ok:
         flash(f"Notice: approval email not sent ({emsg}).", "warning")
@@ -745,6 +745,7 @@ def disapprove(req_id):
         f"Substitutes: {subs_text}\n"
         f"Dates: {r.start_date} to {r.end_date}\n"
     )
+
     ok, emsg = send_email([u.email] + admin_emails(), subj, body)
     if not ok:
         flash(f"Notice: disapproval email not sent ({emsg}).", "warning")
@@ -761,7 +762,6 @@ def cancel(req_id):
         return redirect(url_for("my_requests"))
     u = User.query.get(r.user_id)
     if r.status == RequestStatus.approved and not r.is_school_related:
-        # Restore hours (can move negative toward zero)
         u.hours_balance = float(u.hours_balance or 0.0) + float(r.hours or 0.0)
     r.status = RequestStatus.cancelled
     r.decided_at = datetime.utcnow()
@@ -777,6 +777,7 @@ def cancel(req_id):
         f"Dates: {r.start_date} to {r.end_date}\n"
         f"Balance is now: {u.hours_balance:.2f} hours\n"
     )
+
     recipients = admin_emails()
     if u.email:
         recipients = [u.email] + recipients
