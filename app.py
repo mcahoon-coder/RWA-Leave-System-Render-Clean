@@ -12,6 +12,8 @@ from datetime import datetime, date, timedelta, time as dt_time
 from zoneinfo import ZoneInfo
 import os, smtplib, ssl, io, csv
 from email.message import EmailMessage
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 from sqlalchemy import text
 import xlsxwriter  # Excel export (in-memory, safe on Render)
 
@@ -90,6 +92,7 @@ def send_email(to_addrs, subject, body):
     except Exception as e:
         app.logger.error(f"Email send failed: {e}")
         return False, str(e)
+
 # =========================================================
 # Models & constants
 # =========================================================
