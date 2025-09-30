@@ -53,15 +53,15 @@ def add_no_cache_headers(resp):
     return resp
 
 # =========================================================
-# Email settings (env vars)
+# Email settings (env vars) — ✅ FIXED to match Render
 # =========================================================
 MAIL_SERVER = os.environ.get("MAIL_HOST", "smtp.gmail.com")
 MAIL_PORT = int(os.environ.get("MAIL_PORT", 587))
 MAIL_USE_TLS = os.environ.get("MAIL_USE_TLS", "TRUE").lower() in ("true", "1", "yes")
 MAIL_USE_SSL = False
-MAIL_USERNAME = os.environ.get("MAIL_USER")      # 🔧 FIX: now uses MAIL_USER
-MAIL_PASSWORD = os.environ.get("MAIL_PASSWORD")
-MAIL_DEFAULT_SENDER = os.environ.get("MAIL_USER")
+MAIL_USERNAME = os.environ.get("MAIL_USER")        # Gmail login
+MAIL_PASSWORD = os.environ.get("MAIL_PASSWORD")    # Gmail app password
+MAIL_DEFAULT_SENDER = os.environ.get("MAIL_USER")  # from address
 
 # comma-separated list of admin emails for notifications
 ADMIN_EMAILS_ENV = [
@@ -92,7 +92,6 @@ def send_email(to_addrs, subject, body):
     except Exception as e:
         app.logger.error(f"Email send failed: {e}")
         return False, str(e)
-
 # =========================================================
 # Models & constants
 # =========================================================
