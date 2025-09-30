@@ -790,6 +790,28 @@ def cancel(req_id):
     flash("Cancelled.", "secondary")
     return redirect(request.referrer or url_for("my_requests"))
 
+@app.route("/requests/<int:req_id>/edit", methods=["GET", "POST"])
+@login_required
+def edit_request(req_id):
+    if not current_user.is_admin:  # Make sure only admins can edit
+        abort(403)
+
+    r = LeaveRequest.query.get_or_404(req_id)
+
+    if request.method == "POST":
+        # Update times/dates/hours
+        r.start_date = request.form.get("start_date") or r.start_date
+        r.end_date = request.form.get("end_date") or r.end_date
+        r.start_time = request.form.get("start_time") or r.start_time
+        r.end_time = request.form.get("end_time") or r.end_time
+        r.hours = float(request.form.get("hours") or r.hours)
+
+        db.session.commit()
+        flash("Request updated successfully.", "success")
+        return redirect(url_for("my_requests"))
+
+    return render_template("edit_request.html", r=r)
+
 # ---------- Manage Users (admin) ----------
 @app.route("/admin/users", methods=["GET"])
 @login_required
