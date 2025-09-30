@@ -120,6 +120,10 @@ class User(UserMixin, db.Model):
     # Optional display name for staff
     staff_name = db.Column(db.String(150))
 
+    @property
+    def is_admin(self):
+        return (self.role or "").lower() == "admin"
+
 class LeaveRequest(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
