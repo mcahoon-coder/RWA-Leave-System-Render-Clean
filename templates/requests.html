@@ -9,7 +9,7 @@
       {% for s in staff_overview %}
         <div style="background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:.75rem;box-shadow:0 1px 2px rgba(0,0,0,.04);display:flex;align-items:center;justify-content:space-between;">
           <div>
-            <!-- Username now links to their history -->
+            <!-- Username links to their request history -->
             <div style="font-weight:600;">
               <a href="{{ url_for('user_requests', user_id=s.id) }}" style="text-decoration:none; color:inherit;">
                 {{ s.username }}
@@ -91,17 +91,45 @@
           <td>{{ "%.2f"|format(r.hours) }}</td>
           <td>{{ r.status }}</td>
           <td>{{ "Yes" if r.is_school_related else "No" }}</td>
+
+          <!-- Substitutes block (restored) -->
           <td>
             {% if r.subs and r.subs|length > 0 %}
-              {% for s in r.subs %}
-                {{ s.name }} ({{ "%.2f"|format(s.hours) }}h){% if not loop.last %}, {% endif %}
-              {% endfor %}
+              <ul style="margin:.25rem 0 .5rem 1rem; padding:0;">
+                {% for s in r.subs %}
+                  <li style="margin-bottom:.25rem;">
+                    <form method="post" action="{{ url_for('update_substitute', req_id=r.id, sub_id=s.id) }}"
+                          style="display:inline-flex; gap:.25rem; align-items:center; flex-wrap:wrap;">
+                      <input class="input" type="text" name="sub_name" value="{{ s.name }}" style="width:160px;">
+                      <input class="input" type="number" step="0.25" name="sub_hours" value="{{ '%.2f'|format(s.hours) }}" style="width:90px;">
+                      {% if is_admin and r.status in ['Pending','Approved'] %}
+                        <button type="submit" class="btn btn-sm">Update</button>
+                      {% endif %}
+                    </form>
+                    {% if is_admin and r.status in ['Pending','Approved'] %}
+                      <form method="post" action="{{ url_for('delete_substitute', req_id=r.id, sub_id=s.id) }}" style="display:inline;">
+                        <button type="submit" class="btn btn-sm" style="background:#9b1c1c;">Delete</button>
+                      </form>
+                    {% endif %}
+                  </li>
+                {% endfor %}
+              </ul>
             {% elif r.substitute %}
-              {{ r.substitute }}
+              <div style="margin-bottom:.5rem;">{{ r.substitute }}</div>
             {% else %}
-              –
+              <div style="margin-bottom:.5rem;">–</div>
+            {% endif %}
+
+            {% if is_admin and r.status in ['Pending','Approved'] %}
+              <form method="post" action="{{ url_for('add_substitute', req_id=r.id) }}" style="display:flex; gap:.25rem; flex-wrap:wrap;">
+                <input class="input" type="text" name="sub_name" placeholder="Substitute name" required style="flex:1 1 180px;">
+                <input class="input" type="number" step="0.25" name="sub_hours" placeholder="Hours" style="width:100px;">
+                <button type="submit" class="btn btn-sm">Add Sub</button>
+              </form>
             {% endif %}
           </td>
+
+          <!-- Actions -->
           <td>
             {% if r.status == "Pending" and r.user_id == me.id %}
               <form method="post" action="{{ url_for('cancel', req_id=r.id) }}" style="display:inline;">
