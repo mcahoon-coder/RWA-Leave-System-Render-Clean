@@ -3,31 +3,6 @@
 <div class="container mt-4">
     <h2>My Requests</h2>
 
-    <!-- Employees at a Glance (top, four columns, balances + pending flag) -->
-    {% if is_admin and staff_overview %}
-        <h3 class="mt-3">Employees at a Glance</h3>
-        <div class="row">
-            {% for u in staff_overview %}
-            <div class="col-md-3 mb-3">
-                <div class="card {% if u.has_pending %}border-warning{% endif %}">
-                    <div class="card-body">
-                        <h5 class="card-title">{{ u.username }}</h5>
-                        <p class="card-text">
-                            Balance:
-                            <span class="{% if u.hours_balance >= 0 %}text-success{% else %}text-danger{% endif %}">
-                                {{ "%.2f"|format(u.hours_balance) }}h
-                            </span>
-                        </p>
-                        {% if u.has_pending %}
-                            <span class="badge bg-warning text-dark">Pending</span>
-                        {% endif %}
-                    </div>
-                </div>
-            </div>
-            {% endfor %}
-        </div>
-    {% endif %}
-
     <!-- Filters -->
     <form method="get" class="row g-3 mb-3">
         <div class="col-auto">
@@ -53,8 +28,33 @@
         </div>
     </form>
 
+    <!-- Staff overview for admins -->
+    {% if is_admin and staff_overview %}
+        <h3 class="mt-4">Employees at a Glance</h3>
+        <div class="row">
+            {% for u in staff_overview %}
+            <div class="col-md-3 mb-3">
+                <div class="card {% if u.has_pending %}border-warning{% endif %}">
+                    <div class="card-body text-center">
+                        <h5 class="card-title">{{ u.username }}</h5>
+                        <p class="card-text">
+                            Balance:
+                            <span style="color: {% if u.hours_balance < 0 %}red{% else %}green{% endif %}; font-weight:bold;">
+                                {{ "%.2f"|format(u.hours_balance) }}h
+                            </span>
+                        </p>
+                        {% if u.has_pending %}
+                            <span class="badge bg-warning text-dark">Pending</span>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    {% endif %}
+
     <!-- Requests Table -->
-    <div class="table-responsive">
+    <div class="table-responsive mt-4">
         <table class="table table-striped align-middle">
             <thead>
                 <tr>
