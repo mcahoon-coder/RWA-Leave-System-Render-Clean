@@ -1,134 +1,126 @@
 {% extends "base.html" %}
 {% block content %}
-<div class="container mt-4">
-    <h2>My Requests</h2>
+<h2>My Requests</h2>
 
-    <!-- Filters -->
-    <form method="get" class="row g-3 mb-3">
-        <div class="col-auto">
-            <label for="status" class="form-label">Status</label>
-            <select name="status" id="status" class="form-select">
-                <option value="all" {% if status=='all' %}selected{% endif %}>All</option>
-                <option value="pending" {% if status=='pending' %}selected{% endif %}>Pending</option>
-                <option value="approved" {% if status=='approved' %}selected{% endif %}>Approved</option>
-                <option value="disapproved" {% if status=='disapproved' %}selected{% endif %}>Disapproved</option>
-                <option value="cancelled" {% if status=='cancelled' %}selected{% endif %}>Cancelled</option>
-            </select>
-        </div>
-        <div class="col-auto">
-            <label for="start" class="form-label">Start Date</label>
-            <input type="date" class="form-control" name="start" id="start" value="{{ start }}">
-        </div>
-        <div class="col-auto">
-            <label for="end" class="form-label">End Date</label>
-            <input type="date" class="form-control" name="end" id="end" value="{{ end }}">
-        </div>
-        <div class="col-auto align-self-end">
-            <button type="submit" class="btn btn-primary">Filter</button>
-        </div>
-    </form>
-
-    <!-- Requests Table -->
-    <div class="table-responsive">
-        <table class="table table-striped align-middle">
-            <thead>
-                <tr>
-                    <th>ID</th>
-                    <th>User</th>
-                    <th>Kind</th>
-                    <th>Mode</th>
-                    <th class="date-col">Dates</th>
-                    <th>Times</th>
-                    <th>Hours</th>
-                    <th>Status</th>
-                    <th>School?</th>
-                    <th>Substitutes</th>
-                    <th>Actions</th>
-                </tr>
-            </thead>
-            <tbody>
-            {% for r in reqs %}
-                <tr>
-                    <td>{{ r.id }}</td>
-                    <td>
-                        <a href="{{ url_for('user_requests', user_id=r.user.id) }}" style="text-decoration:none; color:inherit;">
-                            {{ r.user.username }}
-                        </a>
-                    </td>
-                    <td>{{ r.kind }}</td>
-                    <td>{{ r.mode }}</td>
-                    <td class="date-col">{{ r.start_date }} → {{ r.end_date }}</td>
-                    <td>
-                        {% if r.start_time %}{{ r.start_time|h12 }}{% else %}-{% endif %}
-                        →
-                        {% if r.end_time %}{{ r.end_time|h12 }}{% else %}-{% endif %}
-                    </td>
-                    <td>{{ "%.2f"|format(r.hours) }}</td>
-                    <td>{{ r.status }}</td>
-                    <td>{{ "Yes" if r.is_school_related else "No" }}</td>
-                    <td>
-                        {% if r.subs %}
-                            {% for s in r.subs %}
-                                {{ s.name }} ({{ "%.2f"|format(s.hours) }}h){% if not loop.last %}, {% endif %}
-                            {% endfor %}
-                        {% elif r.substitute %}
-                            {{ r.substitute }}
-                        {% else %}
-                            –
-                        {% endif %}
-                    </td>
-                    <td>
-                        <!-- Employee Cancel Button -->
-                        {% if r.status == "Pending" and r.user_id == me.id %}
-                            <form action="{{ url_for('cancel', req_id=r.id) }}" method="post" style="display:inline;">
-                                <button type="submit" class="btn btn-sm btn-warning">Cancel</button>
-                            </form>
-                        {% endif %}
-
-                        <!-- Admin Actions -->
-                        {% if is_admin %}
-                            <a href="{{ url_for('edit_request', req_id=r.id) }}" class="btn btn-sm btn-primary">Edit</a>
-                            <form action="{{ url_for('cancel', req_id=r.id) }}" method="post" style="display:inline;">
-                                <button type="submit" class="btn btn-sm btn-danger">Cancel</button>
-                            </form>
-                        {% endif %}
-                    </td>
-                </tr>
-            {% else %}
-                <tr><td colspan="11" class="text-center">No requests to display.</td></tr>
-            {% endfor %}
-            </tbody>
-        </table>
-    </div>
-
-    <!-- Staff overview for admins -->
-    {% if is_admin and staff_overview %}
-      <h3 class="mt-4">Employees at a Glance</h3>
-      <div class="row">
-        {% for u in staff_overview %}
-        <div class="col-md-3 mb-3">
-          <div class="card {% if u.has_pending %}border-warning{% endif %}">
-            <div class="card-body">
-              <!-- Username now links to the user history page -->
-              <h5 class="card-title">
-                <a href="{{ url_for('user_requests', user_id=u.id) }}" style="text-decoration:none; color:inherit;">
-                  {{ u.username }}
-                </a>
-              </h5>
-              <p class="card-text">
-                Balance:
-                <span class="{% if u.hours_balance >= 0 %}text-success{% else %}text-danger{% endif %}">
-                  {{ "%.2f"|format(u.hours_balance) }}h
-                </span>
-              </p>
-              {% if u.has_pending %}
-                <span class="badge bg-warning text-dark">Pending</span>
-              {% endif %}
+{% if is_admin and staff_overview %}
+  <div class="card" style="padding:1rem 1rem 0.5rem;">
+    <h3 style="margin-top:0;margin-bottom:.5rem;">Employees at a Glance</h3>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:.75rem;">
+      {% for s in staff_overview %}
+        <div style="background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:.75rem;box-shadow:0 1px 2px rgba(0,0,0,.04);display:flex;align-items:center;justify-content:space-between;">
+          <div>
+            <!-- Username now links to their history -->
+            <div style="font-weight:600;">
+              <a href="{{ url_for('user_requests', user_id=s.id) }}" style="text-decoration:none; color:inherit;">
+                {{ s.username }}
+              </a>
+            </div>
+            <div style="font-size:.9rem;opacity:.8;">
+              Balance:
+              <span style="font-weight:700; color: {{ '#16a34a' if s.hours_balance >= 0 else '#b91c1c' }};">
+                {{ '%.2f'|format(s.hours_balance) }}h
+              </span>
             </div>
           </div>
+          {% if s.has_pending %}
+            <div style="background:#f59e0b;color:#111827;font-weight:700;border-radius:999px;padding:.25rem .5rem;font-size:.8rem;white-space:nowrap;">
+              Pending
+            </div>
+          {% else %}
+            <div style="background:#e5e7eb;color:#374151;border-radius:999px;padding:.25rem .5rem;font-size:.8rem;white-space:nowrap;">
+              Clear
+            </div>
+          {% endif %}
         </div>
-        {% endfor %}
-      </div>
+      {% endfor %}
+    </div>
+  </div>
+{% endif %}
+
+<div class="card" style="padding:1rem; margin-top:1rem;">
+  <form method="get" action="{{ url_for('my_requests') }}" style="display:flex; gap:.5rem; align-items:end; flex-wrap:wrap;">
+    <input type="hidden" name="status" value="{{ status }}">
+    <input type="hidden" name="start" value="{{ start }}">
+    <input type="hidden" name="end" value="{{ end }}">
+    <div>
+      <label for="day">Show submissions for day</label>
+      <input class="input" id="day" name="day" type="date"
+             value="{{ selected_day if selected_day and selected_day != 'all' else ('' if not selected_day else selected_day) }}"
+             style="min-width: 180px;">
+    </div>
+    <div><button type="submit" class="btn">Apply</button></div>
+    <div><a class="btn" href="{{ url_for('my_requests', status=status, start=start, end=end, day='all') }}">Show All</a></div>
+    {% if selected_day and selected_day != 'all' %}
+      <div style="margin-left:auto; opacity:.75;">Viewing: {{ selected_day }}</div>
+    {% else %}
+      <div style="margin-left:auto; opacity:.75;">Viewing: All submissions</div>
     {% endif %}
+  </form>
+</div>
+
+<div class="card">
+  {% if reqs %}
+    <table class="table">
+      <thead>
+        <tr>
+          <th>ID</th>
+          {% if is_admin %}<th>User</th>{% endif %}
+          <th>Kind</th>
+          <th>Mode</th>
+          <th>Dates</th>
+          <th>Hours</th>
+          <th>Status</th>
+          <th>School?</th>
+          <th style="min-width:260px;">Substitutes</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in reqs %}
+        <tr>
+          <td>{{ r.id }}</td>
+          {% if is_admin %}<td>{{ r.user.username }}</td>{% endif %}
+          <td>{{ r.kind }}</td>
+          <td>{{ r.mode }}</td>
+          <td>
+            {{ r.start_date }} → {{ r.end_date }}
+            {% if r.mode|lower == 'hourly' and r.start_time and r.end_time %}
+              &nbsp;({{ r.start_time|h12 }} – {{ r.end_time|h12 }})
+            {% endif %}
+          </td>
+          <td>{{ "%.2f"|format(r.hours) }}</td>
+          <td>{{ r.status }}</td>
+          <td>{{ "Yes" if r.is_school_related else "No" }}</td>
+          <td>
+            {% if r.subs and r.subs|length > 0 %}
+              {% for s in r.subs %}
+                {{ s.name }} ({{ "%.2f"|format(s.hours) }}h){% if not loop.last %}, {% endif %}
+              {% endfor %}
+            {% elif r.substitute %}
+              {{ r.substitute }}
+            {% else %}
+              –
+            {% endif %}
+          </td>
+          <td>
+            {% if r.status == "Pending" and r.user_id == me.id %}
+              <form method="post" action="{{ url_for('cancel', req_id=r.id) }}" style="display:inline;">
+                <button type="submit" class="btn btn-sm btn-warning">Cancel</button>
+              </form>
+            {% endif %}
+            {% if is_admin %}
+              <a href="{{ url_for('edit_request', req_id=r.id) }}" class="btn btn-sm btn-primary">Edit</a>
+              <form method="post" action="{{ url_for('cancel', req_id=r.id) }}" style="display:inline;">
+                <button type="submit" class="btn btn-sm btn-danger">Cancel</button>
+              </form>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p>No requests found.</p>
+  {% endif %}
 </div>
 {% endblock %}
