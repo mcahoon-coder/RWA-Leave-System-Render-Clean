@@ -1,32 +1,43 @@
 {% extends "base.html" %}
 {% block content %}
 <div class="container mt-4">
-    <h2>Edit Request #{{ req.id }}</h2>
+    <h2>Edit Request #{{ r.id }}</h2>
 
-    <form method="POST">
-        <div class="mb-3">
-            <label for="start_time" class="form-label">Start Time</label>
-            <input type="text" class="form-control" name="start_time" id="start_time"
-                   value="{{ req.start_time or '' }}" placeholder="HH:MM (24h)">
-            <div class="form-text">Use 24-hour format, e.g. 07:00, 13:15</div>
+    <form method="post" class="form-grid">
+        <div class="form-row">
+            <label class="label" for="start_date">Start Date</label>
+            <input type="date" id="start_date" name="start_date" class="input"
+                   value="{{ r.start_date }}">
         </div>
 
-        <div class="mb-3">
-            <label for="end_time" class="form-label">End Time</label>
-            <input type="text" class="form-control" name="end_time" id="end_time"
-                   value="{{ req.end_time or '' }}" placeholder="HH:MM (24h)">
-            <div class="form-text">Use 24-hour format, e.g. 10:00, 16:45</div>
+        <div class="form-row">
+            <label class="label" for="end_date">End Date</label>
+            <input type="date" id="end_date" name="end_date" class="input"
+                   value="{{ r.end_date }}">
         </div>
 
-        <div class="mb-3">
-            <label for="hours" class="form-label">Hours</label>
-            <input type="text" class="form-control" name="hours" id="hours"
-                   value="{{ req.hours }}">
-            <div class="form-text">Enter total hours (decimals allowed, e.g. 2.25)</div>
+        <div class="form-row">
+            <label class="label" for="start_time">Start Time</label>
+            <input type="time" id="start_time" name="start_time" class="input"
+                   value="{{ r.start_time }}">
         </div>
 
-        <button type="submit" class="btn btn-success">Save</button>
-        <a href="{{ url_for('my_requests') }}" class="btn btn-secondary">Back</a>
+        <div class="form-row">
+            <label class="label" for="end_time">End Time</label>
+            <input type="time" id="end_time" name="end_time" class="input"
+                   value="{{ r.end_time }}">
+        </div>
+
+        <div class="form-row">
+            <label class="label" for="hours">Hours</label>
+            <input type="number" step="0.25" id="hours" name="hours" class="input"
+                   value="{{ r.hours }}">
+        </div>
+
+        <div class="form-row mt-3">
+            <button type="submit" class="btn btn-success">Save Changes</button>
+            <a href="{{ url_for('my_requests') }}" class="btn btn-secondary">Cancel</a>
+        </div>
     </form>
 </div>
 {% endblock %}
