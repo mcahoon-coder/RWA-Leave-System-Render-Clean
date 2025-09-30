@@ -1,1 +1,32 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container mt-4">
+    <h2>Edit Request #{{ req.id }}</h2>
 
+    <form method="POST">
+        <div class="mb-3">
+            <label for="start_time" class="form-label">Start Time</label>
+            <input type="text" class="form-control" name="start_time" id="start_time"
+                   value="{{ req.start_time or '' }}" placeholder="HH:MM (24h)">
+            <div class="form-text">Use 24-hour format, e.g. 07:00, 13:15</div>
+        </div>
+
+        <div class="mb-3">
+            <label for="end_time" class="form-label">End Time</label>
+            <input type="text" class="form-control" name="end_time" id="end_time"
+                   value="{{ req.end_time or '' }}" placeholder="HH:MM (24h)">
+            <div class="form-text">Use 24-hour format, e.g. 10:00, 16:45</div>
+        </div>
+
+        <div class="mb-3">
+            <label for="hours" class="form-label">Hours</label>
+            <input type="text" class="form-control" name="hours" id="hours"
+                   value="{{ req.hours }}">
+            <div class="form-text">Enter total hours (decimals allowed, e.g. 2.25)</div>
+        </div>
+
+        <button type="submit" class="btn btn-success">Save</button>
+        <a href="{{ url_for('my_requests') }}" class="btn btn-secondary">Back</a>
+    </form>
+</div>
+{% endblock %}
