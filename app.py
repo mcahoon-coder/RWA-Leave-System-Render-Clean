@@ -816,6 +816,16 @@ def edit_request(req_id):
 
     return render_template("edit_request.html", r=r)
 
+@app.route("/user/<int:user_id>/requests")
+@login_required
+def user_requests(user_id):
+    if not (current_user.is_admin or current_user.id == user_id):
+        abort(403)
+
+    user = User.query.get_or_404(user_id)
+    requests = LeaveRequest.query.filter_by(user_id=user_id).order_by(LeaveRequest.start_date.desc()).all()
+    return render_template("user_requests.html", user=user, requests=requests)
+
 # ---------- Manage Users (admin) ----------
 @app.route("/admin/users", methods=["GET"])
 @login_required
