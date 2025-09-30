@@ -60,7 +60,17 @@
                         {% if r.end_time %}{{ r.end_time|h12 }}{% else %}-{% endif %}
                     </td>
                     <td>{{ "%.2f"|format(r.hours) }}</td>
-                    <td>{{ r.status }}</td>
+                    <td>
+                        {% if r.status == "Approved" %}
+                            <span class="badge badge-green">Approved</span>
+                        {% elif r.status == "Pending" %}
+                            <span class="badge badge-blue">Pending</span>
+                        {% elif r.status in ["Disapproved", "Cancelled"] %}
+                            <span class="badge badge-red">{{ r.status }}</span>
+                        {% else %}
+                            {{ r.status }}
+                        {% endif %}
+                    </td>
                     <td>{{ "Yes" if r.is_school_related else "No" }}</td>
                     <td>
                         {% if r.subs %}
