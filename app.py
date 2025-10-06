@@ -855,6 +855,26 @@ def user_requests(user_id):
         is_admin=is_admin,
         me=current_user
     )
+@app.route("/user/<int:user_id>/adjust", methods=["POST"])
+@login_required
+def add_manual_adjustment(user_id):
+    if getattr(current_user, "role", "") != "admin":
+        abort(403)
+
+    user = User.query.get_or_404(user_id)
+    hours = float(request.form.get("hours", 0))
+    note = request.form.get("note", "")
+
+    # Create a manual adjustment record
+    adj = ManualAdjustment(user_id=user.id, hours=hours, note=note)
+    db.session.add(adj)
+
+    # Update the user's current balance
+    user.hours_balance = (user.hours_balance or 0) + hours
+    db.session.commit()
+
+    flash(f"Adjustment of {hours:+.2f}h added for {user.username}.", "success")
+    return redirect(url_for("user_requests", user_id=user.id))
 
 @app.route("/user/<int:user_id>/add_time", methods=["POST"])
 @login_required
