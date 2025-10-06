@@ -829,82 +829,40 @@ def edit_request(req_id):
 
     return render_template("edit_request.html", r=r)
 
-@app.route("/user/<int:user_id>/requests")
-@login_required
-def user_requests(user_id):
-    # Always get the user first — this ensures the variable exists
-    user = User.query.get_or_404(user_id)
-    is_admin = getattr(current_user, "role", "") == "admin"
-
-    # Retrieve this user’s leave requests
-    reqs = LeaveRequest.query.filter_by(user_id=user.id).order_by(LeaveRequest.start_date.desc()).all()
-
-    # Try to fetch manual adjustments (if table exists)
-    adjustments = []
-    try:
-        if "manual_adjustment" in db.metadata.tables:
-            adjustments = ManualAdjustment.query.filter_by(user_id=user.id).order_by(ManualAdjustment.timestamp.desc()).all()
-    except Exception as e:
-        app.logger.warning(f"ManualAdjustment query failed: {e}")
-
-    return render_template(
-        "user_requests.html",
-        user=user,
-        requests=reqs,
-        adjustments=adjustments,
-        is_admin=is_admin,
-        me=current_user
-    )
 # =========================================================
-# Manual Adjustment for Admins
+# Manual Adjustment for Admins (single working route)
 # =========================================================
 @app.route("/user/<int:user_id>/adjust", methods=["POST"])
 @login_required
-def add_manual_adjustment(user_id):
-    if current_user.role != "admin":
+def add_manual_adjustment_for_user(user_id):
+    if getattr(current_user, "role", "") != "admin":
         abort(403)
 
     user = User.query.get_or_404(user_id)
     hours = request.form.get("hours", type=float)
-    note = request.form.get("note", "")
+    note = request.form.get("note", "").strip()
 
-    if hours is None:
-        flash("Invalid hours value.", "danger")
+    if hours is None or note == "":
+        flash("Please enter both hours and a note.", "warning")
         return redirect(url_for("user_requests", user_id=user.id))
 
+    # Create the manual adjustment entry
     adj = ManualAdjustment(
         user_id=user.id,
+        admin_id=current_user.id if hasattr(current_user, "id") else None,
         hours=hours,
         note=note,
         timestamp=datetime.now()
     )
     db.session.add(adj)
-    user.hours_balance += hours
+
+    # Update balance
+    user.hours_balance = (user.hours_balance or 0) + hours
     db.session.commit()
 
     flash(f"Manual adjustment of {hours:+.2f}h added for {user.username}.", "success")
     return redirect(url_for("user_requests", user_id=user.id))
 
-@app.route("/user/<int:user_id>/adjust", methods=["POST"])
-@login_required
-def add_manual_adjustment(user_id):
-    if getattr(current_user, "role", "") != "admin":
-        abort(403)
-
-    user = User.query.get_or_404(user_id)
-    hours = float(request.form.get("hours", 0))
-    note = request.form.get("note", "")
-
-    # Create a manual adjustment record
-    adj = ManualAdjustment(user_id=user.id, hours=hours, note=note)
-    db.session.add(adj)
-
-    # Update the user's current balance
-    user.hours_balance = (user.hours_balance or 0) + hours
-    db.session.commit()
-
-    flash(f"Adjustment of {hours:+.2f}h added for {user.username}.", "success")
-    return redirect(url_for("user_requests", user_id=user.id))
 
 @app.route("/user/<int:user_id>/add_time", methods=["POST"])
 @login_required
