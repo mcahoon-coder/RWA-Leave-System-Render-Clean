@@ -832,13 +832,41 @@ def edit_request(req_id):
 @app.route("/user/<int:user_id>/requests")
 @login_required
 def user_requests(user_id):
+    adjustments = ManualAdjustment.query.filter_by(user_id=user.id).order_by(ManualAdjustment.timestamp.desc()).all()
     if not (current_user.is_admin or current_user.id == user_id):
         abort(403)
 
     user = User.query.get_or_404(user_id)
     requests = LeaveRequest.query.filter_by(user_id=user_id).order_by(LeaveRequest.start_date.desc()).all()
-    return render_template("user_requests.html", user=user, requests=requests)
+    return render_template("user_requests.html", user=user, requests=requests, adjustments=adjustments,
+    is_admin=is_admin)
 
+@app.route("/user/<int:user_id>/add_time", methods=["POST"])
+@login_required
+def add_manual_time(user_id):
+    if not getattr(current_user, "role", "") == "admin":
+        flash("Admins only.", "danger")
+        return redirect(url_for("my_requests"))
+
+    user = User.query.get_or_404(user_id)
+    hours = request.form.get("adjust_hours", type=float)
+    note = request.form.get("note", "").strip()
+
+    if hours is None or not note:
+        flash("Please provide both hours and a note.", "warning")
+        return redirect(url_for("user_requests", user_id=user_id))
+
+    adj = ManualAdjustment(
+        user_id=user.id,
+        admin_id=current_user.id,
+        hours=hours,
+        note=note
+    )
+    db.session.add(adj)
+    db.session.commit()
+
+    flash(f"Adjustment of {hours:+.2f}h added for {user.username}.", "success")
+    return redirect(url_for("user_requests", user_id=user_id))
 
 @app.route("/user/<int:user_id>/requests/export")
 @login_required
