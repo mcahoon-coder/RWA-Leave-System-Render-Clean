@@ -890,6 +890,29 @@ def add_manual_time(user_id):
 
     flash(f"Adjustment of {hours:+.2f}h added for {user.username}.", "success")
     return redirect(url_for("user_requests", user_id=user_id))
+ # =========================================================
+# Delete a Manual Adjustment (Admins only)
+# =========================================================
+@app.post("/adjustment/<int:adj_id>/delete/<int:user_id>")
+@login_required
+def delete_adjustment(adj_id, user_id):
+    # Only admins can delete adjustments
+    if getattr(current_user, "role", "") != "admin":
+        abort(403)
+
+    adj = ManualAdjustment.query.get_or_404(adj_id)
+
+    # Reverse the adjustment on user's balance if field exists
+    user = User.query.get(user_id)
+    if user and hasattr(user, "hours_balance") and adj.hours:
+        user.hours_balance = (user.hours_balance or 0) - adj.hours
+
+    db.session.delete(adj)
+    db.session.commit()
+
+    flash("Manual adjustment deleted successfully.", "success")
+    return redirect(url_for("user_requests", user_id=user_id))
+   
 # =========================================================
 # Show individual user's leave history (admin only)
 # =========================================================
