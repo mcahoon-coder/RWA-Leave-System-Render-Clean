@@ -70,58 +70,46 @@
       <p>No requests found for this user.</p>
     {% endif %}
 
-    <!-- Admin Add Time Section -->
-    {% if is_admin %}
-    <div class="card mt-4 p-3">
-      <h4>Add Manual Time Adjustment</h4>
-      <form method="post" action="{{ url_for('add_manual_time', user_id=user.id) }}" class="row g-3 align-items-end">
-        <div class="col-md-4">
-          <label for="adjust_hours" class="form-label">Hours to Add (or subtract)</label>
-          <input type="number" step="0.25" id="adjust_hours" name="adjust_hours" class="form-control" required>
-        </div>
-        <div class="col-md-6">
-          <label for="note" class="form-label">Reason / Note</label>
-          <input type="text" id="note" name="note" class="form-control" placeholder="Reason for adjustment" required>
-        </div>
-        <div class="col-md-2">
-          <button type="submit" class="btn btn-primary w-100">Add</button>
-        </div>
-      </form>
-    </div>
-    {% endif %}
-
-    <!-- Manual Adjustments Table -->
-    {% if adjustments %}
-    <div class="card mt-4 p-3">
-      <h4>Manual Adjustments</h4>
-      <div class="table-responsive">
-        <table class="table table-striped align-middle">
-          <thead>
-            <tr>
-              <th>Date</th>
-              <th>Admin</th>
-              <th>Hours</th>
-              <th>Note</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for adj in adjustments %}
-            <tr>
-              <td>{{ adj.timestamp.strftime('%Y-%m-%d %I:%M %p') }}</td>
-              <td>{{ adj.admin.username }}</td>
-              <td>
-                <span class="{% if adj.hours >= 0 %}text-success{% else %}text-danger{% endif %}">
-                  {{ "%.2f"|format(adj.hours) }}
-                </span>
-              </td>
-              <td>{{ adj.note }}</td>
-            </tr>
-            {% endfor %}
-          </tbody>
-        </table>
+    {% if current_user.role == 'admin' %}
+    <hr class="mt-4 mb-3">
+    <h4>Add Manual Leave Adjustment</h4>
+    <form method="post" action="{{ url_for('add_manual_adjustment', user_id=user.id) }}" class="form-grid mt-2">
+      <div class="form-row">
+        <label class="label" for="hours">Hours (+ / -)</label>
+        <input type="number" step="0.25" id="hours" name="hours" class="input" placeholder="e.g. 2 or -1.5" required>
       </div>
-    </div>
-    {% endif %}
+      <div class="form-row">
+        <label class="label" for="note">Reason / Note</label>
+        <input type="text" id="note" name="note" class="input" placeholder="Optional note (e.g. manual correction)">
+      </div>
+      <div class="form-row mt-2">
+        <button type="submit" class="btn btn-success">Add Adjustment</button>
+      </div>
+    </form>
 
+    {% if adjustments %}
+      <h4 class="mt-4">Manual Adjustments</h4>
+      <table class="table table-striped align-middle">
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Hours</th>
+            <th>Note</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for a in adjustments %}
+            <tr>
+              <td>{{ a.timestamp.strftime('%Y-%m-%d %I:%M %p') }}</td>
+              <td class="{% if a.hours >= 0 %}text-success{% else %}text-danger{% endif %}">
+                {{ '%.2f'|format(a.hours) }}
+              </td>
+              <td>{{ a.note or '—' }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% endif %}
+    {% endif %}
 </div>
 {% endblock %}
