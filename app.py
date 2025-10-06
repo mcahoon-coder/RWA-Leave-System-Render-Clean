@@ -165,6 +165,19 @@ class SubAssignment(db.Model):
     hours = db.Column(db.Float, nullable=False, default=0.0)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
+class ManualAdjustment(db.Model):
+    __tablename__ = "manual_adjustments"
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    admin_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    hours = db.Column(db.Float, nullable=False)
+    note = db.Column(db.String(255), nullable=False)
+    timestamp = db.Column(db.DateTime, default=datetime.utcnow)
+
+    user = db.relationship("User", foreign_keys=[user_id], backref="adjustments_received")
+    admin = db.relationship("User", foreign_keys=[admin_id])
+
+
 @login_manager.user_loader
 def load_user(user_id):
     return User.query.get(int(user_id))
