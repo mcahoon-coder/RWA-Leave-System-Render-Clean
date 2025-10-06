@@ -890,6 +890,38 @@ def add_manual_time(user_id):
 
     flash(f"Adjustment of {hours:+.2f}h added for {user.username}.", "success")
     return redirect(url_for("user_requests", user_id=user_id))
+# =========================================================
+# Show individual user's leave history (admin only)
+# =========================================================
+@app.route("/user/<int:user_id>/requests")
+@login_required
+def user_requests(user_id):
+    # Fetch user safely
+    user = User.query.get_or_404(user_id)
+
+    # Determine if current user is admin
+    is_admin = getattr(current_user, "role", "") == "admin"
+
+    # Pull all this user’s leave requests
+    reqs = LeaveRequest.query.filter_by(user_id=user.id).order_by(LeaveRequest.start_date.desc()).all()
+
+    # Pull manual adjustments (if the table exists)
+    adjustments = []
+    try:
+        if "manual_adjustment" in db.metadata.tables:
+            adjustments = ManualAdjustment.query.filter_by(user_id=user.id).order_by(ManualAdjustment.timestamp.desc()).all()
+    except Exception as e:
+        app.logger.warning(f"ManualAdjustment query failed: {e}")
+
+    # Render the history page
+    return render_template(
+        "user_requests.html",
+        user=user,
+        requests=reqs,
+        adjustments=adjustments,
+        is_admin=is_admin,
+        me=current_user
+    )
 
 @app.route("/user/<int:user_id>/requests/export")
 @login_required
