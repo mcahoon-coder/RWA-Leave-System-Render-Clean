@@ -832,14 +832,29 @@ def edit_request(req_id):
 @app.route("/user/<int:user_id>/requests")
 @login_required
 def user_requests(user_id):
-    adjustments = ManualAdjustment.query.filter_by(user_id=user.id).order_by(ManualAdjustment.timestamp.desc()).all()
-    if not (current_user.is_admin or current_user.id == user_id):
-        abort(403)
-
+    # Always get the user first — this ensures the variable exists
     user = User.query.get_or_404(user_id)
-    requests = LeaveRequest.query.filter_by(user_id=user_id).order_by(LeaveRequest.start_date.desc()).all()
-    return render_template("user_requests.html", user=user, requests=requests, adjustments=adjustments,
-    is_admin=is_admin)
+    is_admin = getattr(current_user, "role", "") == "admin"
+
+    # Retrieve this user’s leave requests
+    reqs = LeaveRequest.query.filter_by(user_id=user.id).order_by(LeaveRequest.start_date.desc()).all()
+
+    # Try to fetch manual adjustments (if table exists)
+    adjustments = []
+    try:
+        if "manual_adjustment" in db.metadata.tables:
+            adjustments = ManualAdjustment.query.filter_by(user_id=user.id).order_by(ManualAdjustment.timestamp.desc()).all()
+    except Exception as e:
+        app.logger.warning(f"ManualAdjustment query failed: {e}")
+
+    return render_template(
+        "user_requests.html",
+        user=user,
+        requests=reqs,
+        adjustments=adjustments,
+        is_admin=is_admin,
+        me=current_user
+    )
 
 @app.route("/user/<int:user_id>/add_time", methods=["POST"])
 @login_required
