@@ -638,7 +638,6 @@ def my_requests():
         staff_overview=staff_overview,
         selected_day=selected_day_str,
     )
-
 # ---------- School-related toggles ----------
 @app.post("/requests/<int:req_id>/school")
 @login_required
@@ -841,11 +840,14 @@ def edit_request(req_id):
     return render_template("edit_request.html", r=r)
 
 # =========================================================
-# Manual Adjustment for Admins (single working route)
+# Manual Adjustments for Admins — Add / Delete / Undo
 # =========================================================
+from flask import session
+
 @app.route("/user/<int:user_id>/adjust", methods=["POST"])
 @login_required
 def add_manual_adjustment_for_user(user_id):
+    """Admin adds manual adjustment to a user's balance."""
     if getattr(current_user, "role", "") != "admin":
         abort(403)
 
@@ -857,17 +859,17 @@ def add_manual_adjustment_for_user(user_id):
         flash("Please enter both hours and a note.", "warning")
         return redirect(url_for("user_requests", user_id=user.id))
 
-    # Create the manual adjustment entry
+    # Create adjustment entry
     adj = ManualAdjustment(
         user_id=user.id,
-        admin_id=current_user.id if hasattr(current_user, "id") else None,
+        admin_id=getattr(current_user, "id", None),
         hours=hours,
         note=note,
         timestamp=datetime.now()
     )
     db.session.add(adj)
 
-    # Update balance
+    # Update user balance
     user.hours_balance = (user.hours_balance or 0) + hours
     db.session.commit()
 
@@ -875,55 +877,80 @@ def add_manual_adjustment_for_user(user_id):
     return redirect(url_for("user_requests", user_id=user.id))
 
 
-@app.route("/user/<int:user_id>/add_time", methods=["POST"])
-@login_required
-def add_manual_time(user_id):
-    if not getattr(current_user, "role", "") == "admin":
-        flash("Admins only.", "danger")
-        return redirect(url_for("my_requests"))
-
-    user = User.query.get_or_404(user_id)
-    hours = request.form.get("adjust_hours", type=float)
-    note = request.form.get("note", "").strip()
-
-    if hours is None or not note:
-        flash("Please provide both hours and a note.", "warning")
-        return redirect(url_for("user_requests", user_id=user_id))
-
-    adj = ManualAdjustment(
-        user_id=user.id,
-        admin_id=current_user.id,
-        hours=hours,
-        note=note
-    )
-    db.session.add(adj)
-    db.session.commit()
-
-    flash(f"Adjustment of {hours:+.2f}h added for {user.username}.", "success")
-    return redirect(url_for("user_requests", user_id=user_id))
- # =========================================================
-# Delete a Manual Adjustment (Admins only)
 # =========================================================
-@app.post("/adjustment/<int:adj_id>/delete/<int:user_id>")
+# Delete Manual Adjustment (with Undo support)
+# =========================================================
+@app.route("/user/<int:user_id>/adjust/<int:adj_id>/delete", methods=["POST"])
 @login_required
-def delete_adjustment(adj_id, user_id):
-    # Only admins can delete adjustments
+def delete_adjustment(user_id, adj_id):
+    """Admin deletes a manual adjustment with undo option."""
     if getattr(current_user, "role", "") != "admin":
         abort(403)
 
     adj = ManualAdjustment.query.get_or_404(adj_id)
+    user = User.query.get_or_404(user_id)
 
-    # Reverse the adjustment on user's balance if field exists
-    user = User.query.get(user_id)
-    if user and hasattr(user, "hours_balance") and adj.hours:
+    # Save deleted record for undo
+    session["last_deleted_adjustment"] = {
+        "user_id": user.id,
+        "adj_id": adj.id,
+        "hours": adj.hours,
+        "note": adj.note,
+        "timestamp": adj.timestamp.isoformat() if adj.timestamp else None,
+        "admin_id": adj.admin_id,
+    }
+
+    try:
         user.hours_balance = (user.hours_balance or 0) - adj.hours
+        db.session.delete(adj)
+        db.session.commit()
+        flash(
+            f"Adjustment ({adj.hours:+.2f}h) deleted. "
+            f"<a href='{url_for('undo_delete_adjustment')}' class='alert-link'>Undo</a>",
+            "warning"
+        )
+    except Exception as e:
+        db.session.rollback()
+        flash(f"Error deleting adjustment: {e}", "danger")
 
-    db.session.delete(adj)
-    db.session.commit()
+    return redirect(url_for("user_requests", user_id=user.id))
 
-    flash("Manual adjustment deleted successfully.", "success")
-    return redirect(url_for("user_requests", user_id=user_id))
-   
+
+# =========================================================
+# Undo Restore Adjustment
+# =========================================================
+@app.route("/undo_delete_adjustment")
+@login_required
+def undo_delete_adjustment():
+    """Restore most recently deleted manual adjustment."""
+    if getattr(current_user, "role", "") != "admin":
+        abort(403)
+
+    data = session.pop("last_deleted_adjustment", None)
+    if not data:
+        flash("No recent adjustment to restore.", "info")
+        return redirect(url_for("my_requests"))
+
+    try:
+        adj = ManualAdjustment(
+            user_id=data["user_id"],
+            hours=data["hours"],
+            note=data["note"],
+            admin_id=data.get("admin_id"),
+            timestamp=datetime.fromisoformat(data["timestamp"]) if data.get("timestamp") else datetime.now(),
+        )
+        user = User.query.get(data["user_id"])
+        user.hours_balance = (user.hours_balance or 0) + adj.hours
+
+        db.session.add(adj)
+        db.session.commit()
+        flash("Deleted adjustment has been restored.", "success")
+    except Exception as e:
+        db.session.rollback()
+        flash(f"Error restoring adjustment: {e}", "danger")
+
+    return redirect(url_for("user_requests", user_id=data["user_id"]))
+
 # =========================================================
 # Show individual user's leave history (admin only)
 # =========================================================
