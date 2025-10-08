@@ -611,31 +611,35 @@ def my_requests():
     reqs = q.order_by(LeaveRequest.start_date.desc()).all()
 
     # Build staff overview (for admins only)
-    staff_overview = []
    
+     staff_overview = [
+        {
+            "id": u.id,
+            "username": u.username,
+            "hours_balance": float(u.hours_balance or 0.0),
+            "has_pending": (u.id in pending_user_ids),
+        }
+        for u in users
+    ]
+
+    # Include manual adjustments in the admin overview (safe for dicts)
     if is_admin and "manual_adjustment" in db.metadata.tables:
         for u in staff_overview:
             # Check if this user has any pending requests
-            has_pending = LeaveRequest.query.filter_by(user_id=u["id"], status="Pending").first() is not None
+            has_pending = LeaveRequest.query.filter_by(
+                user_id=u["id"], status="Pending"
+            ).first() is not None
             u["has_pending"] = has_pending
 
-            # Sum up all manual adjustments for this user
+            # Sum up manual adjustments
             try:
                 adjustments = ManualAdjustment.query.filter_by(user_id=u["id"]).all()
                 u["adjust_total"] = sum(a.hours for a in adjustments)
             except Exception:
                 u["adjust_total"] = 0.0
-      else:
-            for u in staff_overview:
-                u["adjust_total"] = 0.0
-
-            staff_overview.append({
-                "id": u.id,
-                "username": u.username,
-                "hours_balance": u.hours_balance,
-                "has_pending": has_pending,
-                "adjust_total": total_adjust
-            })
+    else:
+        for u in staff_overview:
+            u["adjust_total"] = 0.0
 
     return render_template(
         "requests.html",
@@ -643,12 +647,13 @@ def my_requests():
         reqs=reqs,
         me=current_user,
         is_admin=is_admin,
-        status=status,
-        start=start,
-        end=end,
+        status=request.args.get("status", "all"),
+        start=request.args.get("start", ""),
+        end=request.args.get("end", ""),
         staff_overview=staff_overview,
-        selected_day=selected_day_str
+        selected_day=selected_day_str,
     )
+
 
 # ---------- School-related toggles ----------
 @app.post("/requests/<int:req_id>/school")
