@@ -564,37 +564,20 @@ def new_request():
     return render_template("new_request.html", title="New Request", workday=WORKDAY_HOURS)
 
 # ---------- Requests list (admin sees all, staff sees own) ----------
-from zoneinfo import ZoneInfo
-from datetime import datetime, timedelta
-
-@app.route("/requests")
+@app.get("/requests")
 @login_required
 def my_requests():
-    is_admin = (getattr(current_user, "role", "") == "admin")
-    status = request.args.get("status", "all")
-    start = request.args.get("start", "")
-    end = request.args.get("end", "")
-    selected_day_str = request.args.get("day", "all")
+    is_admin = (current_user.role == Role.admin)
 
-    # Base query
-    q = LeaveRequest.query
-    if not is_admin:
-        q = q.filter_by(user_id=current_user.id)
+    q = _filtered_requests_for(is_admin)
 
-    # Filter by status
-    if status != "all":
-        q = q.filter_by(status=status.capitalize())
-
-    # Filter by date range
-    if start:
-        q = q.filter(LeaveRequest.start_date >= start)
-    if end:
-        q = q.filter(LeaveRequest.end_date <= end)
-
-    # Admin: optional "Show submissions for day" logic
+    # Admin: show a "daily" slice in America/New_York timezone
+    selected_day_str = None
     if is_admin:
         tz = ZoneInfo("America/New_York")
-        if selected_day_str and selected_day_str != "all":
+        selected_day_str = request.args.get("day") or datetime.now(tz).date().isoformat()
+
+        if selected_day_str != "all":
             try:
                 d = datetime.strptime(selected_day_str, "%Y-%m-%d").date()
             except Exception:
@@ -605,41 +588,49 @@ def my_requests():
             end_dt = start_dt + timedelta(days=1)
             start_utc = start_dt.astimezone(ZoneInfo("UTC")).replace(tzinfo=None)
             end_utc = end_dt.astimezone(ZoneInfo("UTC")).replace(tzinfo=None)
-            q = q.filter(LeaveRequest.created_at >= start_utc,
-                         LeaveRequest.created_at < end_utc)
 
-    reqs = q.order_by(LeaveRequest.start_date.desc()).all()
+            q = q.filter(
+                LeaveRequest.created_at >= start_utc,
+                LeaveRequest.created_at < end_utc
+            )
 
-    # Build staff overview (for admins only)
-   
-     staff_overview = [
-        {
-            "id": u.id,
-            "username": u.username,
-            "hours_balance": float(u.hours_balance or 0.0),
-            "has_pending": (u.id in pending_user_ids),
+    reqs = q.all()
+
+    staff_overview = None
+    if is_admin:
+        users = User.query.order_by(User.username.asc()).all()
+        pending_user_ids = {
+            r.user_id for r in LeaveRequest.query.with_entities(LeaveRequest.user_id)
+            .filter(LeaveRequest.status == RequestStatus.pending).all()
         }
-        for u in users
-    ]
+        staff_overview = [
+            {
+                "id": u.id,
+                "username": u.username,
+                "hours_balance": float(u.hours_balance or 0.0),
+                "has_pending": (u.id in pending_user_ids),
+            }
+            for u in users
+        ]
 
-    # Include manual adjustments in the admin overview (safe for dicts)
-    if is_admin and "manual_adjustment" in db.metadata.tables:
-        for u in staff_overview:
-            # Check if this user has any pending requests
-            has_pending = LeaveRequest.query.filter_by(
-                user_id=u["id"], status="Pending"
-            ).first() is not None
-            u["has_pending"] = has_pending
+        # Include manual adjustments in the admin overview (safe for dicts)
+        if "manual_adjustment" in db.metadata.tables:
+            for u in staff_overview:
+                # Check if this user has any pending requests
+                has_pending = LeaveRequest.query.filter_by(
+                    user_id=u["id"], status="Pending"
+                ).first() is not None
+                u["has_pending"] = has_pending
 
-            # Sum up manual adjustments
-            try:
-                adjustments = ManualAdjustment.query.filter_by(user_id=u["id"]).all()
-                u["adjust_total"] = sum(a.hours for a in adjustments)
-            except Exception:
+                # Sum up manual adjustments
+                try:
+                    adjustments = ManualAdjustment.query.filter_by(user_id=u["id"]).all()
+                    u["adjust_total"] = sum(a.hours for a in adjustments)
+                except Exception:
+                    u["adjust_total"] = 0.0
+        else:
+            for u in staff_overview:
                 u["adjust_total"] = 0.0
-    else:
-        for u in staff_overview:
-            u["adjust_total"] = 0.0
 
     return render_template(
         "requests.html",
@@ -653,8 +644,6 @@ def my_requests():
         staff_overview=staff_overview,
         selected_day=selected_day_str,
     )
-
-
 # ---------- School-related toggles ----------
 @app.post("/requests/<int:req_id>/school")
 @login_required
