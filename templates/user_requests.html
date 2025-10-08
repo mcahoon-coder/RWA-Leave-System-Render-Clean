@@ -3,6 +3,38 @@
 <div class="container mt-4">
     <h2>Leave History for {{ user.username }}</h2>
 
+    <!-- Flash messages (RWA themed) -->
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        <div style="max-width: 800px; margin: 0 auto 1rem;">
+          {% for category, message in messages %}
+            <div 
+              style="
+                padding: .75rem 1rem; 
+                border-radius: 10px; 
+                margin-bottom: .5rem; 
+                text-align: center;
+                font-weight: 600;
+                border: 1px solid 
+                  {% if category == 'warning' %}#ffe58f
+                  {% elif category == 'success' %}#4169e1
+                  {% else %}#f5c2c7{% endif %};
+                background:
+                  {% if category == 'warning' %}#fff9d9
+                  {% elif category == 'success' %}#e8f0fe
+                  {% else %}#fde2e1{% endif %};
+                color:
+                  {% if category == 'warning' %}#664d03
+                  {% elif category == 'success' %}#0b3d91
+                  {% else %}#842029{% endif %};
+              ">
+              {{ message|safe }}
+            </div>
+          {% endfor %}
+        </div>
+      {% endif %}
+    {% endwith %}
+
     <!-- Export + Back Buttons -->
     <div class="d-flex justify-content-between align-items-center mb-3">
         <a href="{{ url_for('export_user_requests', user_id=user.id) }}" class="btn btn-success">
@@ -11,7 +43,6 @@
         <a href="{{ url_for('my_requests') }}" class="btn btn-secondary">← Back to All Requests</a>
     </div>
 
-    <!-- Leave Requests Table -->
     {% if requests %}
       <div class="table-responsive mt-3">
         <table class="table table-striped align-middle">
@@ -90,10 +121,9 @@
       </form>
     {% endif %}
 
-    <!-- Manual Adjustments Log -->
+    <!-- Adjustment log table -->
     {% if adjustments %}
-      <hr class="my-4">
-      <h4>Manual Adjustments</h4>
+      <h4 class="mt-4">Manual Adjustments</h4>
       <div class="table-responsive">
         <table class="table table-striped align-middle">
           <thead>
@@ -117,8 +147,8 @@
               <td>{{ a.note }}</td>
               <td>
                 {% if a.admin_id %}
-                  {% set admin_user = User.query.get(a.admin_id) %}
-                  {{ admin_user.username if admin_user else "Unknown" }}
+                  {% set admin = users.query.get(a.admin_id) %}
+                  {{ admin.username if admin else "Unknown" }}
                 {% else %}
                   –
                 {% endif %}
