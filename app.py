@@ -564,68 +564,72 @@ def new_request():
     return render_template("new_request.html", title="New Request", workday=WORKDAY_HOURS)
 
 # ---------- Requests list (admin sees all, staff sees own) ----------
-@app.get("/requests")
+from zoneinfo import ZoneInfo
+from datetime import datetime, timedelta
+
+@app.route("/requests")
 @login_required
 def my_requests():
-    is_admin = (current_user.role == Role.admin)
+    is_admin = (getattr(current_user, "role", "") == "admin")
+    status = request.args.get("status", "all")
+    start = request.args.get("start", "")
+    end = request.args.get("end", "")
+    selected_day_str = request.args.get("day", "all")
 
-    q = _filtered_requests_for(is_admin)
+    # Base query
+    q = LeaveRequest.query
+    if not is_admin:
+        q = q.filter_by(user_id=current_user.id)
 
-    # Admin: show a "daily" slice in America/New_York timezone
-    selected_day_str = None
+    # Filter by status
+    if status != "all":
+        q = q.filter_by(status=status.capitalize())
+
+    # Filter by date range
+    if start:
+        q = q.filter(LeaveRequest.start_date >= start)
+    if end:
+        q = q.filter(LeaveRequest.end_date <= end)
+
+    # Admin: optional "Show submissions for day" logic
     if is_admin:
         tz = ZoneInfo("America/New_York")
-        # If ?day=all → no filter; otherwise default to "today" in local tz
-        selected_day_str = request.args.get("day") or datetime.now(tz).date().isoformat()
-
-        if selected_day_str != "all":
+        if selected_day_str and selected_day_str != "all":
             try:
                 d = datetime.strptime(selected_day_str, "%Y-%m-%d").date()
             except Exception:
                 d = datetime.now(tz).date()
                 selected_day_str = d.isoformat()
 
-            # Use local midnight boundaries
             start_dt = datetime.combine(d, datetime.min.time(), tzinfo=tz)
             end_dt = start_dt + timedelta(days=1)
-
-            # Convert to UTC before filtering DB (assuming DB stores naive/UTC timestamps)
             start_utc = start_dt.astimezone(ZoneInfo("UTC")).replace(tzinfo=None)
             end_utc = end_dt.astimezone(ZoneInfo("UTC")).replace(tzinfo=None)
-
             q = q.filter(LeaveRequest.created_at >= start_utc,
                          LeaveRequest.created_at < end_utc)
 
-    reqs = q.all()
+    reqs = q.order_by(LeaveRequest.start_date.desc()).all()
 
-    staff_overview = None
+    # Build staff overview (for admins only)
+    staff_overview = []
     if is_admin:
         users = User.query.order_by(User.username.asc()).all()
-        pending_user_ids = {
-            r.user_id for r in LeaveRequest.query.with_entities(LeaveRequest.user_id)\
-            .filter(LeaveRequest.status == RequestStatus.pending).all()
-        }
-        staff_overview = [
-            {
+        for u in users:
+            has_pending = any(r.status == "Pending" for r in u.requests)
+            total_adjust = 0.0
+            if "manual_adjustment" in db.metadata.tables:
+                try:
+                    total_adjust = sum(a.hours for a in ManualAdjustment.query.filter_by(user_id=u.id).all())
+                except Exception:
+                    total_adjust = 0.0
+
+            staff_overview.append({
                 "id": u.id,
                 "username": u.username,
-                "hours_balance": float(u.hours_balance or 0.0),
-                "has_pending": (u.id in pending_user_ids),
-            }
-            for u in users
-        ]
-# Include manual adjustments in the admin overview
-    if is_admin and "manual_adjustment" in db.metadata.tables:
-        for u in staff_overview:
-            u.has_pending = any(r.status == "Pending" for r in u.requests)
-        try:
-            adjustments = ManualAdjustment.query.filter_by(user_id=u.id).all()
-            u.adjust_total = sum(a.hours for a in adjustments)
-        except Exception:
-            u.adjust_total = 0.0
-    else:
-        for u in staff_overview:
-            u.adjust_total = 0.0
+                "hours_balance": u.hours_balance,
+                "has_pending": has_pending,
+                "adjust_total": total_adjust
+            })
 
     return render_template(
         "requests.html",
@@ -633,12 +637,13 @@ def my_requests():
         reqs=reqs,
         me=current_user,
         is_admin=is_admin,
-        status=request.args.get("status", "all"),
-        start=request.args.get("start", ""),
-        end=request.args.get("end", ""),
+        status=status,
+        start=start,
+        end=end,
         staff_overview=staff_overview,
-        selected_day=selected_day_str,
+        selected_day=selected_day_str
     )
+
 # ---------- School-related toggles ----------
 @app.post("/requests/<int:req_id>/school")
 @login_required
