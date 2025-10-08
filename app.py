@@ -624,8 +624,8 @@ def my_requests():
         except Exception:
             u.adjust_total = 0.0
     else:
-    for u in staff_overview:
-        u.adjust_total = 0.0
+        for u in staff_overview:
+            u.adjust_total = 0.0
 
     return render_template(
         "requests.html",
