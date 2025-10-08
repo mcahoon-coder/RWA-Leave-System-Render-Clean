@@ -11,6 +11,7 @@
         <a href="{{ url_for('my_requests') }}" class="btn btn-secondary">← Back to All Requests</a>
     </div>
 
+    <!-- Leave Requests Table -->
     {% if requests %}
       <div class="table-responsive mt-3">
         <table class="table table-striped align-middle">
@@ -89,9 +90,10 @@
       </form>
     {% endif %}
 
-    <!-- Adjustment log table -->
+    <!-- Manual Adjustments Log -->
     {% if adjustments %}
-      <h4 class="mt-4">Manual Adjustments</h4>
+      <hr class="my-4">
+      <h4>Manual Adjustments</h4>
       <div class="table-responsive">
         <table class="table table-striped align-middle">
           <thead>
@@ -115,8 +117,8 @@
               <td>{{ a.note }}</td>
               <td>
                 {% if a.admin_id %}
-                  {% set admin = users.query.get(a.admin_id) %}
-                  {{ admin.username if admin else "Unknown" }}
+                  {% set admin_user = User.query.get(a.admin_id) %}
+                  {{ admin_user.username if admin_user else "Unknown" }}
                 {% else %}
                   –
                 {% endif %}
