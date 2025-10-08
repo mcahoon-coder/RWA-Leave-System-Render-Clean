@@ -612,16 +612,22 @@ def my_requests():
 
     # Build staff overview (for admins only)
     staff_overview = []
-    if is_admin:
-        users = User.query.order_by(User.username.asc()).all()
-        for u in users:
-            has_pending = any(r.status == "Pending" for r in u.requests)
-            total_adjust = 0.0
-            if "manual_adjustment" in db.metadata.tables:
-                try:
-                    total_adjust = sum(a.hours for a in ManualAdjustment.query.filter_by(user_id=u.id).all())
-                except Exception:
-                    total_adjust = 0.0
+   
+    if is_admin and "manual_adjustment" in db.metadata.tables:
+    for u in staff_overview:
+        # Check if this user has any pending requests
+        has_pending = LeaveRequest.query.filter_by(user_id=u["id"], status="Pending").first() is not None
+        u["has_pending"] = has_pending
+
+        # Sum up all manual adjustments for this user
+        try:
+            adjustments = ManualAdjustment.query.filter_by(user_id=u["id"]).all()
+            u["adjust_total"] = sum(a.hours for a in adjustments)
+        except Exception:
+            u["adjust_total"] = 0.0
+else:
+    for u in staff_overview:
+        u["adjust_total"] = 0.0
 
             staff_overview.append({
                 "id": u.id,
