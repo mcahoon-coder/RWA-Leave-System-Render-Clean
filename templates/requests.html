@@ -16,22 +16,29 @@
               </a>
             </div>
 
-            <!-- Balance with manual adjustment line -->
+            <!-- Balance -->
             <div style="font-size:.9rem;opacity:.8;">
               Balance:
               <span style="font-weight:700; color: {{ '#16a34a' if s.hours_balance >= 0 else '#b91c1c' }};">
                 {{ '%.2f'|format(s.hours_balance) }}h
               </span>
-              {% if s.adjust_total and s.adjust_total != 0 %}
-                <br>
-                <a href="{{ url_for('user_requests', user_id=s.id) }}" style="color:#6b7280; font-size:0.85rem; text-decoration:none;">
-                  {% if s.adjust_total > 0 %}
-                    (+{{ "%.2f"|format(s.adjust_total) }}h manual adj.)
-                  {% else %}
-                    ({{ "%.2f"|format(s.adjust_total) }}h manual adj.)
-                  {% endif %}
-                </a>
-              {% endif %}
+            </div>
+
+            <!-- Manual Adjustment total -->
+            <div style="font-size:.9rem;opacity:.8;" title="Manual adjustment total from admin corrections">
+              Manual Adj:
+              <span style="font-weight:700; color: {{ '#16a34a' if s.adjust_total >= 0 else '#b91c1c' }};">
+                {{ "%+.2f"|format(s.adjust_total) }}h
+              </span>
+            </div>
+
+            <!-- Total Adjusted Hours (Balance + Manual Adj) -->
+            <div style="font-size:.9rem;opacity:.8;margin-top:0.25rem;" title="Current total balance including manual adjustments">
+              <strong>Total:</strong>
+              {% set total = (s.hours_balance or 0) + (s.adjust_total or 0) %}
+              <span style="font-weight:700; color: {{ '#16a34a' if total >= 0 else '#b91c1c' }};">
+                {{ '%.2f'|format(total) }}h
+              </span>
             </div>
           </div>
 
