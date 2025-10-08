@@ -614,6 +614,17 @@ def my_requests():
             }
             for u in users
         ]
+# Include manual adjustments in the admin overview
+    if is_admin and "manual_adjustment" in db.metadata.tables:
+    for u in staff_overview:
+        try:
+            adjustments = ManualAdjustment.query.filter_by(user_id=u.id).all()
+            u.adjust_total = sum(a.hours for a in adjustments)
+        except Exception:
+            u.adjust_total = 0.0
+    else:
+    for u in staff_overview:
+        u.adjust_total = 0.0
 
     return render_template(
         "requests.html",
