@@ -1,9 +1,9 @@
 {% extends "base.html" %}
 {% block content %}
-<h2>Calendar</h2>
+<h2 style="margin-bottom: 0.25rem;">Calendar</h2>
 
-<div class="card" style="padding: 1rem;">
-  <div style="text-align: right; margin-bottom: 0.5rem;">
+<div class="card" style="padding: 0.5rem 1rem 1rem;">
+  <div style="text-align: right; margin-bottom: 0.25rem;">
     <button onclick="printCalendar()" class="btn btn-primary">🖨️ Print Calendar</button>
   </div>
 
@@ -14,7 +14,7 @@
 <link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.css" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.js"></script>
 
-<!-- Print-only tweaks: keep borders, align cells, fit one page -->
+<!-- Print styling -->
 <style>
   @media print {
     @page {
@@ -22,75 +22,67 @@
       margin: 0.35in;
     }
 
-    /* Better color fidelity for borders/backgrounds that exist */
     body {
       -webkit-print-color-adjust: exact;
       print-color-adjust: exact;
     }
 
-    /* Hide site chrome you don't want on paper */
+    /* Hide navigation UI, but keep title and grid */
     .nav,
     .btn,
     .fc-header-toolbar .fc-toolbar-chunk button {
       display: none !important;
     }
 
-    /* Keep the header text but reduce space */
+    /* Keep heading and shrink space above calendar */
+    h2 {
+      text-align: center;
+      margin-top: 0 !important;
+      margin-bottom: 0.2rem !important;
+      font-size: 1.4rem !important;
+    }
+
+    .card {
+      border: none !important;
+      box-shadow: none !important;
+      padding-top: 0 !important;
+    }
+
     .fc-header-toolbar {
-      margin: 0 0 6px 0 !important;
+      margin: 0 0 4px 0 !important;
       padding: 0 !important;
     }
 
-    /* Fit to a single page by scaling slightly */
+    /* Slight scale to fit on one page */
     #calendar {
-      transform: scale(0.86);
+      transform: scale(0.9);
       transform-origin: top center;
     }
 
-    /* Tighten overall font size for print */
+    /* Preserve grid alignment & borders */
     .fc {
       font-size: 11px;
       line-height: 1.2;
     }
-
-    /* Force grid/table consistency and borders */
     .fc .fc-scrollgrid,
     .fc table {
       border-collapse: collapse !important;
       table-layout: fixed !important;
     }
-
-    /* Outer border */
     .fc .fc-scrollgrid {
-      border: 1px solid #d1d5db !important; /* tailwind gray-300 */
+      border: 1px solid #d1d5db !important;
     }
-
-    /* Column headers + day cells borders */
     .fc .fc-col-header-cell,
     .fc .fc-daygrid-day {
       border: 1px solid #d1d5db !important;
     }
-
-    /* Header cell padding smaller */
     .fc .fc-col-header-cell-cushion {
-      padding: 4px 6px !important;
+      padding: 3px 5px !important;
     }
-
-    /* Day number alignment & spacing */
     .fc .fc-daygrid-day-top {
       justify-content: flex-end !important;
       padding: 2px 4px !important;
     }
-    .fc .fc-daygrid-day-number {
-      font-weight: 600;
-    }
-
-    /* Reduce vertical event space so weeks don’t spill */
-    .fc .fc-daygrid-body-unbalanced .fc-daygrid-day-events {
-      min-height: 0 !important;
-    }
-
-    /* Remove extra gaps/padding inside month grid */
     .fc .fc-daygrid-day-frame {
       padding: 2px !important;
     }
@@ -106,9 +98,7 @@
 document.addEventListener('DOMContentLoaded', function () {
   const el = document.getElementById('calendar');
   const cal = new FullCalendar.Calendar(el, {
-    // Keep Eastern time as you had
     timeZone: 'America/New_York',
-
     initialView: 'dayGridMonth',
     height: 'auto',
     headerToolbar: {
@@ -117,13 +107,10 @@ document.addEventListener('DOMContentLoaded', function () {
       right: 'dayGridMonth,dayGridWeek,dayGridDay'
     },
     fixedWeekCount: false,
-    firstDay: 0, // Sunday
-    displayEventTime: false, // all-day look; times hidden
-
+    firstDay: 0,
+    displayEventTime: false,
     events: '/calendar-data',
-
     eventDidMount: function(info) {
-      // Subtle tooltip with title
       info.el.title = info.event.title;
     }
   });
@@ -132,7 +119,6 @@ document.addEventListener('DOMContentLoaded', function () {
 });
 
 function printCalendar() {
-  // Print in-place so all current styles & layout are preserved
   window.print();
 }
 </script>
