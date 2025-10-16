@@ -3,7 +3,6 @@
 <h2>Calendar</h2>
 
 <div class="card" style="padding: 1rem;">
-  <!-- ✅ Print Button -->
   <div style="text-align: right; margin-bottom: 0.5rem;">
     <button onclick="printCalendar()" class="btn btn-primary">🖨️ Print Calendar</button>
   </div>
@@ -11,7 +10,7 @@
   <div id="calendar"></div>
 </div>
 
-<!-- FullCalendar (same as before) -->
+<!-- FullCalendar -->
 <link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.css" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.js"></script>
 
@@ -28,32 +27,48 @@ document.addEventListener('DOMContentLoaded', function () {
       right: 'dayGridMonth,dayGridWeek,dayGridDay'
     },
     fixedWeekCount: false,
-    firstDay: 0, // Sunday
+    firstDay: 0,
     displayEventTime: false,
     events: '/calendar-data',
     eventDidMount: function(info) {
       info.el.title = info.event.title;
     }
   });
-
   cal.render();
 });
 
 function printCalendar() {
   const printContents = document.getElementById('calendar').outerHTML;
-  const newWin = window.open('', '', 'width=900,height=700');
+  const newWin = window.open('', '', 'width=1000,height=700');
   newWin.document.write(`
     <html>
       <head>
         <title>Calendar Print</title>
         <link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.css" rel="stylesheet">
         <style>
-          body { font-family: Arial, sans-serif; margin: 20px; }
-          #calendar { max-width: 100%; }
+          @page {
+            size: landscape;
+            margin: 0.4in;
+          }
+          body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 10px;
+            transform: scale(0.9);
+            transform-origin: top center;
+          }
+          #calendar {
+            max-width: 100%;
+            margin: auto;
+          }
+          h2 {
+            text-align: center;
+            margin-bottom: 10px;
+          }
         </style>
       </head>
       <body>
-        <h2 style="text-align:center;">Calendar</h2>
+        <h2>Calendar</h2>
         ${printContents}
       </body>
     </html>
