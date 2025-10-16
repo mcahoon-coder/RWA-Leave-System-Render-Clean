@@ -14,11 +14,101 @@
 <link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.css" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.js"></script>
 
+<!-- Print-only tweaks: keep borders, align cells, fit one page -->
+<style>
+  @media print {
+    @page {
+      size: landscape;
+      margin: 0.35in;
+    }
+
+    /* Better color fidelity for borders/backgrounds that exist */
+    body {
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+
+    /* Hide site chrome you don't want on paper */
+    .nav,
+    .btn,
+    .fc-header-toolbar .fc-toolbar-chunk button {
+      display: none !important;
+    }
+
+    /* Keep the header text but reduce space */
+    .fc-header-toolbar {
+      margin: 0 0 6px 0 !important;
+      padding: 0 !important;
+    }
+
+    /* Fit to a single page by scaling slightly */
+    #calendar {
+      transform: scale(0.90);
+      transform-origin: top center;
+    }
+
+    /* Tighten overall font size for print */
+    .fc {
+      font-size: 11px;
+      line-height: 1.2;
+    }
+
+    /* Force grid/table consistency and borders */
+    .fc .fc-scrollgrid,
+    .fc table {
+      border-collapse: collapse !important;
+      table-layout: fixed !important;
+    }
+
+    /* Outer border */
+    .fc .fc-scrollgrid {
+      border: 1px solid #d1d5db !important; /* tailwind gray-300 */
+    }
+
+    /* Column headers + day cells borders */
+    .fc .fc-col-header-cell,
+    .fc .fc-daygrid-day {
+      border: 1px solid #d1d5db !important;
+    }
+
+    /* Header cell padding smaller */
+    .fc .fc-col-header-cell-cushion {
+      padding: 4px 6px !important;
+    }
+
+    /* Day number alignment & spacing */
+    .fc .fc-daygrid-day-top {
+      justify-content: flex-end !important;
+      padding: 2px 4px !important;
+    }
+    .fc .fc-daygrid-day-number {
+      font-weight: 600;
+    }
+
+    /* Reduce vertical event space so weeks don’t spill */
+    .fc .fc-daygrid-body-unbalanced .fc-daygrid-day-events {
+      min-height: 0 !important;
+    }
+
+    /* Remove extra gaps/padding inside month grid */
+    .fc .fc-daygrid-day-frame {
+      padding: 2px !important;
+    }
+    .fc .fc-daygrid-event {
+      margin: 1px 0 !important;
+      padding: 1px 2px !important;
+      border-radius: 2px !important;
+    }
+  }
+</style>
+
 <script>
 document.addEventListener('DOMContentLoaded', function () {
   const el = document.getElementById('calendar');
   const cal = new FullCalendar.Calendar(el, {
+    // Keep Eastern time as you had
     timeZone: 'America/New_York',
+
     initialView: 'dayGridMonth',
     height: 'auto',
     headerToolbar: {
@@ -27,56 +117,23 @@ document.addEventListener('DOMContentLoaded', function () {
       right: 'dayGridMonth,dayGridWeek,dayGridDay'
     },
     fixedWeekCount: false,
-    firstDay: 0,
-    displayEventTime: false,
+    firstDay: 0, // Sunday
+    displayEventTime: false, // all-day look; times hidden
+
     events: '/calendar-data',
+
     eventDidMount: function(info) {
+      // Subtle tooltip with title
       info.el.title = info.event.title;
     }
   });
+
   cal.render();
 });
 
 function printCalendar() {
-  const printContents = document.getElementById('calendar').outerHTML;
-  const newWin = window.open('', '', 'width=1000,height=700');
-  newWin.document.write(`
-    <html>
-      <head>
-        <title>Calendar Print</title>
-        <link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.css" rel="stylesheet">
-        <style>
-          @page {
-            size: landscape;
-            margin: 0.4in;
-          }
-          body {
-            font-family: Arial, sans-serif;
-            margin: 0;
-            padding: 10px;
-            transform: scale(0.9);
-            transform-origin: top center;
-          }
-          #calendar {
-            max-width: 100%;
-            margin: auto;
-          }
-          h2 {
-            text-align: center;
-            margin-bottom: 10px;
-          }
-        </style>
-      </head>
-      <body>
-        <h2>Calendar</h2>
-        ${printContents}
-      </body>
-    </html>
-  `);
-  newWin.document.close();
-  newWin.focus();
-  newWin.print();
-  newWin.close();
+  // Print in-place so all current styles & layout are preserved
+  window.print();
 }
 </script>
 {% endblock %}
