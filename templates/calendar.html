@@ -2,11 +2,16 @@
 {% block content %}
 <h2>Calendar</h2>
 
-<div class="card">
+<div class="card" style="padding: 1rem;">
+  <!-- ✅ Print Button -->
+  <div style="text-align: right; margin-bottom: 0.5rem;">
+    <button onclick="printCalendar()" class="btn btn-primary">🖨️ Print Calendar</button>
+  </div>
+
   <div id="calendar"></div>
 </div>
 
-<!-- FullCalendar (assumes you already include it the same way as before) -->
+<!-- FullCalendar (same as before) -->
 <link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.css" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.js"></script>
 
@@ -14,9 +19,7 @@
 document.addEventListener('DOMContentLoaded', function () {
   const el = document.getElementById('calendar');
   const cal = new FullCalendar.Calendar(el, {
-    // 👇 Key change: lock the calendar to Eastern time
     timeZone: 'America/New_York',
-
     initialView: 'dayGridMonth',
     height: 'auto',
     headerToolbar: {
@@ -26,17 +29,39 @@ document.addEventListener('DOMContentLoaded', function () {
     },
     fixedWeekCount: false,
     firstDay: 0, // Sunday
-    displayEventTime: false, // all-day look; times hidden
-
+    displayEventTime: false,
     events: '/calendar-data',
-
     eventDidMount: function(info) {
-      // Subtle tooltip with title
       info.el.title = info.event.title;
     }
   });
 
   cal.render();
 });
+
+function printCalendar() {
+  const printContents = document.getElementById('calendar').outerHTML;
+  const newWin = window.open('', '', 'width=900,height=700');
+  newWin.document.write(`
+    <html>
+      <head>
+        <title>Calendar Print</title>
+        <link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.css" rel="stylesheet">
+        <style>
+          body { font-family: Arial, sans-serif; margin: 20px; }
+          #calendar { max-width: 100%; }
+        </style>
+      </head>
+      <body>
+        <h2 style="text-align:center;">Calendar</h2>
+        ${printContents}
+      </body>
+    </html>
+  `);
+  newWin.document.close();
+  newWin.focus();
+  newWin.print();
+  newWin.close();
+}
 </script>
 {% endblock %}
