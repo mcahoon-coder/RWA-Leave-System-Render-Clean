@@ -402,6 +402,20 @@ def dashboard():
         .limit(10)
         .all()
     )
+        # Fetch this user's most recent manual adjustments
+    my_adjustments = []
+    try:
+        if "manual_adjustment" in db.metadata.tables:
+            my_adjustments = (
+                ManualAdjustment.query
+                .filter_by(user_id=current_user.id)
+                .order_by(ManualAdjustment.timestamp.desc())
+                .limit(10)
+                .all()
+            )
+    except Exception as e:
+        app.logger.warning(f"Could not load manual adjustments for dashboard: {e}")
+
     return render_template(
         "dashboard.html",
         title="Dashboard",
