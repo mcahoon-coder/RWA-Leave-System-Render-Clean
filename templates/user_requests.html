@@ -3,38 +3,6 @@
 <div class="container mt-4">
     <h2>Leave History for {{ user.username }}</h2>
 
-    <!-- Flash messages (RWA themed) -->
-    {% with messages = get_flashed_messages(with_categories=true) %}
-      {% if messages %}
-        <div style="max-width: 800px; margin: 0 auto 1rem;">
-          {% for category, message in messages %}
-            <div 
-              style="
-                padding: .75rem 1rem; 
-                border-radius: 10px; 
-                margin-bottom: .5rem; 
-                text-align: center;
-                font-weight: 600;
-                border: 1px solid 
-                  {% if category == 'warning' %}#ffe58f
-                  {% elif category == 'success' %}#4169e1
-                  {% else %}#f5c2c7{% endif %};
-                background:
-                  {% if category == 'warning' %}#fff9d9
-                  {% elif category == 'success' %}#e8f0fe
-                  {% else %}#fde2e1{% endif %};
-                color:
-                  {% if category == 'warning' %}#664d03
-                  {% elif category == 'success' %}#0b3d91
-                  {% else %}#842029{% endif %};
-              ">
-              {{ message|safe }}
-            </div>
-          {% endfor %}
-        </div>
-      {% endif %}
-    {% endwith %}
-
     <!-- Export + Back Buttons -->
     <div class="d-flex justify-content-between align-items-center mb-3">
         <a href="{{ url_for('export_user_requests', user_id=user.id) }}" class="btn btn-success">
@@ -43,8 +11,90 @@
         <a href="{{ url_for('my_requests') }}" class="btn btn-secondary">← Back to All Requests</a>
     </div>
 
+    {# =========================
+       Manual Adjustments Log
+       ========================= #}
+    {% if adjustments %}
+      <h4 class="mt-3 mb-2">Manual Adjustments</h4>
+      <p class="text-muted" style="margin-top:-.25rem; margin-bottom:.5rem;">
+        These entries are created automatically whenever time is manually added or taken away.
+      </p>
+      <div class="table-responsive">
+        <table class="table table-striped align-middle">
+          <thead>
+            <tr>
+              <th>Date Added</th>
+              <th>Hours</th>
+              <th>Note</th>
+              <th>Added By</th>
+              {% if is_admin %}<th>Actions</th>{% endif %}
+            </tr>
+          </thead>
+          <tbody>
+            {% for a in adjustments %}
+            <tr>
+              <td>{{ a.timestamp.strftime('%b %d, %Y %I:%M %p') }}</td>
+              <td>
+                <span class="{% if a.hours >= 0 %}text-success{% else %}text-danger{% endif %}">
+                  {{ "%+.2f"|format(a.hours) }}h
+                </span>
+              </td>
+              <td>{{ a.note }}</td>
+              <td>
+                {% if a.admin_id %}
+                  {% set admin_user = User.query.get(a.admin_id) %}
+                  {{ admin_user.username if admin_user else "Unknown" }}
+                {% else %}
+                  –
+                {% endif %}
+              </td>
+              {% if is_admin %}
+              <td>
+                <form method="post" action="{{ url_for('delete_adjustment', adj_id=a.id, user_id=user.id) }}" style="display:inline;">
+                  <button type="submit" class="btn btn-sm btn-danger" onclick="return confirm('Delete this adjustment?');">Delete</button>
+                </form>
+              </td>
+              {% endif %}
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      {% if is_admin %}
+        <div class="alert alert-info">
+          No manual adjustments yet. Use the form below to add or remove time and it will be recorded here.
+        </div>
+      {% endif %}
+    {% endif %}
+
+    {# =========================
+       Admin-only manual adjustment form
+       ========================= #}
+    {% if is_admin %}
+      <hr class="my-4">
+      <h4>Add Manual Adjustment</h4>
+      <form method="post" action="{{ url_for('add_manual_adjustment_for_user', user_id=user.id) }}">
+        <div class="row g-2 mb-3">
+          <div class="col-md-3">
+            <input type="number" name="hours" step="0.25" class="form-control" placeholder="Hours (+/-)" required>
+          </div>
+          <div class="col-md-6">
+            <input type="text" name="note" class="form-control" placeholder="Note (reason)" required>
+          </div>
+          <div class="col-md-3">
+            <button type="submit" class="btn btn-success w-100">Add Adjustment</button>
+          </div>
+        </div>
+      </form>
+    {% endif %}
+
+    {# =========================
+       Leave Requests Table
+       ========================= #}
     {% if requests %}
-      <div class="table-responsive mt-3">
+      <h4 class="mt-4">Leave Requests</h4>
+      <div class="table-responsive mt-2">
         <table class="table table-striped align-middle">
           <thead>
             <tr>
@@ -53,7 +103,7 @@
               <th>Mode</th>
               <th class="date-col">Dates</th>
               <th>Times</th>
-              <th>Hours</th>
+              <th>Hours</hth>
               <th>Status</th>
               <th>School?</th>
               <th>Substitutes</th>
@@ -100,71 +150,6 @@
       </div>
     {% else %}
       <p>No requests found for this user.</p>
-    {% endif %}
-
-    <!-- Admin-only manual adjustment form -->
-    {% if is_admin %}
-      <hr class="my-4">
-      <h4>Add Manual Adjustment</h4>
-      <form method="post" action="{{ url_for('add_manual_adjustment_for_user', user_id=user.id) }}">
-        <div class="row g-2 mb-3">
-          <div class="col-md-3">
-            <input type="number" name="hours" step="0.25" class="form-control" placeholder="Hours (+/-)" required>
-          </div>
-          <div class="col-md-6">
-            <input type="text" name="note" class="form-control" placeholder="Note (reason)" required>
-          </div>
-          <div class="col-md-3">
-            <button type="submit" class="btn btn-success w-100">Add Adjustment</button>
-          </div>
-        </div>
-      </form>
-    {% endif %}
-
-    <!-- Adjustment log table -->
-    {% if adjustments %}
-      <h4 class="mt-4">Manual Adjustments</h4>
-      <div class="table-responsive">
-        <table class="table table-striped align-middle">
-          <thead>
-            <tr>
-              <th>Date Added</th>
-              <th>Hours</th>
-              <th>Note</th>
-              <th>Added By</th>
-              {% if is_admin %}<th>Actions</th>{% endif %}
-            </tr>
-          </thead>
-          <tbody>
-            {% for a in adjustments %}
-            <tr>
-              <td>{{ a.timestamp.strftime('%b %d, %Y %I:%M %p') }}</td>
-              <td>
-                <span class="{% if a.hours >= 0 %}text-success{% else %}text-danger{% endif %}">
-                  {{ "%+.2f"|format(a.hours) }}h
-                </span>
-              </td>
-              <td>{{ a.note }}</td>
-              <td>
-                {% if a.admin_id %}
-                  {% set admin = users.query.get(a.admin_id) %}
-                  {{ admin.username if admin else "Unknown" }}
-                {% else %}
-                  –
-                {% endif %}
-              </td>
-              {% if is_admin %}
-              <td>
-                <form method="post" action="{{ url_for('delete_adjustment', adj_id=a.id, user_id=user.id) }}" style="display:inline;">
-                  <button type="submit" class="btn btn-sm btn-danger" onclick="return confirm('Delete this adjustment?');">Delete</button>
-                </form>
-              </td>
-              {% endif %}
-            </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      </div>
     {% endif %}
 </div>
 {% endblock %}
