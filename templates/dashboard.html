@@ -16,7 +16,7 @@
         <th>Mode</th>
         <th>Hours</th>
         <th>Dates</th>
-        <th>Time Window</th> <!-- NEW -->
+        <th>Time Window</th>
         <th>Status</th>
       </tr>
     </thead>
@@ -30,6 +30,8 @@
         <td>
           {% if r.mode == "hourly" and r.start_time and r.end_time %}
             {{ r.start_time|h12 }} – {{ r.end_time|h12 }} ({{ "%.2f"|format(r.hours) }}h)
+          {% else %}
+            –
           {% endif %}
         </td>
         <td>{{ r.status }}</td>
@@ -37,5 +39,49 @@
       {% endfor %}
     </tbody>
   </table>
+
+  {% if my_adjustments and my_adjustments|length > 0 %}
+  <div class="card mt-4">
+    <div class="card-body">
+      <h4 style="margin-top:0;">Recent Manual Adjustments</h4>
+      <p class="text-muted" style="margin-top:-0.25rem; margin-bottom:.75rem;">
+        Time added or deducted manually by an administrator.
+      </p>
+      <div class="table-responsive">
+        <table class="table table-striped align-middle">
+          <thead class="table-light">
+            <tr>
+              <th>Date</th>
+              <th>Hours</th>
+              <th>Note</th>
+              <th>Added By</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for a in my_adjustments %}
+            <tr>
+              <td>{{ a.timestamp.strftime('%b %d, %Y %I:%M %p') if a.timestamp else '' }}</td>
+              <td>
+                <span class="{% if a.hours >= 0 %}text-success{% else %}text-danger{% endif %}">
+                  {{ "%+.2f"|format(a.hours) }}h
+                </span>
+              </td>
+              <td>{{ a.note }}</td>
+              <td>
+                {% if a.admin_id %}
+                  {% set admin_user = User.query.get(a.admin_id) %}
+                  {{ admin_user.username if admin_user else "Unknown" }}
+                {% else %}
+                  –
+                {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  {% endif %}
 </div>
 {% endblock %}
