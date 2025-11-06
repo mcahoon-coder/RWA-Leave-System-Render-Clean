@@ -182,6 +182,11 @@ class ManualAdjustment(db.Model):
 def load_user(user_id):
     return User.query.get(int(user_id))
 
+@app.context_processor
+def inject_models():
+    # Makes the User model available inside Jinja templates, e.g. {{ User.query.get(id) }}
+    return dict(User=User)
+
 # =========================================================
 # Helpers
 # =========================================================
