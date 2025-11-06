@@ -14,7 +14,7 @@ import os, smtplib, ssl, io, csv
 from email.message import EmailMessage
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-from sqlalchemy import text
+from sqlalchemy import text, func
 import xlsxwriter  # Excel export (in-memory, safe on Render)
 
 # =========================================================
@@ -348,6 +348,21 @@ def _filtered_requests_for(current_user_is_admin: bool):
 
     return q.order_by(LeaveRequest.created_at.desc())
 
+def _manual_adjust_totals_for(user_ids):
+    """Return {user_id: total_hours_adjusted} for the given list of ids."""
+    if not user_ids:
+        return {}
+    rows = (
+        db.session.query(
+            ManualAdjustment.user_id,
+            func.coalesce(func.sum(ManualAdjustment.hours), 0.0),
+        )
+        .filter(ManualAdjustment.user_id.in_(user_ids))
+        .group_by(ManualAdjustment.user_id)
+        .all()
+    )
+    return {uid: float(total or 0.0) for uid, total in rows}
+    
 # =========================================================
 # Nav + globals in templates
 # =========================================================
