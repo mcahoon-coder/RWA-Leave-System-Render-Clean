@@ -177,6 +177,7 @@ class ManualAdjustment(db.Model):
     user = db.relationship("User", foreign_keys=[user_id], backref="adjustments_received")
     admin = db.relationship("User", foreign_keys=[admin_id])
 
+app.jinja_env.globals["User"] = User
 
 @login_manager.user_loader
 def load_user(user_id):
