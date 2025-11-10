@@ -603,9 +603,10 @@ def new_request():
 def my_requests():
     is_admin = (current_user.role == Role.admin)
 
+    # Base query (uses your existing helper)
     q = _filtered_requests_for(is_admin)
 
-    # Admin: show a "daily" slice in America/New_York timezone
+    # Admin: optional "day" filter in America/New_York timezone
     selected_day_str = None
     if is_admin:
         tz = ZoneInfo("America/New_York")
@@ -620,6 +621,8 @@ def my_requests():
 
             start_dt = datetime.combine(d, datetime.min.time(), tzinfo=tz)
             end_dt = start_dt + timedelta(days=1)
+
+            # Convert to UTC-naive for DB filter (if DB stores UTC/naive)
             start_utc = start_dt.astimezone(ZoneInfo("UTC")).replace(tzinfo=None)
             end_utc = end_dt.astimezone(ZoneInfo("UTC")).replace(tzinfo=None)
 
@@ -628,43 +631,52 @@ def my_requests():
                 LeaveRequest.created_at < end_utc
             )
 
+    # Final list of requests for this view
     reqs = q.all()
 
+    # -----------------------------
+    # Admin overview (Employees at a Glance)
+    # -----------------------------
     staff_overview = None
     if is_admin:
+        # All users, sorted by username
         users = User.query.order_by(User.username.asc()).all()
+
+        # Who has at least one pending request?
         pending_user_ids = {
-            r.user_id for r in LeaveRequest.query.with_entities(LeaveRequest.user_id)
-            .filter(LeaveRequest.status == RequestStatus.pending).all()
+            uid for (uid,) in db.session.query(LeaveRequest.user_id)
+            .filter(LeaveRequest.status == RequestStatus.pending)
+            .distinct()
         }
+
+        # Manual adjustment totals per user (if table exists)
+        adjustments_map = {}
+        if "manual_adjustments" in db.metadata.tables:
+            from sqlalchemy import func
+            rows = (
+                db.session.query(
+                    ManualAdjustment.user_id,
+                    func.sum(ManualAdjustment.hours)
+                )
+                .group_by(ManualAdjustment.user_id)
+                .all()
+            )
+            adjustments_map = {
+                user_id: float(total or 0.0)
+                for user_id, total in rows
+            }
+
+        # Build simple dicts for the template
         staff_overview = [
             {
                 "id": u.id,
                 "username": u.username,
                 "hours_balance": float(u.hours_balance or 0.0),
                 "has_pending": (u.id in pending_user_ids),
+                "adjust_total": adjustments_map.get(u.id, 0.0),
             }
             for u in users
         ]
-
-        # Include manual adjustments in the admin overview (safe for dicts)
-        if "manual_adjustment" in db.metadata.tables:
-            for u in staff_overview:
-                # Check if this user has any pending requests
-                has_pending = LeaveRequest.query.filter_by(
-                    user_id=u["id"], status="Pending"
-                ).first() is not None
-                u["has_pending"] = has_pending
-
-                # Sum up manual adjustments
-                try:
-                    adjustments = ManualAdjustment.query.filter_by(user_id=u["id"]).all()
-                    u["adjust_total"] = sum(a.hours for a in adjustments)
-                except Exception:
-                    u["adjust_total"] = 0.0
-        else:
-            for u in staff_overview:
-                u["adjust_total"] = 0.0
 
     return render_template(
         "requests.html",
