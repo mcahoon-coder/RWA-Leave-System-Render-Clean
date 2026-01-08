@@ -538,7 +538,8 @@ def new_request():
             hours = round(computed * 4) / 4.0
 
         elif mode == RequestMode.halfday:
-            hours = 4.0
+            wd = workdays_between(sd, ed)
+            hours = wd * (WORKDAY_HOURS / 2)
 
         else:  # daily
             wd = workdays_between(sd, ed)
