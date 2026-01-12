@@ -191,6 +191,10 @@ def inject_models():
 # =========================================================
 # Helpers
 # =========================================================
+def normalize_hours(value):
+    """Normalize hours to 2 decimal places to avoid float drift."""
+    return round(float(value or 0.0), 2)
+
 WORKDAY_HOURS = float(os.environ.get("WORKDAY_HOURS", "8"))
 HOLIDAYS: set[date] = set()  # add date(...) objects here if you want static holidays
 
@@ -571,7 +575,7 @@ def new_request():
             end_date=ed,
             start_time=_norm(start_time_str) if mode == RequestMode.hourly else None,
             end_time=_norm(end_time_str) if mode == RequestMode.hourly else None,
-            hours=hours,
+            hours=normalize_hours(hours),
             reason=reason,
             is_school_related=is_school,
         )
@@ -780,7 +784,9 @@ def approve(req_id):
         flash("Request not pending.", "warning"); return redirect(url_for("my_requests"))
     u = User.query.get(r.user_id)
     if not r.is_school_related:
-        u.hours_balance = float(u.hours_balance or 0.0) - float(r.hours or 0.0)
+    u.hours_balance = normalize_hours(
+        (u.hours_balance or 0.0) - (r.hours or 0.0)
+    )
     r.status = RequestStatus.approved
     r.decided_at = datetime.utcnow()
     db.session.commit()
@@ -844,7 +850,9 @@ def cancel(req_id):
         return redirect(url_for("my_requests"))
     u = User.query.get(r.user_id)
     if r.status == RequestStatus.approved and not r.is_school_related:
-        u.hours_balance = float(u.hours_balance or 0.0) + float(r.hours or 0.0)
+    u.hours_balance = normalize_hours(
+        (u.hours_balance or 0.0) + (r.hours or 0.0)
+    )
     r.status = RequestStatus.cancelled
     r.decided_at = datetime.utcnow()
     db.session.commit()
@@ -923,8 +931,11 @@ def add_manual_adjustment_for_user(user_id):
     db.session.add(adj)
 
     # Update the user's balance
-    user.hours_balance = (user.hours_balance or 0) + hours
-    db.session.commit()
+    # Update the user's balance
+     user.hours_balance = normalize_hours(
+     (user.hours_balance or 0.0) + hours
+     )
+     db.session.commit()
 
     # -----------------------------
     # Send notification emails
@@ -1001,7 +1012,9 @@ def delete_adjustment(user_id, adj_id):
     }
 
     try:
-        user.hours_balance = (user.hours_balance or 0) - adj.hours
+        user.hours_balance = normalize_hours(
+        (user.hours_balance or 0.0) - adj.hours
+        )
         db.session.delete(adj)
         db.session.commit()
         flash(
@@ -1040,8 +1053,9 @@ def undo_delete_adjustment():
             timestamp=datetime.fromisoformat(data["timestamp"]) if data.get("timestamp") else datetime.now(),
         )
         user = User.query.get(data["user_id"])
-        user.hours_balance = (user.hours_balance or 0) + adj.hours
-
+        user.hours_balance = normalize_hours(
+        (user.hours_balance or 0.0) + adj.hours
+        )
         db.session.add(adj)
         db.session.commit()
         flash("Deleted adjustment has been restored.", "success")
