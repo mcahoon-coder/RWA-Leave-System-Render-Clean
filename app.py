@@ -778,35 +778,47 @@ def delete_substitute(req_id, sub_id):
 @login_required
 def approve(req_id):
     if current_user.role != Role.admin:
-        flash("Admins only.", "warning"); return redirect(url_for("my_requests"))
+        flash("Admins only.", "warning")
+        return redirect(url_for("my_requests"))
+
     r = LeaveRequest.query.get_or_404(req_id)
+
     if r.status != RequestStatus.pending:
-        flash("Request not pending.", "warning"); return redirect(url_for("my_requests"))
+        flash("Request not pending.", "warning")
+        return redirect(url_for("my_requests"))
+
     u = User.query.get(r.user_id)
+
+    # Deduct hours only if NOT school-related
     if not r.is_school_related:
-    u.hours_balance = normalize_hours(
-        (u.hours_balance or 0.0) - (r.hours or 0.0)
-    )
-  
+        u.hours_balance = normalize_hours(
+            (u.hours_balance or 0.0) - (r.hours or 0.0)
+        )
+
+    # Always approve the request
     r.status = RequestStatus.approved
     r.decided_at = datetime.utcnow()
+
     db.session.commit()
 
-    subs_text = "; ".join([f"{s.name} ({s.hours:.2f}h)" for s in r.subs]) or (r.substitute or "(none)")
+    subs_text = "; ".join(
+        [f"{s.name} ({s.hours:.2f}h)" for s in r.subs]
+    ) or (r.substitute or "(none)")
+
     subj = "Leave Request Approved"
     body = (
         f"Hello {u.username},\n\n"
         f"Your leave request has been APPROVED.\n"
-        f"Kind: {r.kind}\nMode: {r.mode}\nHours: {r.hours:.2f}\n"
+        f"Kind: {r.kind}\n"
+        f"Mode: {r.mode}\n"
+        f"Hours: {r.hours:.2f}\n"
         f"School-related: {'Yes' if r.is_school_related else 'No'}\n"
         f"Substitutes: {subs_text}\n"
         f"Dates: {r.start_date} to {r.end_date}\n\n"
         f"Remaining balance: {u.hours_balance:.2f} hours\n"
     )
 
-    ok, emsg = send_email([u.email] + admin_emails(), subj, body)
-    if not ok:
-        flash(f"Notice: approval email not sent ({emsg}).", "warning")
+    send_email([u.email] + admin_emails(), subj, body)
 
     flash("Approved.", "success")
     return redirect(request.referrer or url_for("my_requests"))
