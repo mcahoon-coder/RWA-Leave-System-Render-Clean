@@ -787,6 +787,7 @@ def approve(req_id):
     u.hours_balance = normalize_hours(
         (u.hours_balance or 0.0) - (r.hours or 0.0)
     )
+  
     r.status = RequestStatus.approved
     r.decided_at = datetime.utcnow()
     db.session.commit()
