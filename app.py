@@ -931,7 +931,7 @@ from flask import session
 @login_required
 def add_manual_adjustment_for_user(user_id):
     # Only admins can manually adjust time
-    if not getattr(current_user, "is_admin", False) and getattr(current_user, "role", "") != "admin":
+    if getattr(current_user, "role", "") != "admin":
         abort(403)
 
     user = User.query.get_or_404(user_id)
@@ -945,66 +945,46 @@ def add_manual_adjustment_for_user(user_id):
     # Create the manual adjustment entry
     adj = ManualAdjustment(
         user_id=user.id,
-        admin_id=current_user.id if hasattr(current_user, "id") else None,
+        admin_id=current_user.id,
         hours=hours,
         note=note,
         timestamp=datetime.utcnow(),
     )
     db.session.add(adj)
 
-    # Update the user's balance
-    # Update the user's balance
-     user.hours_balance = normalize_hours(
-     (user.hours_balance or 0.0) + hours
-     )
-     db.session.commit()
+    # Update the user's balance (normalized)
+    user.hours_balance = normalize_hours((user.hours_balance or 0.0) + float(hours or 0.0))
+    db.session.commit()
 
-    # -----------------------------
-    # Send notification emails
-    # -----------------------------
+    # Optional email notifications (won't break page if it fails)
     try:
-        # 1) Email to the employee (if they have an address)
         if user.email:
             subject_emp = "Your leave balance has been adjusted"
-            body_emp = f"""Hi {user.staff_name or user.username},
-
-Your leave balance has been adjusted by {hours:+.2f} hours.
-
-Reason: {note}
-New balance: {user.hours_balance:.2f} hours
-
-This change was made on {adj.timestamp.strftime('%b %d, %Y at %I:%M %p')} 
-by {current_user.staff_name or current_user.username}.
-
-If you have any questions, please contact the office.
-"""
-
+            body_emp = (
+                f"Hi {user.staff_name or user.username},\n\n"
+                f"Your leave balance has been adjusted by {hours:+.2f} hours.\n\n"
+                f"Reason: {note}\n"
+                f"New balance: {user.hours_balance:.2f} hours\n\n"
+                f"This change was made on {adj.timestamp.strftime('%b %d, %Y at %I:%M %p')} "
+                f"by {current_user.staff_name or current_user.username}.\n"
+            )
             send_email([user.email], subject_emp, body_emp)
 
-        # 2) Email to admins (including current admin if they have an email)
-        admin_recipients = list(ADMIN_EMAILS_ENV)  # from your config
-        if getattr(current_user, "email", None):
-            if current_user.email not in admin_recipients:
-                admin_recipients.append(current_user.email)
-
+        admin_recipients = admin_emails()
         if admin_recipients:
             subject_admin = f"Manual leave adjustment for {user.staff_name or user.username}"
-            body_admin = f"""Manual leave adjustment recorded.
-
-Employee: {user.staff_name or user.username} (username: {user.username})
-Changed by: {current_user.staff_name or current_user.username}
-
-Amount: {hours:+.2f} hours
-Reason: {note}
-New balance: {user.hours_balance:.2f} hours
-When: {adj.timestamp.strftime('%b %d, %Y at %I:%M %p')}
-
-This message was sent automatically by the leave system.
-"""
+            body_admin = (
+                "Manual leave adjustment recorded.\n\n"
+                f"Employee: {user.staff_name or user.username} (username: {user.username})\n"
+                f"Changed by: {current_user.staff_name or current_user.username}\n\n"
+                f"Amount: {hours:+.2f} hours\n"
+                f"Reason: {note}\n"
+                f"New balance: {user.hours_balance:.2f} hours\n"
+                f"When: {adj.timestamp.strftime('%b %d, %Y at %I:%M %p')}\n"
+            )
             send_email(admin_recipients, subject_admin, body_admin)
 
     except Exception as e:
-        # Don't break the page if email fails; just log it
         app.logger.error(f"Error sending manual adjustment emails: {e}")
 
     flash(f"Manual adjustment of {hours:+.2f}h added for {user.username}.", "success")
