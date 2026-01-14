@@ -857,24 +857,30 @@ def disapprove(req_id):
 @app.post("/requests/<int:req_id>/cancel")
 @login_required
 def cancel(req_id):
-r = LeaveRequest.query.get_or_404(req_id)
+    r = LeaveRequest.query.get_or_404(req_id)
 
-if r.user_id != current_user.id and current_user.role != Role.admin:
-    flash("Not allowed.", "danger")
-    return redirect(url_for("my_requests"))
+    if r.user_id != current_user.id and current_user.role != Role.admin:
+        flash("Not allowed.", "danger")
+        return redirect(url_for("my_requests"))
 
-u = User.query.get(r.user_id)
+    u = User.query.get(r.user_id)
 
-# Add hours back ONLY if it was approved and not school-related
-if r.status == RequestStatus.approved and not r.is_school_related:
-    u.hours_balance = normalize_hours(
-        (u.hours_balance or 0.0) + (r.hours or 0.0)
-    )
+    # Add hours back ONLY if it was approved and not school-related
+    if r.status == RequestStatus.approved and not r.is_school_related:
+        u.hours_balance = normalize_hours(
+            (u.hours_balance or 0.0) + (r.hours or 0.0)
+        )
 
-r.status = RequestStatus.cancelled
-r.decided_at = datetime.utcnow()
-db.session.commit()
+    r.status = RequestStatus.cancelled
+    r.decided_at = datetime.utcnow()
+    db.session.commit()
 
+    subs_text = "; ".join(
+        [f"{s.name} ({s.hours:.2f}h)" for s in r.subs]
+    ) or (r.substitute or "(none)")
+
+    subj = "Leave Request Cancelled"
+    body = (
         f"User {u.username} cancelled a leave request.\n"
         f"Kind: {r.kind}\nMode: {r.mode}\nHours: {r.hours:.2f}\n"
         f"School-related: {'Yes' if r.is_school_related else 'No'}\n"
@@ -886,6 +892,7 @@ db.session.commit()
     recipients = admin_emails()
     if u.email:
         recipients = [u.email] + recipients
+
     ok, emsg = send_email(recipients, subj, body)
     if not ok:
         flash(f"Notice: cancel email not sent ({emsg}).", "warning")
