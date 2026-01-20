@@ -116,6 +116,7 @@ class User(UserMixin, db.Model):
     password_hash = db.Column(db.String(255), nullable=False)
     role = db.Column(db.String(20), default=Role.staff, nullable=False)
     hours_balance = db.Column(db.Float, default=160.0, nullable=False)
+    starting_balance = db.Column(db.Float, default=0.0, nullable=False)
     email = db.Column(db.String(255))  # for notifications
     # Optional display name for staff
     staff_name = db.Column(db.String(150))
@@ -268,6 +269,9 @@ def ensure_db():
                 db.session.execute(text("ALTER TABLE leave_request ADD COLUMN substitute VARCHAR(120)"))
             if not _column_exists("user", "staff_name"):
                 db.session.execute(text("ALTER TABLE user ADD COLUMN staff_name VARCHAR(150)"))
+             if not _column_exists("user", "starting_balance"):
+                db.session.execute(text("ALTER TABLE user ADD COLUMN starting_balance FLOAT DEFAULT 0 NOT NULL"))
+                 
             db.session.commit()
         else:
             db.session.execute(text("ALTER TABLE leave_request ADD COLUMN IF NOT EXISTS start_time VARCHAR(5)"))
@@ -275,6 +279,7 @@ def ensure_db():
             db.session.execute(text("ALTER TABLE leave_request ADD COLUMN IF NOT EXISTS is_school_related BOOLEAN NOT NULL DEFAULT FALSE"))
             db.session.execute(text("ALTER TABLE leave_request ADD COLUMN IF NOT EXISTS substitute VARCHAR(120)"))
             db.session.execute(text("ALTER TABLE \"user\" ADD COLUMN IF NOT EXISTS staff_name VARCHAR(150)"))
+            db.session.execute(text('ALTER TABLE "user" ADD COLUMN IF NOT EXISTS starting_balance DOUBLE PRECISION NOT NULL DEFAULT 0'))
             db.session.commit()
     except Exception:
         db.session.rollback()
