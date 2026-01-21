@@ -258,22 +258,31 @@ def ensure_db():
 
     # Add newly introduced columns if missing
     try:
-        if db.engine.dialect.name == "sqlite":
+    if db.engine.dialect.name == "sqlite":
             if not _column_exists("leave_request", "start_time"):
                 db.session.execute(text("ALTER TABLE leave_request ADD COLUMN start_time VARCHAR(5)"))
             if not _column_exists("leave_request", "end_time"):
                 db.session.execute(text("ALTER TABLE leave_request ADD COLUMN end_time VARCHAR(5)"))
             if not _column_exists("leave_request", "is_school_related"):
-                db.session.execute(text("ALTER TABLE leave_request ADD COLUMN is_school_related BOOLEAN DEFAULT 0 NOT NULL"))
+                db.session.execute(
+                    text("ALTER TABLE leave_request ADD COLUMN is_school_related BOOLEAN DEFAULT 0 NOT NULL")
+                )
             if not _column_exists("leave_request", "substitute"):
-                db.session.execute(text("ALTER TABLE leave_request ADD COLUMN substitute VARCHAR(120)"))
+                db.session.execute(
+                    text("ALTER TABLE leave_request ADD COLUMN substitute VARCHAR(120)")
+                )
             if not _column_exists("user", "staff_name"):
-                db.session.execute(text("ALTER TABLE user ADD COLUMN staff_name VARCHAR(150)"))
-             if not _column_exists("user", "starting_balance"):
-                db.session.execute(text("ALTER TABLE user ADD COLUMN starting_balance FLOAT DEFAULT 0 NOT NULL"))
-                 
+                db.session.execute(
+                    text("ALTER TABLE user ADD COLUMN staff_name VARCHAR(150)")
+                )
+            if not _column_exists("user", "starting_balance"):
+                db.session.execute(
+                    text("ALTER TABLE user ADD COLUMN starting_balance FLOAT DEFAULT 0 NOT NULL")
+                )
+
             db.session.commit()
-        else:
+
+    else:
             db.session.execute(text("ALTER TABLE leave_request ADD COLUMN IF NOT EXISTS start_time VARCHAR(5)"))
             db.session.execute(text("ALTER TABLE leave_request ADD COLUMN IF NOT EXISTS end_time VARCHAR(5)"))
             db.session.execute(text("ALTER TABLE leave_request ADD COLUMN IF NOT EXISTS is_school_related BOOLEAN NOT NULL DEFAULT FALSE"))
