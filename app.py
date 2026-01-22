@@ -373,7 +373,57 @@ def _manual_adjust_totals_for(user_ids):
         .all()
     )
     return {uid: float(total or 0.0) for uid, total in rows}
-    
+
+  def normalize_hours(h: float) -> float:
+    """
+    Normalize hours to the system's quarter-hour precision and avoid -0.00.
+    """
+    try:
+        h = float(h or 0.0)
+    except Exception:
+        h = 0.0
+
+    # Quarter-hour rounding (0.25)
+    h = round(h * 4) / 4.0
+
+    # Avoid negative zero display weirdness
+    if abs(h) < 0.0001:
+        h = 0.0
+    return h
+
+def manual_adjust_sum(user_id: int) -> float:
+    total = (
+        db.session.query(func.coalesce(func.sum(ManualAdjustment.hours), 0.0))
+        .filter(ManualAdjustment.user_id == user_id)
+        .scalar()
+    )
+    return float(total or 0.0)
+
+def approved_leave_sum(user_id: int) -> float:
+    """
+    Leave that SHOULD deduct from balance:
+    - Approved
+    - NOT school-related
+    """
+    total = (
+        db.session.query(func.coalesce(func.sum(LeaveRequest.hours), 0.0))
+        .filter(
+            LeaveRequest.user_id == user_id,
+            LeaveRequest.status == RequestStatus.approved,
+            LeaveRequest.is_school_related == False,  # noqa: E712
+        )
+        .scalar()
+    )
+    return float(total or 0.0)
+
+def expected_balance_for_user(u: User) -> float:
+    start = float(getattr(u, "starting_balance", 0.0) or 0.0)
+    manual = manual_adjust_sum(u.id)
+    taken = approved_leave_sum(u.id)
+
+    expected = start + manual - taken
+    return normalize_hours(expected)
+  
 # =========================================================
 # Nav + globals in templates
 # =========================================================
@@ -678,17 +728,26 @@ def my_requests():
             }
 
         # Build simple dicts for the template
-        staff_overview = [
-            {
-                "id": u.id,
-                "username": u.username,
-                "hours_balance": float(u.hours_balance or 0.0),
-                "has_pending": (u.id in pending_user_ids),
-                "adjust_total": adjustments_map.get(u.id, 0.0),
-            }
-            for u in users
-        ]
+       staff_overview = []
+       for u in users:
+           hb = normalize_hours(u.hours_balance or 0.0)
+           start_bal = normalize_hours(getattr(u, "starting_balance", 0.0) or 0.0)
 
+           manual_total = normalize_hours(adjustments_map.get(u.id, 0.0))
+           expected = expected_balance_for_user(u)
+           diff = normalize_hours(hb - expected)
+
+           staff_overview.append({
+               "id": u.id,
+               "username": u.username,
+               "hours_balance": hb,
+               "starting_balance": start_bal,
+               "adjust_total": manual_total,
+               "expected_balance": expected,
+               "diff": diff,
+               "has_pending": (u.id in pending_user_ids),
+            })
+  
     return render_template(
         "requests.html",
         title="Requests",
