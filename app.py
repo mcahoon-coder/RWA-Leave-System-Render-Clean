@@ -374,22 +374,21 @@ def _manual_adjust_totals_for(user_ids):
     )
     return {uid: float(total or 0.0) for uid, total in rows}
 
-  def normalize_hours(h: float) -> float:
+def normalize_hours(h: float) -> float:
     """
-    Normalize hours to the system's quarter-hour precision and avoid -0.00.
+    Normalize hours to quarter-hour precision and avoid -0.00.
     """
     try:
         h = float(h or 0.0)
     except Exception:
         h = 0.0
 
-    # Quarter-hour rounding (0.25)
     h = round(h * 4) / 4.0
 
-    # Avoid negative zero display weirdness
     if abs(h) < 0.0001:
         h = 0.0
     return h
+
 
 def manual_adjust_sum(user_id: int) -> float:
     total = (
@@ -399,22 +398,19 @@ def manual_adjust_sum(user_id: int) -> float:
     )
     return float(total or 0.0)
 
+
 def approved_leave_sum(user_id: int) -> float:
-    """
-    Leave that SHOULD deduct from balance:
-    - Approved
-    - NOT school-related
-    """
     total = (
         db.session.query(func.coalesce(func.sum(LeaveRequest.hours), 0.0))
         .filter(
             LeaveRequest.user_id == user_id,
             LeaveRequest.status == RequestStatus.approved,
-            LeaveRequest.is_school_related == False,  # noqa: E712
+            LeaveRequest.is_school_related == False,  # noqa
         )
         .scalar()
     )
     return float(total or 0.0)
+
 
 def expected_balance_for_user(u: User) -> float:
     start = float(getattr(u, "starting_balance", 0.0) or 0.0)
@@ -423,7 +419,7 @@ def expected_balance_for_user(u: User) -> float:
 
     expected = start + manual - taken
     return normalize_hours(expected)
-  
+
 # =========================================================
 # Nav + globals in templates
 # =========================================================
