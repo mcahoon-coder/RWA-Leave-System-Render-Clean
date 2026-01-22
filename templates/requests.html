@@ -62,7 +62,23 @@
     </div>
   </div>
 {% endif %}
+            <div style="font-size:.9rem;opacity:.8;">
+              Starting:
+              <span style="font-weight:700;">
+                {{ '%.2f'|format(s.starting_balance) }}h
+              </span>
+             </div>
 
+             <div style="font-size:.9rem;opacity:.8;margin-top:0.25rem;" title="Expected = Starting + Manual - Approved Leave (non-school)">
+               <strong>Expected:</strong>
+               <span style="font-weight:700;">
+                 {{ '%.2f'|format(s.expected_balance) }}h
+              </span>
+              <span style="margin-left:.5rem; font-weight:700; color: {{ '#b91c1c' if s.diff != 0 else '#16a34a' }};">
+                (Diff: {{ '%+.2f'|format(s.diff) }}h)
+              </span>
+             </div>
+ 
 <div class="card" style="padding:1rem; margin-top:1rem;">
   <form method="get" action="{{ url_for('my_requests') }}" style="display:flex; gap:.5rem; align-items:end; flex-wrap:wrap;">
     <input type="hidden" name="status" value="{{ status }}">
