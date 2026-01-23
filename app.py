@@ -706,43 +706,30 @@ def my_requests():
             .distinct()
         }
 
-        # Manual adjustment totals per user (if table exists)
-        adjustments_map = {}
-        if "manual_adjustments" in db.metadata.tables:
-            from sqlalchemy import func
-            rows = (
-                db.session.query(
-                    ManualAdjustment.user_id,
-                    func.sum(ManualAdjustment.hours)
-                )
-                .group_by(ManualAdjustment.user_id)
-                .all()
-            )
-            adjustments_map = {
-                user_id: float(total or 0.0)
-                for user_id, total in rows
-            }
+        # Manual adjustment totals per user
+        adjustments_map = _manual_adjust_totals_for([u.id for u in users])
 
         # Build simple dicts for the template
-       staff_overview = []
-       for u in users:
-           hb = normalize_hours(u.hours_balance or 0.0)
-           start_bal = normalize_hours(getattr(u, "starting_balance", 0.0) or 0.0)
+        staff_overview = []
+        for u in users:
+            hb = normalize_hours(u.hours_balance or 0.0)
+            start_bal = normalize_hours(getattr(u, "starting_balance", 0.0) or 0.0)
 
-           manual_total = normalize_hours(adjustments_map.get(u.id, 0.0))
-           expected = expected_balance_for_user(u)
-           diff = normalize_hours(hb - expected)
+            manual_total = normalize_hours(adjustments_map.get(u.id, 0.0))
+            expected = expected_balance_for_user(u)
+            diff = normalize_hours(hb - expected)
 
-           staff_overview.append({
-               "id": u.id,
-               "username": u.username,
-               "hours_balance": hb,
-               "starting_balance": start_bal,
-               "adjust_total": manual_total,
-               "expected_balance": expected,
-               "diff": diff,
-               "has_pending": (u.id in pending_user_ids),
+            staff_overview.append({
+                "id": u.id,
+                "username": u.username,
+                "hours_balance": hb,
+                "starting_balance": start_bal,
+                "adjust_total": manual_total,
+                "expected_balance": expected,
+                "diff": diff,
+                "has_pending": (u.id in pending_user_ids),
             })
+
   
     return render_template(
         "requests.html",
