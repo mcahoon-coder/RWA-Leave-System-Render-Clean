@@ -1,34 +1,30 @@
 {# templates/new_request.html #}
 {% extends "base.html" %}
-{% block title %}New Request{% endblock %}
+{% block title %}New Leave Request{% endblock %}
 
 {% block content %}
-<h2>New Request</h2>
+<h2>New Leave Request</h2>
 
 <div class="card" style="padding:1rem;">
   <form method="post" action="{{ url_for('new_request') }}" id="leave-form"
-        style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:0.75rem;align-items:end;">
+        style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:0.9rem;align-items:end;">
 
-    <!-- Kind -->
     <div>
-      <label for="kind">Kind</label>
+      <label for="kind">Leave Category</label>
       <select class="input" name="kind" id="kind" required>
         <option value="annual">Annual</option>
         <option value="sick">Sick</option>
       </select>
     </div>
 
-    <!-- Mode -->
     <div>
-      <label for="mode">Mode</label>
+      <label for="mode">Leave Type</label>
       <select class="input" name="mode" id="mode" required>
-        <option value="hourly" selected>Hourly (uses Start/End times)</option>
-        <option value="daily">Daily (full workdays)</option>
-        <option value="halfday">Half Day (4.00h)</option>
+        <option value="daily" selected>Full Day(s)</option>
+        <option value="hourly">Hourly</option>
       </select>
     </div>
 
-    <!-- Dates -->
     <div>
       <label for="start_date">Start Date</label>
       <input class="input" type="date" name="start_date" id="start_date" required>
@@ -38,152 +34,124 @@
       <input class="input" type="date" name="end_date" id="end_date" required>
     </div>
 
-    <!-- Start Time (Hour • Minutes • AM/PM) -->
     <div class="hourly-only">
       <label>Start Time</label>
       <div style="display:flex; gap:.35rem;">
         <select class="input" id="st_hour" aria-label="Start hour">
-          {% for h in range(1,13) %}
-            <option value="{{ h }}">{{ h }}</option>
-          {% endfor %}
+          {% for h in range(1,13) %}<option value="{{ h }}">{{ h }}</option>{% endfor %}
         </select>
         <select class="input" id="st_min" aria-label="Start minutes">
-          <option value="00">:00</option>
-          <option value="15">:15</option>
-          <option value="30">:30</option>
-          <option value="45">:45</option>
+          <option value="00">:00</option><option value="15">:15</option>
+          <option value="30">:30</option><option value="45">:45</option>
         </select>
         <select class="input" id="st_ampm" aria-label="Start AM/PM">
-          <option value="AM">AM</option>
-          <option value="PM">PM</option>
+          <option value="AM">AM</option><option value="PM">PM</option>
         </select>
       </div>
     </div>
 
-    <!-- End Time (Hour • Minutes • AM/PM) -->
     <div class="hourly-only">
       <label>End Time</label>
       <div style="display:flex; gap:.35rem;">
         <select class="input" id="et_hour" aria-label="End hour">
-          {% for h in range(1,13) %}
-            <option value="{{ h }}">{{ h }}</option>
-          {% endfor %}
+          {% for h in range(1,13) %}<option value="{{ h }}">{{ h }}</option>{% endfor %}
         </select>
         <select class="input" id="et_min" aria-label="End minutes">
-          <option value="00">:00</option>
-          <option value="15">:15</option>
-          <option value="30">:30</option>
-          <option value="45">:45</option>
+          <option value="00">:00</option><option value="15">:15</option>
+          <option value="30">:30</option><option value="45">:45</option>
         </select>
         <select class="input" id="et_ampm" aria-label="End AM/PM">
-          <option value="AM">AM</option>
-          <option value="PM">PM</option>
+          <option value="AM">AM</option><option value="PM">PM</option>
         </select>
       </div>
     </div>
 
-    {# Hidden fields that server expects ("HH:MM" 24h) #}
     <input type="hidden" name="start_time" id="start_time">
     <input type="hidden" name="end_time" id="end_time">
 
-    <!-- School related -->
-    <div>
-      <label for="school_related">School Related?</label><br>
-      <input type="checkbox" name="school_related" id="school_related" value="1">
+    <div style="grid-column:1/-1;border:1px solid #dbeafe;background:#eff6ff;border-radius:8px;padding:.85rem;">
+      <label for="school_related" style="display:flex;gap:.6rem;align-items:flex-start;cursor:pointer;">
+        <input type="checkbox" name="school_related" id="school_related" value="1" style="margin-top:.25rem;">
+        <span>
+          <strong>School Related</strong><br>
+          <span style="font-size:.92rem;opacity:.8;">Check this when the absence is for school business. Approved hours will not be deducted from your leave balance. Substitute coverage may still be needed.</span>
+        </span>
+      </label>
     </div>
 
-    <!-- Reason -->
     <div style="grid-column:1/-1">
       <label for="reason">Reason (optional)</label>
-      <textarea class="input" name="reason" id="reason" rows="3" placeholder="Optional"></textarea>
+      <textarea class="input" name="reason" id="reason" rows="3" placeholder="Optional note"></textarea>
     </div>
 
-    <!-- Submit -->
     <div style="grid-column:1/-1;display:flex;gap:.5rem;justify-content:flex-end;">
       <button type="submit" class="btn">Submit Request</button>
       <a class="btn" href="{{ url_for('my_requests') }}">Cancel</a>
     </div>
   </form>
 
-  <p style="margin-top:.75rem;opacity:.7;">
-    <strong>Note:</strong> For <em>Hourly</em> requests, hours are calculated automatically from the selected Start and End times and shown on the “My Requests” page.
+  <p style="margin-top:.75rem;opacity:.75;">
+    <strong>Full Day(s):</strong> hours are calculated from the workdays selected. Weekends and configured school holidays are excluded.<br>
+    <strong>Hourly:</strong> choose one date and a start and end time in 15-minute increments.
   </p>
 </div>
 
 <script>
-  (function () {
-    const modeSel = document.getElementById('mode');
-    const hourlyBlocks = document.querySelectorAll('.hourly-only');
-    const startDate = document.getElementById('start_date');
-    const endDate   = document.getElementById('end_date');
+(function () {
+  const modeSel = document.getElementById('mode');
+  const hourlyBlocks = document.querySelectorAll('.hourly-only');
+  const startDate = document.getElementById('start_date');
+  const endDate = document.getElementById('end_date');
+  const stHour = document.getElementById('st_hour');
+  const stMin = document.getElementById('st_min');
+  const stAmpm = document.getElementById('st_ampm');
+  const etHour = document.getElementById('et_hour');
+  const etMin = document.getElementById('et_min');
+  const etAmpm = document.getElementById('et_ampm');
+  const stHidden = document.getElementById('start_time');
+  const etHidden = document.getElementById('end_time');
 
-    // Three-part selects
-    const stHour = document.getElementById('st_hour');
-    const stMin  = document.getElementById('st_min');
-    const stAmpm = document.getElementById('st_ampm');
-    const etHour = document.getElementById('et_hour');
-    const etMin  = document.getElementById('et_min');
-    const etAmpm = document.getElementById('et_ampm');
+  function to24(h12, mm, ampm) {
+    let h = parseInt(h12, 10) % 12;
+    if (ampm === 'PM') h += 12;
+    return String(h).padStart(2, '0') + ':' + mm;
+  }
 
-    // Hidden values to send to server
-    const stHidden = document.getElementById('start_time');
-    const etHidden = document.getElementById('end_time');
+  function updateHiddenTimes() {
+    stHidden.value = to24(stHour.value, stMin.value, stAmpm.value);
+    etHidden.value = to24(etHour.value, etMin.value, etAmpm.value);
+  }
 
-    function to24(h12, mm, ampm) {
-      let h = parseInt(h12, 10) % 12;
-      if (ampm === 'PM') h += 12;
-      if (ampm === 'AM' && h === 12) h = 0;
-      return String(h).padStart(2, '0') + ':' + mm;
-    }
+  function toggleMode() {
+    const hourly = modeSel.value === 'hourly';
+    hourlyBlocks.forEach(el => el.style.display = hourly ? '' : 'none');
+    if (hourly && startDate.value) endDate.value = startDate.value;
+    if (hourly) updateHiddenTimes();
+    else { stHidden.value = ''; etHidden.value = ''; }
+  }
 
-    function updateHiddenTimes() {
-      stHidden.value = to24(stHour.value, stMin.value, stAmpm.value);
-      etHidden.value = to24(etHour.value, etMin.value, etAmpm.value);
-    }
+  modeSel.addEventListener('change', toggleMode);
+  startDate.addEventListener('change', function () {
+    if (modeSel.value === 'hourly') endDate.value = startDate.value;
+  });
+  [stHour, stMin, stAmpm, etHour, etMin, etAmpm].forEach(el => el.addEventListener('change', updateHiddenTimes));
 
-    function toggleHourly() {
-      const hourly = modeSel.value === 'hourly';
-      hourlyBlocks.forEach(el => el.style.display = hourly ? '' : 'none');
-      if (hourly && startDate && endDate && startDate.value && endDate.value !== startDate.value) {
-        endDate.value = startDate.value;
-      }
+  document.getElementById('leave-form').addEventListener('submit', function (e) {
+    if (modeSel.value === 'hourly') {
       updateHiddenTimes();
-    }
-
-    // Keep hidden fields in sync
-    [stHour, stMin, stAmpm, etHour, etMin, etAmpm].forEach(el => {
-      el.addEventListener('change', updateHiddenTimes);
-    });
-
-    // Validate + set hidden fields on submit
-    document.getElementById('leave-form').addEventListener('submit', function (e) {
-      if (modeSel.value === 'hourly') {
-        updateHiddenTimes();
-        // simple client check: same day + end after start
-        if (startDate.value !== endDate.value) {
-          e.preventDefault();
-          alert('Hourly requests must start and end on the same day.');
-          return;
-        }
-        const st = stHidden.value, et = etHidden.value;
-        if (!st || !et) {
-          e.preventDefault();
-          alert('Please choose a start and end time.');
-          return;
-        }
-        if (st >= et) {
-          e.preventDefault();
-          alert('End time must be after start time.');
-          return;
-        }
-      } else {
-        stHidden.value = '';
-        etHidden.value = '';
+      endDate.value = startDate.value;
+      if (!startDate.value) {
+        e.preventDefault(); alert('Please choose a date.'); return;
       }
-    });
+      if (stHidden.value >= etHidden.value) {
+        e.preventDefault(); alert('End time must be after start time.'); return;
+      }
+    } else if (startDate.value && endDate.value && endDate.value < startDate.value) {
+      e.preventDefault(); alert('End date cannot be before start date.');
+    }
+  });
 
-    // defaults
-    toggleHourly();
-  })();
+  toggleMode();
+})();
 </script>
 {% endblock %}
