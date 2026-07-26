@@ -178,6 +178,39 @@ class ManualAdjustment(db.Model):
     admin = db.relationship("User", foreign_keys=[admin_id])
 
 
+
+class AbsenceNotice(db.Model):
+    __tablename__ = "absence_notice"
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    start_date = db.Column(db.Date, nullable=False)
+    end_date = db.Column(db.Date, nullable=False)
+    start_time = db.Column(db.String(5))
+    end_time = db.Column(db.String(5))
+    reason = db.Column(db.String(500))
+    office_note = db.Column(db.String(500))
+    status = db.Column(db.String(20), default="Open", nullable=False)
+    leave_request_id = db.Column(
+        db.Integer,
+        db.ForeignKey("leave_request.id"),
+        nullable=True,
+    )
+    created_by_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    reminder_sent_at = db.Column(db.DateTime)
+    resolved_at = db.Column(db.DateTime)
+
+    user = db.relationship(
+        "User",
+        foreign_keys=[user_id],
+        backref="absence_notices",
+        lazy="joined",
+    )
+    created_by = db.relationship("User", foreign_keys=[created_by_id])
+    leave_request = db.relationship("LeaveRequest", foreign_keys=[leave_request_id])
+
+
 class SchoolYear(db.Model):
     __tablename__ = "school_year"
     id = db.Column(db.Integer, primary_key=True)
@@ -570,6 +603,214 @@ def admin_hub():
     return render_template("admin.html", title="Admin", pending=pending)
 
 
+
+
+
+# ---------- Absence Notices ----------
+@app.route("/admin/absence-notices", methods=["GET", "POST"])
+@login_required
+def absence_notices():
+    if current_user.role != Role.admin:
+        flash("Admins only.", "warning")
+        return redirect(url_for("dashboard"))
+
+    if request.method == "POST":
+        user_id = request.form.get("user_id", type=int)
+        start_text = (request.form.get("start_date") or "").strip()
+        end_text = (request.form.get("end_date") or "").strip()
+        start_time = (request.form.get("start_time") or "").strip() or None
+        end_time = (request.form.get("end_time") or "").strip() or None
+        reason = (request.form.get("reason") or "").strip()
+        office_note = (request.form.get("office_note") or "").strip()
+        send_now = request.form.get("send_email") == "yes"
+
+        employee = db.session.get(User, user_id) if user_id else None
+        if employee is None:
+            flash("Please select an employee.", "warning")
+            return redirect(url_for("absence_notices"))
+
+        try:
+            start_date = datetime.strptime(start_text, "%Y-%m-%d").date()
+            end_date = datetime.strptime(end_text, "%Y-%m-%d").date()
+        except ValueError:
+            flash("Please enter valid absence dates.", "warning")
+            return redirect(url_for("absence_notices"))
+
+        if end_date < start_date:
+            flash("The end date cannot be before the start date.", "warning")
+            return redirect(url_for("absence_notices"))
+
+        if bool(start_time) != bool(end_time):
+            flash("Enter both a start time and an end time, or leave both blank.", "warning")
+            return redirect(url_for("absence_notices"))
+
+        notice = AbsenceNotice(
+            user_id=employee.id,
+            start_date=start_date,
+            end_date=end_date,
+            start_time=start_time,
+            end_time=end_time,
+            reason=reason or None,
+            office_note=office_note or None,
+            status="Open",
+            created_by_id=current_user.id,
+        )
+        db.session.add(notice)
+        db.session.commit()
+
+        if send_now:
+            sent, message = send_absence_notice_reminder(notice)
+            if sent:
+                notice.reminder_sent_at = datetime.utcnow()
+                db.session.commit()
+                flash("The absence notice was saved and the employee was emailed.", "success")
+            else:
+                flash(
+                    f"The absence notice was saved, but the email was not sent: {message}",
+                    "warning",
+                )
+        else:
+            flash("The absence notice was saved.", "success")
+
+        return redirect(url_for("absence_notices"))
+
+    status_filter = (request.args.get("status") or "open").strip().lower()
+    query = AbsenceNotice.query
+
+    if status_filter == "resolved":
+        query = query.filter(AbsenceNotice.status == "Resolved")
+    elif status_filter == "all":
+        pass
+    else:
+        status_filter = "open"
+        query = query.filter(AbsenceNotice.status == "Open")
+
+    notices = query.order_by(
+        AbsenceNotice.start_date.asc(),
+        AbsenceNotice.created_at.desc(),
+    ).all()
+
+    users = User.query.order_by(
+        func.coalesce(User.staff_name, User.username)
+    ).all()
+
+    return render_template(
+        "absence_notices.html",
+        title="Absence Notices",
+        notices=notices,
+        users=users,
+        status_filter=status_filter,
+        today=date.today(),
+    )
+
+
+def send_absence_notice_reminder(notice):
+    employee = notice.user
+    if not employee.email:
+        return False, "The employee does not have an email address in the system."
+
+    date_text = notice.start_date.strftime("%B %d, %Y")
+    if notice.end_date != notice.start_date:
+        date_text += f" through {notice.end_date.strftime('%B %d, %Y')}"
+
+    time_text = ""
+    if notice.start_time and notice.end_time:
+        time_text = (
+            f"\nTime: {h12_filter(notice.start_time)} "
+            f"to {h12_filter(notice.end_time)}"
+        )
+
+    reason_text = f"\nReason on file: {notice.reason}" if notice.reason else ""
+
+    body = (
+        f"Hello {employee.staff_name or employee.username},\n\n"
+        "The school office has recorded that you will be absent on the "
+        f"following date(s):\n\n{date_text}{time_text}{reason_text}\n\n"
+        "Please log in to the Richard Winn Academy Leave System and submit "
+        "the matching leave request when you are able.\n\n"
+        "Thank you,\nRichard Winn Academy"
+    )
+
+    return send_email(
+        [employee.email],
+        "Reminder: Please Submit Your Leave Request",
+        body,
+    )
+
+
+@app.post("/admin/absence-notices/<int:notice_id>/remind")
+@login_required
+def remind_absence_notice(notice_id):
+    if current_user.role != Role.admin:
+        flash("Admins only.", "warning")
+        return redirect(url_for("dashboard"))
+
+    notice = db.session.get(AbsenceNotice, notice_id)
+    if notice is None:
+        abort(404)
+
+    sent, message = send_absence_notice_reminder(notice)
+    if sent:
+        notice.reminder_sent_at = datetime.utcnow()
+        db.session.commit()
+        flash("Reminder email sent.", "success")
+    else:
+        flash(f"Reminder email was not sent: {message}", "warning")
+
+    return redirect(url_for("absence_notices"))
+
+
+@app.post("/admin/absence-notices/<int:notice_id>/resolve")
+@login_required
+def resolve_absence_notice(notice_id):
+    if current_user.role != Role.admin:
+        flash("Admins only.", "warning")
+        return redirect(url_for("dashboard"))
+
+    notice = db.session.get(AbsenceNotice, notice_id)
+    if notice is None:
+        abort(404)
+
+    notice.status = "Resolved"
+    notice.resolved_at = datetime.utcnow()
+    db.session.commit()
+    flash("The absence notice was marked resolved.", "success")
+    return redirect(url_for("absence_notices"))
+
+
+@app.post("/admin/absence-notices/<int:notice_id>/reopen")
+@login_required
+def reopen_absence_notice(notice_id):
+    if current_user.role != Role.admin:
+        flash("Admins only.", "warning")
+        return redirect(url_for("dashboard"))
+
+    notice = db.session.get(AbsenceNotice, notice_id)
+    if notice is None:
+        abort(404)
+
+    notice.status = "Open"
+    notice.resolved_at = None
+    db.session.commit()
+    flash("The absence notice was reopened.", "success")
+    return redirect(url_for("absence_notices", status="all"))
+
+
+@app.post("/admin/absence-notices/<int:notice_id>/delete")
+@login_required
+def delete_absence_notice(notice_id):
+    if current_user.role != Role.admin:
+        flash("Admins only.", "warning")
+        return redirect(url_for("dashboard"))
+
+    notice = db.session.get(AbsenceNotice, notice_id)
+    if notice is None:
+        abort(404)
+
+    db.session.delete(notice)
+    db.session.commit()
+    flash("The absence notice was deleted.", "success")
+    return redirect(url_for("absence_notices"))
 
 
 # ---------- Coverage Center ----------
