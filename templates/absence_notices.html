@@ -1,1 +1,170 @@
+{% extends "base.html" %}
 
+{% block content %}
+<div class="container" style="max-width:1200px; margin:0 auto;">
+  <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:18px;">
+    <div>
+      <h1 style="margin-bottom:4px;">Absence Notices</h1>
+      <p style="margin:0; color:#5f6368;">
+        Record an employee absence before the matching leave request is submitted.
+      </p>
+    </div>
+    <a class="btn" href="{{ url_for('admin_hub') }}">Back to Admin</a>
+  </div>
+
+  <div class="card" style="margin-bottom:18px;">
+    <h2 style="margin-top:0;">Record an Absence</h2>
+
+    <form method="post">
+      <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(210px,1fr)); gap:14px;">
+        <div>
+          <label for="user_id"><strong>Employee</strong></label>
+          <select id="user_id" name="user_id" required style="width:100%;">
+            <option value="">Select an employee</option>
+            {% for employee in users %}
+              <option value="{{ employee.id }}">
+                {{ employee.staff_name or employee.username }}
+              </option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div>
+          <label for="start_date"><strong>Start Date</strong></label>
+          <input id="start_date" name="start_date" type="date"
+                 value="{{ today.isoformat() }}" required style="width:100%;">
+        </div>
+
+        <div>
+          <label for="end_date"><strong>End Date</strong></label>
+          <input id="end_date" name="end_date" type="date"
+                 value="{{ today.isoformat() }}" required style="width:100%;">
+        </div>
+
+        <div>
+          <label for="start_time"><strong>Start Time</strong> (optional)</label>
+          <input id="start_time" name="start_time" type="time" step="900" style="width:100%;">
+        </div>
+
+        <div>
+          <label for="end_time"><strong>End Time</strong> (optional)</label>
+          <input id="end_time" name="end_time" type="time" step="900" style="width:100%;">
+        </div>
+      </div>
+
+      <div style="margin-top:14px;">
+        <label for="reason"><strong>Reason</strong> (optional)</label>
+        <input id="reason" name="reason" type="text"
+               placeholder="Example: Sick, appointment, family emergency"
+               style="width:100%;">
+      </div>
+
+      <div style="margin-top:14px;">
+        <label for="office_note"><strong>Office Note</strong> (admin only)</label>
+        <textarea id="office_note" name="office_note" rows="3"
+                  placeholder="Add any information the office needs to remember."
+                  style="width:100%;"></textarea>
+      </div>
+
+      <label style="display:flex; align-items:center; gap:8px; margin-top:14px;">
+        <input type="checkbox" name="send_email" value="yes" checked>
+        Email the employee a reminder to submit leave
+      </label>
+
+      <button class="btn btn-primary" type="submit" style="margin-top:14px;">
+        Save Absence Notice
+      </button>
+    </form>
+  </div>
+
+  <form method="get" class="card" style="margin-bottom:18px;">
+    <div style="display:flex; gap:10px; align-items:end; flex-wrap:wrap;">
+      <div style="min-width:220px;">
+        <label for="status"><strong>Show</strong></label>
+        <select id="status" name="status" style="width:100%;">
+          <option value="open" {% if status_filter == 'open' %}selected{% endif %}>Open Notices</option>
+          <option value="resolved" {% if status_filter == 'resolved' %}selected{% endif %}>Resolved Notices</option>
+          <option value="all" {% if status_filter == 'all' %}selected{% endif %}>All Notices</option>
+        </select>
+      </div>
+      <button class="btn btn-primary" type="submit">Apply Filter</button>
+    </div>
+  </form>
+
+  {% if not notices %}
+    <div class="card">
+      <p style="margin:0;">No absence notices match this filter.</p>
+    </div>
+  {% else %}
+    {% for notice in notices %}
+      <div class="card" style="margin-bottom:14px;">
+        <div style="display:flex; justify-content:space-between; gap:14px; flex-wrap:wrap;">
+          <div>
+            <h2 style="margin:0 0 6px 0;">
+              {{ notice.user.staff_name or notice.user.username }}
+            </h2>
+
+            <div>
+              <strong>{{ notice.start_date.strftime("%b %d, %Y") }}</strong>
+              {% if notice.end_date != notice.start_date %}
+                through <strong>{{ notice.end_date.strftime("%b %d, %Y") }}</strong>
+              {% endif %}
+            </div>
+
+            {% if notice.start_time and notice.end_time %}
+              <div style="margin-top:4px;">
+                {{ notice.start_time|h12 }} to {{ notice.end_time|h12 }}
+              </div>
+            {% endif %}
+
+            {% if notice.reason %}
+              <div style="margin-top:8px;"><strong>Reason:</strong> {{ notice.reason }}</div>
+            {% endif %}
+
+            {% if notice.office_note %}
+              <div style="margin-top:5px;"><strong>Office note:</strong> {{ notice.office_note }}</div>
+            {% endif %}
+
+            <div style="margin-top:8px; font-size:.9rem; color:#5f6368;">
+              Recorded by
+              {{ notice.created_by.staff_name or notice.created_by.username }}
+              on {{ notice.created_at.strftime("%b %d, %Y at %I:%M %p") }}
+            </div>
+
+            {% if notice.reminder_sent_at %}
+              <div style="margin-top:3px; font-size:.9rem; color:#5f6368;">
+                Last reminder sent {{ notice.reminder_sent_at.strftime("%b %d, %Y at %I:%M %p") }}
+              </div>
+            {% endif %}
+          </div>
+
+          <div>
+            <strong>{{ notice.status }}</strong>
+          </div>
+        </div>
+
+        <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:14px;">
+          {% if notice.status == "Open" %}
+            <form method="post" action="{{ url_for('remind_absence_notice', notice_id=notice.id) }}">
+              <button class="btn" type="submit">Send Reminder</button>
+            </form>
+
+            <form method="post" action="{{ url_for('resolve_absence_notice', notice_id=notice.id) }}">
+              <button class="btn btn-success" type="submit">Mark Resolved</button>
+            </form>
+          {% else %}
+            <form method="post" action="{{ url_for('reopen_absence_notice', notice_id=notice.id) }}">
+              <button class="btn" type="submit">Reopen</button>
+            </form>
+          {% endif %}
+
+          <form method="post" action="{{ url_for('delete_absence_notice', notice_id=notice.id) }}"
+                onsubmit="return confirm('Delete this absence notice?');">
+            <button class="btn btn-danger" type="submit">Delete</button>
+          </form>
+        </div>
+      </div>
+    {% endfor %}
+  {% endif %}
+</div>
+{% endblock %}
