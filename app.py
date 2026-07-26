@@ -571,6 +571,104 @@ def admin_hub():
 
 
 
+
+# ---------- Coverage Center ----------
+@app.get("/admin/coverage")
+@login_required
+def coverage_center():
+    if current_user.role != Role.admin:
+        flash("Admins only.", "warning")
+        return redirect(url_for("dashboard"))
+
+    start_text = (request.args.get("start") or "").strip()
+    end_text = (request.args.get("end") or "").strip()
+    status_filter = (request.args.get("status") or "active").strip().lower()
+
+    today = date.today()
+    default_end = today + timedelta(days=45)
+
+    try:
+        start_date = (
+            datetime.strptime(start_text, "%Y-%m-%d").date()
+            if start_text else today
+        )
+        end_date = (
+            datetime.strptime(end_text, "%Y-%m-%d").date()
+            if end_text else default_end
+        )
+    except ValueError:
+        flash("Please enter valid coverage dates.", "warning")
+        start_date = today
+        end_date = default_end
+
+    if end_date < start_date:
+        start_date, end_date = end_date, start_date
+
+    query = LeaveRequest.query.filter(
+        LeaveRequest.end_date >= start_date,
+        LeaveRequest.start_date <= end_date,
+    )
+
+    if status_filter == "pending":
+        query = query.filter(LeaveRequest.status == RequestStatus.pending)
+    elif status_filter == "approved":
+        query = query.filter(LeaveRequest.status == RequestStatus.approved)
+    elif status_filter == "all":
+        query = query.filter(
+            LeaveRequest.status.in_([
+                RequestStatus.pending,
+                RequestStatus.approved,
+            ])
+        )
+    else:
+        status_filter = "active"
+        query = query.filter(
+            LeaveRequest.status.in_([
+                RequestStatus.pending,
+                RequestStatus.approved,
+            ])
+        )
+
+    requests_list = query.order_by(
+        LeaveRequest.start_date.asc(),
+        LeaveRequest.created_at.asc(),
+    ).all()
+
+    uncovered_count = 0
+    covered_count = 0
+    total_sub_hours = 0.0
+
+    for leave_request in requests_list:
+        assigned_hours = sum((sub.hours or 0.0) for sub in leave_request.subs)
+        leave_request.coverage_hours = normalize_hours(assigned_hours)
+        leave_request.coverage_complete = (
+            assigned_hours >= (leave_request.hours or 0.0)
+            and (leave_request.hours or 0.0) > 0
+        )
+        leave_request.coverage_remaining = normalize_hours(
+            max((leave_request.hours or 0.0) - assigned_hours, 0.0)
+        )
+
+        if leave_request.coverage_complete:
+            covered_count += 1
+        else:
+            uncovered_count += 1
+
+        total_sub_hours += assigned_hours
+
+    return render_template(
+        "coverage_center.html",
+        title="Coverage Center",
+        requests_list=requests_list,
+        start_date=start_date,
+        end_date=end_date,
+        status_filter=status_filter,
+        uncovered_count=uncovered_count,
+        covered_count=covered_count,
+        total_sub_hours=normalize_hours(total_sub_hours),
+    )
+
+
 # ---------- Leave Ledger Helpers ----------
 def get_active_school_year():
     return (
