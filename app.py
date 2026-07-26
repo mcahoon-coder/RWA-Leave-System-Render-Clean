@@ -177,6 +177,67 @@ class ManualAdjustment(db.Model):
     user = db.relationship("User", foreign_keys=[user_id], backref="adjustments_received")
     admin = db.relationship("User", foreign_keys=[admin_id])
 
+
+class SchoolYear(db.Model):
+    __tablename__ = "school_year"
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(20), unique=True, nullable=False)
+    start_date = db.Column(db.Date, nullable=False)
+    end_date = db.Column(db.Date, nullable=False)
+    is_active = db.Column(db.Boolean, default=False, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+
+class SchoolYearBalance(db.Model):
+    __tablename__ = "school_year_balance"
+    id = db.Column(db.Integer, primary_key=True)
+    school_year_id = db.Column(db.Integer, db.ForeignKey("school_year.id"), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    beginning_balance = db.Column(db.Float, nullable=False, default=0.0)
+    note = db.Column(db.String(500))
+    updated_at = db.Column(
+        db.DateTime,
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow,
+        nullable=False,
+    )
+
+    school_year = db.relationship("SchoolYear", backref="employee_balances")
+    user = db.relationship("User", backref="school_year_balances")
+
+    __table_args__ = (
+        db.UniqueConstraint(
+            "school_year_id",
+            "user_id",
+            name="uq_school_year_balance_year_user",
+        ),
+    )
+
+
+class LeaveLedger(db.Model):
+    __tablename__ = "leave_ledger"
+    id = db.Column(db.Integer, primary_key=True)
+    school_year_id = db.Column(db.Integer, db.ForeignKey("school_year.id"), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    entry_type = db.Column(db.String(50), nullable=False)
+    hours = db.Column(db.Float, nullable=False, default=0.0)
+    description = db.Column(db.String(500))
+    created_by_id = db.Column(db.Integer, db.ForeignKey("user.id"))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    school_year = db.relationship("SchoolYear", backref="ledger_entries")
+    user = db.relationship("User", foreign_keys=[user_id], backref="leave_ledger_entries")
+    created_by = db.relationship("User", foreign_keys=[created_by_id])
+
+    __table_args__ = (
+        db.UniqueConstraint(
+            "school_year_id",
+            "user_id",
+            "entry_type",
+            name="uq_leave_ledger_year_user_type",
+        ),
+    )
+
 app.jinja_env.globals["User"] = User
 
 @login_manager.user_loader
@@ -507,6 +568,165 @@ def admin_hub():
     pending = (LeaveRequest.query.filter_by(status=RequestStatus.pending)
                .order_by(LeaveRequest.created_at.desc()).all())
     return render_template("admin.html", title="Admin", pending=pending)
+
+
+# ---------- School Year Setup ----------
+@app.route("/admin/school-year", methods=["GET", "POST"])
+@login_required
+def school_year_setup():
+    if current_user.role != Role.admin:
+        flash("Admins only.", "warning")
+        return redirect(url_for("dashboard"))
+
+    if request.method == "POST":
+        year_name = (request.form.get("year_name") or "").strip()
+
+        try:
+            start_date = datetime.strptime(
+                request.form.get("start_date", ""), "%Y-%m-%d"
+            ).date()
+            end_date = datetime.strptime(
+                request.form.get("end_date", ""), "%Y-%m-%d"
+            ).date()
+        except ValueError:
+            flash("Please enter valid school-year dates.", "warning")
+            return redirect(url_for("school_year_setup"))
+
+        if not year_name:
+            flash("Please enter a school-year name.", "warning")
+            return redirect(url_for("school_year_setup"))
+
+        if end_date < start_date:
+            flash("The school-year end date must be after the start date.", "warning")
+            return redirect(url_for("school_year_setup"))
+
+        try:
+            SchoolYear.query.update({SchoolYear.is_active: False})
+
+            school_year = SchoolYear.query.filter_by(name=year_name).first()
+            if school_year is None:
+                school_year = SchoolYear(
+                    name=year_name,
+                    start_date=start_date,
+                    end_date=end_date,
+                    is_active=True,
+                )
+                db.session.add(school_year)
+                db.session.flush()
+            else:
+                school_year.start_date = start_date
+                school_year.end_date = end_date
+                school_year.is_active = True
+                db.session.flush()
+
+            users = User.query.order_by(
+                func.coalesce(User.staff_name, User.username)
+            ).all()
+
+            updated_count = 0
+
+            for employee in users:
+                raw_balance = (request.form.get(f"balance_{employee.id}") or "").strip()
+                if raw_balance == "":
+                    continue
+
+                try:
+                    beginning_balance = normalize_hours(raw_balance)
+                except (TypeError, ValueError):
+                    raise ValueError(
+                        f"Invalid beginning balance for "
+                        f"{employee.staff_name or employee.username}."
+                    )
+
+                note = (request.form.get(f"note_{employee.id}") or "").strip()
+
+                saved_balance = SchoolYearBalance.query.filter_by(
+                    school_year_id=school_year.id,
+                    user_id=employee.id,
+                ).first()
+
+                if saved_balance is None:
+                    saved_balance = SchoolYearBalance(
+                        school_year_id=school_year.id,
+                        user_id=employee.id,
+                    )
+                    db.session.add(saved_balance)
+
+                saved_balance.beginning_balance = beginning_balance
+                saved_balance.note = note or None
+                saved_balance.updated_at = datetime.utcnow()
+
+                employee.starting_balance = beginning_balance
+                employee.hours_balance = beginning_balance
+
+                ledger_entry = LeaveLedger.query.filter_by(
+                    school_year_id=school_year.id,
+                    user_id=employee.id,
+                    entry_type="beginning_balance",
+                ).first()
+
+                description = f"Beginning balance for {school_year.name}"
+                if note:
+                    description += f" — {note}"
+
+                if ledger_entry is None:
+                    ledger_entry = LeaveLedger(
+                        school_year_id=school_year.id,
+                        user_id=employee.id,
+                        entry_type="beginning_balance",
+                        created_by_id=current_user.id,
+                    )
+                    db.session.add(ledger_entry)
+
+                ledger_entry.hours = beginning_balance
+                ledger_entry.description = description
+                ledger_entry.created_by_id = current_user.id
+                ledger_entry.created_at = datetime.utcnow()
+
+                updated_count += 1
+
+            db.session.commit()
+            flash(
+                f"{school_year.name} was saved. "
+                f"{updated_count} beginning balance(s) were updated.",
+                "success",
+            )
+            return redirect(url_for("school_year_setup"))
+
+        except ValueError as exc:
+            db.session.rollback()
+            flash(str(exc), "warning")
+        except Exception as exc:
+            db.session.rollback()
+            app.logger.exception("School-year setup failed")
+            flash(f"School-year setup could not be saved: {exc}", "danger")
+
+    active_year = (
+        SchoolYear.query.filter_by(is_active=True)
+        .order_by(SchoolYear.start_date.desc())
+        .first()
+    )
+
+    users = User.query.order_by(
+        func.coalesce(User.staff_name, User.username)
+    ).all()
+
+    balances = {}
+    if active_year:
+        balances = {
+            row.user_id: row
+            for row in SchoolYearBalance.query.filter_by(
+                school_year_id=active_year.id
+            ).all()
+        }
+
+    return render_template(
+        "school_year_setup.html",
+        title="School Year Setup",
+        active_year=active_year,
+        users=users,
+        balances=balances,
+    )
 
 # Admin email test endpoint (needed by template button)
 @app.get("/admin/email-test")
