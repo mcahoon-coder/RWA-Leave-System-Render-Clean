@@ -570,6 +570,121 @@ def admin_hub():
     return render_template("admin.html", title="Admin", pending=pending)
 
 
+
+# ---------- Leave Ledger Helpers ----------
+def get_active_school_year():
+    return (
+        SchoolYear.query.filter_by(is_active=True)
+        .order_by(SchoolYear.start_date.desc())
+        .first()
+    )
+
+
+def record_leave_ledger_entry(
+    *,
+    user_id,
+    entry_type,
+    hours,
+    description,
+    created_by_id=None,
+    created_at=None,
+):
+    """Create or update one uniquely identified ledger transaction."""
+    school_year = get_active_school_year()
+    if school_year is None:
+        return None
+
+    entry = LeaveLedger.query.filter_by(
+        school_year_id=school_year.id,
+        user_id=user_id,
+        entry_type=entry_type,
+    ).first()
+
+    if entry is None:
+        entry = LeaveLedger(
+            school_year_id=school_year.id,
+            user_id=user_id,
+            entry_type=entry_type,
+        )
+        db.session.add(entry)
+
+    entry.hours = normalize_hours(hours or 0.0)
+    entry.description = description
+    entry.created_by_id = created_by_id
+    entry.created_at = created_at or datetime.utcnow()
+    return entry
+
+
+def ledger_entry_label(entry_type):
+    if entry_type == "beginning_balance":
+        return "Beginning Balance"
+    if entry_type.startswith("approved_request_"):
+        return "Approved Leave"
+    if entry_type.startswith("cancelled_request_"):
+        return "Cancelled Leave Restored"
+    if entry_type.startswith("manual_adjustment_deleted_"):
+        return "Adjustment Reversed"
+    if entry_type.startswith("manual_adjustment_restored_"):
+        return "Adjustment Restored"
+    if entry_type.startswith("manual_adjustment_"):
+        return "Manual Adjustment"
+    return "Ledger Entry"
+
+
+app.jinja_env.globals["ledger_entry_label"] = ledger_entry_label
+
+
+# ---------- Leave Ledger ----------
+@app.route("/admin/leave-ledger")
+@login_required
+def leave_ledger():
+    if current_user.role != Role.admin:
+        flash("Admins only.", "warning")
+        return redirect(url_for("dashboard"))
+
+    years = SchoolYear.query.order_by(SchoolYear.start_date.desc()).all()
+    selected_year_id = request.args.get("school_year_id", type=int)
+    selected_user_id = request.args.get("user_id", type=int)
+
+    selected_year = None
+    if selected_year_id:
+        selected_year = SchoolYear.query.get(selected_year_id)
+    if selected_year is None:
+        selected_year = get_active_school_year()
+    if selected_year is None and years:
+        selected_year = years[0]
+
+    users = User.query.order_by(
+        func.coalesce(User.staff_name, User.username)
+    ).all()
+
+    query = LeaveLedger.query
+    if selected_year is not None:
+        query = query.filter(LeaveLedger.school_year_id == selected_year.id)
+    if selected_user_id:
+        query = query.filter(LeaveLedger.user_id == selected_user_id)
+
+    entries = query.order_by(
+        LeaveLedger.created_at.desc(),
+        LeaveLedger.id.desc(),
+    ).all()
+
+    total_change = normalize_hours(sum((entry.hours or 0.0) for entry in entries))
+    selected_user = User.query.get(selected_user_id) if selected_user_id else None
+
+    return render_template(
+        "leave_ledger.html",
+        title="Leave Ledger",
+        years=years,
+        users=users,
+        selected_year=selected_year,
+        selected_user=selected_user,
+        selected_user_id=selected_user_id,
+        entries=entries,
+        total_change=total_change,
+    )
+
+
 # ---------- School Year Setup ----------
 @app.route("/admin/school-year", methods=["GET", "POST"])
 @login_required
@@ -1064,6 +1179,23 @@ def approve(req_id):
     r.status = RequestStatus.approved
     r.decided_at = datetime.utcnow()
 
+    ledger_hours = 0.0 if r.is_school_related else -(r.hours or 0.0)
+    ledger_description = (
+        f"Approved leave request #{r.id}: "
+        f"{r.start_date} to {r.end_date}"
+    )
+    if r.is_school_related:
+        ledger_description += " — School related; no leave deducted."
+
+    record_leave_ledger_entry(
+        user_id=u.id,
+        entry_type=f"approved_request_{r.id}",
+        hours=ledger_hours,
+        description=ledger_description,
+        created_by_id=current_user.id,
+        created_at=r.decided_at,
+    )
+
     db.session.commit()
 
     subs_text = "; ".join(
@@ -1136,8 +1268,26 @@ def cancel(req_id):
             (u.hours_balance or 0.0) + (r.hours or 0.0)
         )
 
+    was_approved_and_deducted = (
+        r.status == RequestStatus.approved and not r.is_school_related
+    )
+
     r.status = RequestStatus.cancelled
     r.decided_at = datetime.utcnow()
+
+    if was_approved_and_deducted:
+        record_leave_ledger_entry(
+            user_id=u.id,
+            entry_type=f"cancelled_request_{r.id}",
+            hours=(r.hours or 0.0),
+            description=(
+                f"Hours restored for cancelled leave request #{r.id}: "
+                f"{r.start_date} to {r.end_date}"
+            ),
+            created_by_id=current_user.id,
+            created_at=r.decided_at,
+        )
+
     db.session.commit()
 
     subs_text = "; ".join(
@@ -1219,6 +1369,17 @@ def add_manual_adjustment_for_user(user_id):
 
     # Update the user's balance (normalized)
     user.hours_balance = normalize_hours((user.hours_balance or 0.0) + float(hours or 0.0))
+    db.session.flush()
+
+    record_leave_ledger_entry(
+        user_id=user.id,
+        entry_type=f"manual_adjustment_{adj.id}",
+        hours=hours,
+        description=f"Manual adjustment: {note}",
+        created_by_id=current_user.id,
+        created_at=adj.timestamp,
+    )
+
     db.session.commit()
 
     # Optional email notifications (won't break page if it fails)
@@ -1324,6 +1485,16 @@ def undo_delete_adjustment():
         (user.hours_balance or 0.0) + adj.hours
         )
         db.session.add(adj)
+        db.session.flush()
+
+        record_leave_ledger_entry(
+            user_id=user.id,
+            entry_type=f"manual_adjustment_restored_{adj.id}",
+            hours=adj.hours,
+            description=f"Manual adjustment restored: {adj.note}",
+            created_by_id=current_user.id,
+        )
+
         db.session.commit()
         flash("Deleted adjustment has been restored.", "success")
     except Exception as e:
