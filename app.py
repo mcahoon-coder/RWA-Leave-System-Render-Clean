@@ -1,41 +1,5 @@
-from flask import (
-    Flask, render_template, redirect, url_for,
-    request, flash, jsonify, send_file, make_response, abort
-)
-from flask_sqlalchemy import SQLAlchemy
-from flask_login import (
-    LoginManager, UserMixin, login_user, logout_user,
-    login_required, current_user
-)
-from werkzeug.security import generate_password_hash, check_password_hash
-from datetime import datetime, date, timedelta, time as dt_time
-from zoneinfo import ZoneInfo
-import os, smtplib, ssl, io, csv
-from email.message import EmailMessage
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
-from sqlalchemy import text, func
-import xlsxwriter  # Excel export (in-memory, safe on Render)
 
-# =========================================================
-# App & DB config
-# =========================================================
-app = Flask(__name__, static_folder="static", static_url_path="/static")
-app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "ChangeThisSecret123!")
-app.config["TEMPLATES_AUTO_RELOAD"] = True
-
-# Prefer Render DATABASE_URL; default to SQLite
-db_url = os.environ.get("DATABASE_URL", "sqlite:///leave_system.db")
-
-# Normalize old Heroku-style scheme and ensure SQLAlchemy uses psycopg (v3)
-if db_url.startswith("postgres://"):
-    db_url = db_url.replace("postgres://", "postgresql+psycopg://", 1)
-elif db_url.startswith("postgresql://") and "+psycopg" not in db_url:
-    db_url = db_url.replace("postgresql://", "postgresql+psycopg://", 1)
-
-app.config["SQLALCHEMY_DATABASE_URI"] = db_url
-app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
-app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
+ONS"] = {
     "pool_pre_ping": True,
     "pool_recycle": 300     # recycle connections every 5 minutes
 }
