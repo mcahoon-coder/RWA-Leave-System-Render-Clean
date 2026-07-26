@@ -108,7 +108,6 @@ class RequestStatus:
 class RequestMode:
     hourly = "hourly"
     daily = "daily"
-    halfday = "halfday"  # 4.00 hr option
 
 class User(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -129,7 +128,7 @@ class LeaveRequest(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
     kind = db.Column(db.String(20), default="annual", nullable=False)    # annual/sick
-    mode = db.Column(db.String(10), default=RequestMode.hourly, nullable=False)  # hourly/daily/halfday
+    mode = db.Column(db.String(10), default=RequestMode.hourly, nullable=False)  # hourly/daily
     start_date = db.Column(db.Date, nullable=False)
     end_date = db.Column(db.Date, nullable=False)
 
@@ -545,6 +544,10 @@ def admin_email_test():
 def new_request():
     if request.method == "POST":
         mode = request.form.get("mode", RequestMode.hourly)
+        if mode not in (RequestMode.hourly, RequestMode.daily):
+            flash("Please choose Full Day(s) or Hourly leave.", "warning")
+            return render_template("new_request.html", title="New Request", workday=WORKDAY_HOURS)
+
         kind = request.form.get("kind", "annual")
         reason = request.form.get("reason", "")
         is_school = bool(request.form.get("school_related"))
@@ -591,11 +594,7 @@ def new_request():
             # Round to nearest quarter hour and store
             hours = round(computed * 4) / 4.0
 
-        elif mode == RequestMode.halfday:
-            wd = workdays_between(sd, ed)
-            hours = wd * (WORKDAY_HOURS / 2)
-
-        else:  # daily
+        else:  # Full Day(s) / daily
             wd = workdays_between(sd, ed)
             hours = wd * WORKDAY_HOURS
             if hours > capacity_hours:
@@ -636,7 +635,7 @@ def new_request():
         subj = "New Leave Request Submitted"
         body = (
             f"User: {current_user.username}\n"
-            f"Kind: {kind}\nMode: {mode}\nHours: {hours:.2f}\n"
+            f"Kind: {kind}\nMode: {'Full Day(s)' if mode == RequestMode.daily else 'Hourly'}\nHours: {hours:.2f}\n"
             f"Dates: {sd} to {ed}\n"
             f"Times: {req.start_time or '-'} to {req.end_time or '-'}\n"
             f"School-related: {'Yes' if is_school else 'No'}\n"
