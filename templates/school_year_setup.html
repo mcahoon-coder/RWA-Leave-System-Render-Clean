@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% block content %}
+
+<h1 style="margin-top:0;">School Year Setup</h1>
+
+<div class="card">
+  <h2 style="margin-top:0;">2026–2027 Beginning Balances</h2>
+  <p>
+    Enter the official beginning balance for each employee. This amount becomes the employee's
+    new current balance and the starting point for the school year.
+  </p>
+  <p style="opacity:.8;">
+    Use the optional note for cash-outs, corrections, or other information you want saved with the beginning balance.
+  </p>
+
+  <form method="post" action="{{ url_for('school_year_setup') }}">
+    <div class="grid-2" style="margin-bottom:1rem;">
+      <div>
+        <label for="year_name"><strong>School Year</strong></label>
+        <input id="year_name" name="year_name" class="input" required
+               value="{{ active_year.name if active_year else '2026-2027' }}">
+      </div>
+      <div></div>
+      <div>
+        <label for="start_date"><strong>Start Date</strong></label>
+        <input id="start_date" name="start_date" type="date" class="input" required
+               value="{{ active_year.start_date.isoformat() if active_year else '2026-08-01' }}">
+      </div>
+      <div>
+        <label for="end_date"><strong>End Date</strong></label>
+        <input id="end_date" name="end_date" type="date" class="input" required
+               value="{{ active_year.end_date.isoformat() if active_year else '2027-07-31' }}">
+      </div>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Employee</th>
+            <th style="width:170px;">Beginning Balance</th>
+            <th>Optional Note</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for u in users %}
+            {% set saved = balances.get(u.id) %}
+            <tr>
+              <td>
+                <strong>{{ u.staff_name or u.username }}</strong>
+                {% if u.staff_name %}<br><small>{{ u.username }}</small>{% endif %}
+              </td>
+              <td>
+                <input class="input" type="number" step="0.25" name="balance_{{ u.id }}"
+                       value="{% if saved %}{{ '%.2f'|format(saved.beginning_balance) }}{% endif %}"
+                       placeholder="0.00">
+              </td>
+              <td>
+                <input class="input" type="text" name="note_{{ u.id }}"
+                       value="{{ saved.note if saved and saved.note else '' }}"
+                       placeholder="Example: Adjusted for 16 hours cashed out">
+              </td>
+            </tr>
+          {% else %}
+            <tr><td colspan="3">No employee accounts were found.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <div style="margin-top:1rem; display:flex; gap:.75rem; flex-wrap:wrap;">
+      <button class="btn" type="submit">Save Beginning Balances</button>
+      <a class="btn" href="{{ url_for('admin') }}" style="background:#6b7280;">Back to Admin</a>
+    </div>
+  </form>
+</div>
+
+<div class="card">
+  <h3 style="margin-top:0;">What happens when you save?</h3>
+  <p style="margin-bottom:.35rem;">The system will:</p>
+  <ul style="margin-top:.35rem;">
+    <li>Make this the active school year.</li>
+    <li>Set each entered amount as the employee's official beginning balance.</li>
+    <li>Set the employee's current balance to the same amount.</li>
+    <li>Create or update a permanent Beginning Balance entry in the leave ledger.</li>
+  </ul>
+  <p style="margin-bottom:0;"><strong>Only employees with an amount entered will be updated.</strong></p>
+</div>
+
+{% endblock %}
