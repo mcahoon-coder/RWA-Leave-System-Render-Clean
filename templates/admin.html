@@ -18,10 +18,11 @@
               <th>#</th>
               <th>User</th>
               <th>Kind</th>
-              <th>Mode</th>
+              <th>Leave Type</th>
               <th>Hours</th>
               <th>School</th>
               <th>Dates</th>
+              <th>Submitted</th>
               <th>Subs</th>
               <th>Actions</th>
             </tr>
@@ -33,7 +34,7 @@
               <td>{{ r.user.username }}</td>
               <td>{{ r.kind }}</td>
               <td>
-                {% if r.mode == 'daily' %}Daily{% elif r.mode == 'halfday' %}Half Day (4.0h){% else %}Hourly{% endif %}
+                {% if r.mode == 'daily' %}Full Day(s){% elif r.mode == 'hourly' %}Hourly{% else %}Legacy {{ r.mode|title }}{% endif %}
               </td>
               <td>
                 {% set bal = r.user.hours_balance or 0 %}
@@ -44,6 +45,7 @@
               </td>
               <td>{% if r.is_school_related %}Yes{% else %}No{% endif %}</td>
               <td>{{ r.start_date }} → {{ r.end_date }}</td>
+              <td>{{ r.created_at.strftime('%b %d, %Y %I:%M %p') if r.created_at else '—' }}</td>
               <td>
                 {% if r.subs and r.subs|length %}
                   {{ r.subs|map(attribute='name')|join(', ') }}
@@ -64,7 +66,7 @@
             </tr>
             <!-- quick sub add (optional) -->
             <tr class="sub-row">
-              <td colspan="9">
+              <td colspan="10">
                 <form method="post" action="{{ url_for('add_substitute', req_id=r.id) }}" class="inline-form">
                   <label>Substitute:</label>
                   <input name="sub_name" type="text" placeholder="Name" class="input input-sm">
