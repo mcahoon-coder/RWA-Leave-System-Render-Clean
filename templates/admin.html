@@ -101,9 +101,12 @@
 <div class="grid-2" style="margin-top:1.25rem;">
   <!-- USER MANAGEMENT QUICK LINKS -->
   <div class="card">
-    <h3 style="margin-top:0;">User Management</h3>
-    <p>Add or update users, reset passwords, adjust balances.</p>
-    <a class="btn" href="{{ url_for('manage_users') }}">Open Manage Users</a>
+    <h3 style="margin-top:0;">School Year &amp; Users</h3>
+    <p>Enter official beginning balances, then manage employee accounts and passwords.</p>
+    <div class="btn-row">
+      <a class="btn btn-primary" href="{{ url_for('school_year_setup') }}">School Year Setup</a>
+      <a class="btn" href="{{ url_for('manage_users') }}">Manage Users</a>
+    </div>
   </div>
 
   <!-- UTILITIES -->
