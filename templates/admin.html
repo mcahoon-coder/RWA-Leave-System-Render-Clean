@@ -116,7 +116,10 @@
   <div class="card">
     <h3 style="margin-top:0;">Utilities</h3>
     <p>Send yourself a test email using current SMTP settings.</p>
-    <a class="btn" href="{{ url_for('admin_email_test') }}">Send Test Email</a>
+    <div class="btn-row">
+      <a class="btn" href="{{ url_for('admin_email_test') }}">Send Test Email</a>
+      <a class="btn btn-primary" href="{{ url_for('sms_settings') }}">SMS Settings</a>
+    </div>
   </div>
 </div>
 
