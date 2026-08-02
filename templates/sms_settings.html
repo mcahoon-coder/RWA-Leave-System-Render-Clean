@@ -1,1 +1,113 @@
+{% extends "base.html" %}
 
+{% block content %}
+<div style="max-width:980px; margin:0 auto;">
+  <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:18px;">
+    <div>
+      <h1 style="margin-bottom:4px;">SMS Settings</h1>
+      <p style="margin:0; opacity:.75;">
+        After-hours alerts are sent for new leave requests and absence notices.
+      </p>
+    </div>
+    <a class="btn" href="{{ url_for('admin_hub') }}">Back to Admin</a>
+  </div>
+
+  <div class="card" style="margin-bottom:18px;">
+    <h2 style="margin-top:0;">Current Status</h2>
+
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px;">
+      <div>
+        <div style="font-size:.9rem;opacity:.7;">SMS Enabled</div>
+        <div style="font-size:1.25rem;font-weight:700;">
+          {{ "Yes" if sms_status.enabled else "No" }}
+        </div>
+      </div>
+
+      <div>
+        <div style="font-size:.9rem;opacity:.7;">Configuration Ready</div>
+        <div style="font-size:1.25rem;font-weight:700;">
+          {{ "Yes" if sms_status.ready else "No" }}
+        </div>
+      </div>
+
+      <div>
+        <div style="font-size:.9rem;opacity:.7;">Alert Window</div>
+        <div style="font-size:1.25rem;font-weight:700;">
+          {{ sms_status.start }}–{{ sms_status.end }}
+        </div>
+      </div>
+
+      <div>
+        <div style="font-size:.9rem;opacity:.7;">Administrator Numbers</div>
+        <div style="font-size:1.25rem;font-weight:700;">
+          {{ sms_status.recipient_count }}
+        </div>
+      </div>
+    </div>
+
+    {% if sms_status.missing %}
+      <div style="margin-top:16px;padding:12px;border:1px solid #f59e0b;border-radius:8px;">
+        <strong>Missing Render settings:</strong>
+        {{ sms_status.missing|join(", ") }}
+      </div>
+    {% endif %}
+  </div>
+
+  <div class="card" style="margin-bottom:18px;">
+    <h2 style="margin-top:0;">Configured Recipients</h2>
+    {% if sms_numbers %}
+      <ul>
+        {% for number in sms_numbers %}
+          <li>{{ number }}</li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p>No valid administrator phone numbers are configured yet.</p>
+    {% endif %}
+  </div>
+
+  <div class="card" style="margin-bottom:18px;">
+    <h2 style="margin-top:0;">Send a Test Text</h2>
+    <p>
+      SMS must be enabled and the Twilio settings must be complete before this test will send.
+    </p>
+
+    <form method="post" action="{{ url_for('admin_sms_test') }}">
+      <label for="test_number"><strong>Test phone number</strong></label>
+      <input
+        id="test_number"
+        name="test_number"
+        type="tel"
+        placeholder="Example: 8035551234"
+        style="width:100%;max-width:360px;"
+      >
+      <div style="margin-top:12px;">
+        <button class="btn btn-primary" type="submit">Send Test Text</button>
+      </div>
+    </form>
+  </div>
+
+  <div class="card">
+    <h2 style="margin-top:0;">Render Environment Variables</h2>
+    <p>These settings will be added in Render when the Twilio account is ready:</p>
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Variable</th>
+          <th>Purpose</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td><code>SMS_ENABLED</code></td><td>Set to TRUE only after testing.</td></tr>
+        <tr><td><code>TWILIO_ACCOUNT_SID</code></td><td>Your Twilio account identifier.</td></tr>
+        <tr><td><code>TWILIO_AUTH_TOKEN</code></td><td>Your private Twilio authentication token.</td></tr>
+        <tr><td><code>TWILIO_FROM_NUMBER</code></td><td>The Twilio phone number that sends alerts.</td></tr>
+        <tr><td><code>ADMIN_SMS_NUMBERS</code></td><td>Comma-separated administrator cell numbers.</td></tr>
+        <tr><td><code>SMS_TIMEZONE</code></td><td>Use America/New_York.</td></tr>
+        <tr><td><code>SMS_ALERT_START</code></td><td>Use 15:15.</td></tr>
+        <tr><td><code>SMS_ALERT_END</code></td><td>Use 07:00.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
