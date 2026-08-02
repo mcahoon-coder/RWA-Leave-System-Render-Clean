@@ -6,4 +6,3 @@ Werkzeug==3.0.3
 gunicorn==21.2.0
 XlsxWriter==3.2.0
 psycopg[binary]==3.2.9
-twilio==9.10.9
