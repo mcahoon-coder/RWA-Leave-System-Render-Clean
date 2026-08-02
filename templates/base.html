@@ -2,76 +2,438 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>{{ title or "RWA Leave System" }}</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
 
-  <!-- Fallback critical styles so the page looks professional even if external CSS fails -->
+  <title>{{ title or "RWA Leave System" }}</title>
+
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#102a43">
+
+  <!--
+    Fallback styles:
+    These keep the application usable if the external stylesheet
+    is temporarily unavailable.
+  -->
   <style>
-    :root { --royal:#4169e1; --royal-dark:#1746a2; --card:#fff; --card-grad:#fff9d9; }
-    *{box-sizing:border-box}
-    body{margin:0;font-family:Arial,Helvetica,sans-serif;background:#f5f5f5}
-    .nav{background:var(--royal);color:#fff;padding:.8rem 1.2rem;display:flex;align-items:center;justify-content:space-between}
-    .brand{font-weight:700;font-size:1.25rem;color:#fff;text-decoration:none}
-    .nav-links{list-style:none;margin:0;padding:0;display:flex;gap:1rem}
-    .nav-links a{color:#fff;text-decoration:none;font-weight:500}
-    .nav-links a:hover{text-decoration:underline}
-    .content-wrapper{min-height:100vh;padding:2rem;background:linear-gradient(to bottom,var(--royal) 0%, #ffffff 100%);display:flex;justify-content:center}
-    .container{max-width:1000px;width:100%;background:linear-gradient(to bottom,var(--card-grad) 0%, #ffffff 100%);border-radius:8px;box-shadow:0 4px 8px rgba(0,0,0,.1);padding:2rem}
-    .flash-stack{margin-bottom:1rem}
-    .flash{padding:.8rem;margin-bottom:.5rem;border-radius:4px;font-weight:700}
-    .flash-success{background:#d4edda;color:#155724}
-    .flash-warning{background:#fff3cd;color:#856404}
-    .flash-danger{background:#f8d7da;color:#721c24}
-    .flash-info{background:#e0f2fe;color:#075985}
-    .flash-secondary{background:#f3f4f6;color:#374151}
-    .card{background:#fff;border-radius:8px;box-shadow:0 2px 4px rgba(0,0,0,.1);padding:1.5rem;margin-bottom:1.5rem}
-    .btn{background:var(--royal);color:#fff;border:none;padding:.5rem 1rem;border-radius:4px;cursor:pointer}
-    .btn:hover{background:var(--royal-dark)}
-    .input{width:100%;padding:.5rem;border:1px solid #ccc;border-radius:4px}
-    .footer{padding:1rem 2rem;color:#555}
-    @media (max-width:720px){.nav{flex-wrap:wrap;gap:.5rem}}
+    :root {
+      --navy: #102a43;
+      --navy-light: #1f5279;
+      --gold: #d8ad45;
+      --white: #ffffff;
+      --background: #f4f7fa;
+      --border: #dce3eb;
+      --text: #17212b;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      color: var(--text);
+      background: var(--background);
+      font-family: Arial, Helvetica, sans-serif;
+    }
+
+    .site-header {
+      position: sticky;
+      top: 0;
+      z-index: 1000;
+      padding: 0.75rem 1.25rem;
+      color: var(--white);
+      background: var(--navy);
+      border-bottom: 3px solid var(--gold);
+    }
+
+    .brand-wrap {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      color: var(--white);
+      text-decoration: none;
+    }
+
+    .brand-mark {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 44px;
+      height: 44px;
+      color: var(--navy);
+      background: var(--gold);
+      border-radius: 10px;
+      font-weight: 800;
+    }
+
+    .brand strong,
+    .brand small {
+      display: block;
+    }
+
+    .brand small {
+      margin-top: 2px;
+      color: rgba(255, 255, 255, 0.78);
+      font-size: 0.75rem;
+    }
+
+    .main-nav {
+      display: flex;
+      align-items: center;
+      gap: 0.25rem;
+      margin-top: 0.65rem;
+      flex-wrap: wrap;
+    }
+
+    .main-nav a {
+      padding: 0.55rem 0.75rem;
+      color: var(--white);
+      border-radius: 7px;
+      text-decoration: none;
+      font-size: 0.9rem;
+      font-weight: 600;
+    }
+
+    .main-nav a:hover,
+    .main-nav a.active {
+      background: rgba(255, 255, 255, 0.14);
+    }
+
+    .menu-toggle {
+      display: none;
+      padding: 0.4rem 0.7rem;
+      color: var(--white);
+      background: transparent;
+      border: 1px solid rgba(255, 255, 255, 0.45);
+      border-radius: 7px;
+      font-size: 1.2rem;
+      cursor: pointer;
+    }
+
+    .page-shell {
+      min-height: calc(100vh - 130px);
+      padding: 2rem;
+      background: linear-gradient(
+        to bottom,
+        #dfeaf4 0,
+        #f7f9fc 320px
+      );
+    }
+
+    .page-container {
+      width: 100%;
+      max-width: 1280px;
+      margin: 0 auto;
+    }
+
+    .flash-stack {
+      margin-bottom: 1rem;
+    }
+
+    .flash {
+      padding: 0.85rem 1rem;
+      margin-bottom: 0.5rem;
+      border-radius: 7px;
+      font-weight: 700;
+    }
+
+    .flash-success {
+      color: #155724;
+      background: #d4edda;
+    }
+
+    .flash-warning {
+      color: #856404;
+      background: #fff3cd;
+    }
+
+    .flash-danger {
+      color: #721c24;
+      background: #f8d7da;
+    }
+
+    .flash-info {
+      color: #075985;
+      background: #e0f2fe;
+    }
+
+    .flash-secondary {
+      color: #374151;
+      background: #f3f4f6;
+    }
+
+    .card {
+      padding: 1.5rem;
+      margin-bottom: 1.5rem;
+      background: var(--white);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      box-shadow: 0 3px 10px rgba(16, 42, 67, 0.08);
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0.55rem 1rem;
+      color: var(--white);
+      background: var(--navy-light);
+      border: none;
+      border-radius: 7px;
+      text-decoration: none;
+      cursor: pointer;
+    }
+
+    .btn:hover {
+      background: var(--navy);
+    }
+
+    .input,
+    input,
+    select,
+    textarea {
+      max-width: 100%;
+      padding: 0.55rem;
+      border: 1px solid #cbd5df;
+      border-radius: 7px;
+      font: inherit;
+    }
+
+    .site-footer {
+      display: flex;
+      justify-content: space-between;
+      gap: 1rem;
+      flex-wrap: wrap;
+      padding: 1rem 2rem;
+      color: #dce6ef;
+      background: var(--navy);
+      font-size: 0.82rem;
+    }
+
+    @media (max-width: 960px) {
+      .menu-toggle {
+        display: block;
+      }
+
+      .main-nav {
+        display: none;
+        flex-direction: column;
+        align-items: stretch;
+      }
+
+      body.nav-open .main-nav {
+        display: flex;
+      }
+
+      .main-nav a {
+        width: 100%;
+      }
+    }
+
+    @media (max-width: 720px) {
+      .page-shell {
+        padding: 1rem 0.65rem;
+      }
+
+      .card {
+        padding: 1rem;
+      }
+    }
   </style>
 
-  <!-- Main stylesheet (loads from /static). If present, it overrides/extends the fallback above. -->
-  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}?v=20250908">
+  <!-- Main professional stylesheet -->
+  <link
+    rel="stylesheet"
+    href="{{ url_for('static', filename='styles.css') }}?v=20260802"
+  >
 </head>
+
 <body>
-  <nav class="nav">
-    <a class="brand" href="{{ NAV.dashboard }}">RWA Leave System</a>
-    <ul class="nav-links">
-      {% if current_user.is_authenticated %}
-        <li><a href="{{ NAV.dashboard }}">Dashboard</a></li>
-        <li><a href="{{ NAV.my_requests }}">My Requests</a></li>
-        <li><a href="{{ NAV.team_calendar }}">Calendar</a></li>
-        <li><a href="{{ NAV.new_request }}">New Request</a></li>
-        {% if NAV.admin %}
-          <li><a href="{{ NAV.admin }}">Admin</a></li>
-        {% endif %}
-        <li><a href="{{ url_for('update_password') }}">Account</a></li>
-        <li><a href="{{ NAV.logout }}">Logout</a></li>
-      {% else %}
-        <li><a href="{{ url_for('login') }}">Login</a></li>
-      {% endif %}
-    </ul>
-  </nav>
 
-  <div class="content-wrapper">
-    <div class="container">
-      {% with messages = get_flashed_messages(with_categories=true) %}
-        {% if messages %}
-          <div class="flash-stack">
-            {% for category, message in messages %}
-              <div class="flash flash-{{ category|lower }}">{{ message }}</div>
-            {% endfor %}
-          </div>
-        {% endif %}
-      {% endwith %}
-      {% block content %}{% endblock %}
+  <header class="site-header">
+
+    <div class="brand-wrap">
+
+      <a class="brand" href="{{ NAV.dashboard }}">
+        <span class="brand-mark">RWA</span>
+
+        <span>
+          <strong>Richard Winn Academy</strong>
+          <small>Leave Management System</small>
+        </span>
+      </a>
+
+      <button
+        class="menu-toggle"
+        type="button"
+        aria-label="Open navigation menu"
+        aria-expanded="false"
+        onclick="toggleNavigation(this)"
+      >
+        ☰
+      </button>
+
     </div>
-  </div>
 
-  <footer class="footer">
-    &copy; {{ current_year }} RWA
+    <nav class="main-nav" aria-label="Main navigation">
+
+      {% if current_user.is_authenticated %}
+
+        <a
+          class="{{ 'active' if request.endpoint == 'dashboard' else '' }}"
+          href="{{ NAV.dashboard }}"
+        >
+          Dashboard
+        </a>
+
+        <a
+          class="{{ 'active' if request.endpoint in ['my_requests', 'user_requests'] else '' }}"
+          href="{{ NAV.my_requests }}"
+        >
+          My Requests
+        </a>
+
+        <a
+          class="{{ 'active' if request.endpoint == 'new_request' else '' }}"
+          href="{{ NAV.new_request }}"
+        >
+          New Request
+        </a>
+
+        <a
+          class="{{ 'active' if request.endpoint in ['calendar', 'calendar_data'] else '' }}"
+          href="{{ NAV.team_calendar }}"
+        >
+          Calendar
+        </a>
+
+        <a
+          class="{{ 'active' if request.endpoint == 'my_leave_ledger' else '' }}"
+          href="{{ url_for('my_leave_ledger') }}"
+        >
+          My Ledger
+        </a>
+
+        {% if NAV.admin %}
+          <a
+            class="{{
+              'active'
+              if request.endpoint in [
+                'admin_hub',
+                'manage_users',
+                'school_year_setup',
+                'leave_ledger',
+                'coverage_center',
+                'absence_notices',
+                'google_sheets_reports'
+              ]
+              else ''
+            }}"
+            href="{{ NAV.admin }}"
+          >
+            Administration
+          </a>
+        {% endif %}
+
+        <a
+          class="{{ 'active' if request.endpoint == 'update_password' else '' }}"
+          href="{{ url_for('update_password') }}"
+        >
+          Account
+        </a>
+
+        <a href="{{ NAV.logout }}">
+          Logout
+        </a>
+
+      {% else %}
+
+        <a
+          class="{{ 'active' if request.endpoint == 'login' else '' }}"
+          href="{{ url_for('login') }}"
+        >
+          Login
+        </a>
+
+      {% endif %}
+
+    </nav>
+
+  </header>
+
+  <main class="page-shell">
+
+    <section class="page-container">
+
+      {% with messages = get_flashed_messages(with_categories=true) %}
+
+        {% if messages %}
+
+          <div class="flash-stack">
+
+            {% for category, message in messages %}
+
+              <div class="flash flash-{{ category|lower }}">
+                {{ message|safe }}
+              </div>
+
+            {% endfor %}
+
+          </div>
+
+        {% endif %}
+
+      {% endwith %}
+
+      {% block content %}{% endblock %}
+
+    </section>
+
+  </main>
+
+  <footer class="site-footer">
+
+    <span>
+      &copy; {{ current_year }} Richard Winn Academy
+    </span>
+
+    {% if current_user.is_authenticated %}
+
+      <span>
+        Signed in as
+        {{ current_user.staff_name or current_user.username }}
+      </span>
+
+    {% endif %}
+
   </footer>
+
+  <script>
+    function toggleNavigation(button) {
+      document.body.classList.toggle("nav-open");
+
+      const isOpen = document.body.classList.contains("nav-open");
+      button.setAttribute("aria-expanded", isOpen ? "true" : "false");
+    }
+
+    document.querySelectorAll(".main-nav a").forEach(function (link) {
+      link.addEventListener("click", function () {
+        document.body.classList.remove("nav-open");
+
+        const button = document.querySelector(".menu-toggle");
+        if (button) {
+          button.setAttribute("aria-expanded", "false");
+        }
+      });
+    });
+  </script>
+
 </body>
 </html>
