@@ -1,5 +1,12 @@
 {% extends "base.html" %} 
 {% block content %}
+
+{% if not is_admin %}
+<div class="card" style="margin-bottom:1rem;border-left:5px solid #2563eb;">
+  <strong>Private account view:</strong> Only your own leave information is displayed here.
+</div>
+{% endif %}
+
 <div class="container mt-4">
     <h2>Leave History for {{ user.username }}</h2>
 
