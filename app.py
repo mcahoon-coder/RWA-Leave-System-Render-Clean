@@ -1108,588 +1108,110 @@ def admin_hub():
     if current_user.role != Role.admin:
         flash("Admins only.", "warning")
         return redirect(url_for("dashboard"))
-    pending = (LeaveRequest.query.filter_by(status=RequestStatus.pending)
-               .order_by(LeaveRequest.created_at.desc()).all())
-    return render_template("admin.html", title="Admin", pending=pending)
-
-
-
-
-
-# ---------- Absence Notices ----------
-@app.route("/admin/absence-notices", methods=["GET", "POST"])
-@login_required
-def absence_notices():
-    if current_user.role != Role.admin:
-        flash("Admins only.", "warning")
-        return redirect(url_for("dashboard"))
-
-    if request.method == "POST":
-        user_id = request.form.get("user_id", type=int)
-        start_text = (request.form.get("start_date") or "").strip()
-        end_text = (request.form.get("end_date") or "").strip()
-        start_time = (request.form.get("start_time") or "").strip() or None
-        end_time = (request.form.get("end_time") or "").strip() or None
-        reason = (request.form.get("reason") or "").strip()
-        office_note = (request.form.get("office_note") or "").strip()
-        send_now = request.form.get("send_email") == "yes"
-
-        employee = db.session.get(User, user_id) if user_id else None
-        if employee is None:
-            flash("Please select an employee.", "warning")
-            return redirect(url_for("absence_notices"))
-
-        try:
-            start_date = datetime.strptime(start_text, "%Y-%m-%d").date()
-            end_date = datetime.strptime(end_text, "%Y-%m-%d").date()
-        except ValueError:
-            flash("Please enter valid absence dates.", "warning")
-            return redirect(url_for("absence_notices"))
-
-        if end_date < start_date:
-            flash("The end date cannot be before the start date.", "warning")
-            return redirect(url_for("absence_notices"))
-
-        if bool(start_time) != bool(end_time):
-            flash("Enter both a start time and an end time, or leave both blank.", "warning")
-            return redirect(url_for("absence_notices"))
-
-        notice = AbsenceNotice(
-            user_id=employee.id,
-            start_date=start_date,
-            end_date=end_date,
-            start_time=start_time,
-            end_time=end_time,
-            reason=reason or None,
-            office_note=office_note or None,
-            status="Open",
-            created_by_id=current_user.id,
-        )
-        db.session.add(notice)
-        db.session.commit()
-
-        if send_now:
-            sent, message = send_absence_notice_reminder(notice)
-            if sent:
-                notice.reminder_sent_at = datetime.utcnow()
-                db.session.commit()
-                flash("The absence notice was saved and the employee was emailed.", "success")
-            else:
-                flash(
-                    f"The absence notice was saved, but the email was not sent: {message}",
-                    "warning",
-                )
-        else:
-            flash("The absence notice was saved.", "success")
-
-        return redirect(url_for("absence_notices"))
-
-    status_filter = (request.args.get("status") or "open").strip().lower()
-    query = AbsenceNotice.query
-
-    if status_filter == "resolved":
-        query = query.filter(AbsenceNotice.status == "Resolved")
-    elif status_filter == "all":
-        pass
-    else:
-        status_filter = "open"
-        query = query.filter(AbsenceNotice.status == "Open")
-
-    notices = query.order_by(
-        AbsenceNotice.start_date.asc(),
-        AbsenceNotice.created_at.desc(),
-    ).all()
-
-    users = User.query.order_by(
-        func.coalesce(User.staff_name, User.username)
-    ).all()
-
-    return render_template(
-        "absence_notices.html",
-        title="Absence Notices",
-        notices=notices,
-        users=users,
-        status_filter=status_filter,
-        today=date.today(),
-    )
-
-
-def send_absence_notice_reminder(notice):
-    employee = notice.user
-    if not employee.email:
-        return False, "The employee does not have an email address in the system."
-
-    date_text = notice.start_date.strftime("%B %d, %Y")
-    if notice.end_date != notice.start_date:
-        date_text += f" through {notice.end_date.strftime('%B %d, %Y')}"
-
-    time_text = ""
-    if notice.start_time and notice.end_time:
-        time_text = (
-            f"\nTime: {h12_filter(notice.start_time)} "
-            f"to {h12_filter(notice.end_time)}"
-        )
-
-    reason_text = f"\nReason on file: {notice.reason}" if notice.reason else ""
-
-    body = (
-        f"Hello {employee.staff_name or employee.username},\n\n"
-        "The school office has recorded that you will be absent on the "
-        f"following date(s):\n\n{date_text}{time_text}{reason_text}\n\n"
-        "Please log in to the Richard Winn Academy Leave System and submit "
-        "the matching leave request when you are able.\n\n"
-        "Thank you,\nRichard Winn Academy"
-    )
-
-    return send_email(
-        [employee.email],
-        "Reminder: Please Submit Your Leave Request",
-        body,
-    )
-
-
-@app.post("/admin/absence-notices/<int:notice_id>/remind")
-@login_required
-def remind_absence_notice(notice_id):
-    if current_user.role != Role.admin:
-        flash("Admins only.", "warning")
-        return redirect(url_for("dashboard"))
-
-    notice = db.session.get(AbsenceNotice, notice_id)
-    if notice is None:
-        abort(404)
-
-    sent, message = send_absence_notice_reminder(notice)
-    if sent:
-        notice.reminder_sent_at = datetime.utcnow()
-        db.session.commit()
-        flash("Reminder email sent.", "success")
-    else:
-        flash(f"Reminder email was not sent: {message}", "warning")
-
-    return redirect(url_for("absence_notices"))
-
-
-@app.post("/admin/absence-notices/<int:notice_id>/resolve")
-@login_required
-def resolve_absence_notice(notice_id):
-    if current_user.role != Role.admin:
-        flash("Admins only.", "warning")
-        return redirect(url_for("dashboard"))
-
-    notice = db.session.get(AbsenceNotice, notice_id)
-    if notice is None:
-        abort(404)
-
-    notice.status = "Resolved"
-    notice.resolved_at = datetime.utcnow()
-    db.session.commit()
-    flash("The absence notice was marked resolved.", "success")
-    return redirect(url_for("absence_notices"))
-
-
-@app.post("/admin/absence-notices/<int:notice_id>/reopen")
-@login_required
-def reopen_absence_notice(notice_id):
-    if current_user.role != Role.admin:
-        flash("Admins only.", "warning")
-        return redirect(url_for("dashboard"))
-
-    notice = db.session.get(AbsenceNotice, notice_id)
-    if notice is None:
-        abort(404)
-
-    notice.status = "Open"
-    notice.resolved_at = None
-    db.session.commit()
-    flash("The absence notice was reopened.", "success")
-    return redirect(url_for("absence_notices", status="all"))
-
-
-@app.post("/admin/absence-notices/<int:notice_id>/delete")
-@login_required
-def delete_absence_notice(notice_id):
-    if current_user.role != Role.admin:
-        flash("Admins only.", "warning")
-        return redirect(url_for("dashboard"))
-
-    notice = db.session.get(AbsenceNotice, notice_id)
-    if notice is None:
-        abort(404)
-
-    db.session.delete(notice)
-    db.session.commit()
-    flash("The absence notice was deleted.", "success")
-    return redirect(url_for("absence_notices"))
-
-
-# ---------- Coverage Center ----------
-@app.get("/admin/coverage")
-@login_required
-def coverage_center():
-    if current_user.role != Role.admin:
-        flash("Admins only.", "warning")
-        return redirect(url_for("dashboard"))
-
-    start_text = (request.args.get("start") or "").strip()
-    end_text = (request.args.get("end") or "").strip()
-    status_filter = (request.args.get("status") or "active").strip().lower()
 
     today = date.today()
-    default_end = today + timedelta(days=45)
-
-    try:
-        start_date = (
-            datetime.strptime(start_text, "%Y-%m-%d").date()
-            if start_text else today
-        )
-        end_date = (
-            datetime.strptime(end_text, "%Y-%m-%d").date()
-            if end_text else default_end
-        )
-    except ValueError:
-        flash("Please enter valid coverage dates.", "warning")
-        start_date = today
-        end_date = default_end
-
-    if end_date < start_date:
-        start_date, end_date = end_date, start_date
-
-    query = LeaveRequest.query.filter(
-        LeaveRequest.end_date >= start_date,
-        LeaveRequest.start_date <= end_date,
-    )
-
-    if status_filter == "pending":
-        query = query.filter(LeaveRequest.status == RequestStatus.pending)
-    elif status_filter == "approved":
-        query = query.filter(LeaveRequest.status == RequestStatus.approved)
-    elif status_filter == "all":
-        query = query.filter(
-            LeaveRequest.status.in_([
-                RequestStatus.pending,
-                RequestStatus.approved,
-            ])
-        )
+    month_start = date(today.year, today.month, 1)
+    if today.month == 12:
+        next_month = date(today.year + 1, 1, 1)
     else:
-        status_filter = "active"
-        query = query.filter(
-            LeaveRequest.status.in_([
-                RequestStatus.pending,
-                RequestStatus.approved,
-            ])
+        next_month = date(today.year, today.month + 1, 1)
+
+    pending = (
+        LeaveRequest.query
+        .filter_by(status=RequestStatus.pending)
+        .order_by(LeaveRequest.created_at.asc())
+        .all()
+    )
+
+    open_absence_count = (
+        AbsenceNotice.query
+        .filter_by(status="Open")
+        .count()
+    )
+
+    approved_active = (
+        LeaveRequest.query
+        .filter(
+            LeaveRequest.status == RequestStatus.approved,
+            LeaveRequest.end_date >= today,
         )
+        .all()
+    )
 
-    requests_list = query.order_by(
-        LeaveRequest.start_date.asc(),
-        LeaveRequest.created_at.asc(),
-    ).all()
-
-    uncovered_count = 0
-    covered_count = 0
-    total_sub_hours = 0.0
-
-    for leave_request in requests_list:
-        assigned_hours = sum((sub.hours or 0.0) for sub in leave_request.subs)
-        leave_request.coverage_hours = normalize_hours(assigned_hours)
-        leave_request.coverage_complete = (
-            assigned_hours >= (leave_request.hours or 0.0)
-            and (leave_request.hours or 0.0) > 0
+    coverage_needed_count = 0
+    for leave_request in approved_active:
+        assigned_hours = sum(
+            float(sub.hours or 0.0)
+            for sub in leave_request.subs
         )
-        leave_request.coverage_remaining = normalize_hours(
-            max((leave_request.hours or 0.0) - assigned_hours, 0.0)
+        if assigned_hours < float(leave_request.hours or 0.0):
+            coverage_needed_count += 1
+
+    employees_out_today = (
+        LeaveRequest.query
+        .filter(
+            LeaveRequest.status == RequestStatus.approved,
+            LeaveRequest.start_date <= today,
+            LeaveRequest.end_date >= today,
         )
+        .order_by(LeaveRequest.start_date.asc())
+        .all()
+    )
 
-        if leave_request.coverage_complete:
-            covered_count += 1
-        else:
-            uncovered_count += 1
+    substitute_hours_month = (
+        db.session.query(func.coalesce(func.sum(SubAssignment.hours), 0.0))
+        .join(LeaveRequest, SubAssignment.request_id == LeaveRequest.id)
+        .filter(
+            LeaveRequest.start_date >= month_start,
+            LeaveRequest.start_date < next_month,
+        )
+        .scalar()
+    )
 
-        total_sub_hours += assigned_hours
+    school_related_hours_month = (
+        db.session.query(func.coalesce(func.sum(LeaveRequest.hours), 0.0))
+        .filter(
+            LeaveRequest.status == RequestStatus.approved,
+            LeaveRequest.is_school_related.is_(True),
+            LeaveRequest.start_date >= month_start,
+            LeaveRequest.start_date < next_month,
+        )
+        .scalar()
+    )
+
+    negative_balance_count = (
+        User.query
+        .filter(User.role == Role.staff, User.hours_balance < 0)
+        .count()
+    )
+
+    active_year = get_active_school_year()
+
+    recent_activity = (
+        LeaveLedger.query
+        .order_by(
+            LeaveLedger.created_at.desc(),
+            LeaveLedger.id.desc(),
+        )
+        .limit(8)
+        .all()
+    )
 
     return render_template(
-        "coverage_center.html",
-        title="Coverage Center",
-        requests_list=requests_list,
-        start_date=start_date,
-        end_date=end_date,
-        status_filter=status_filter,
-        uncovered_count=uncovered_count,
-        covered_count=covered_count,
-        total_sub_hours=normalize_hours(total_sub_hours),
-    )
-
-
-# ---------- Leave Ledger Helpers ----------
-def get_active_school_year():
-    return (
-        SchoolYear.query.filter_by(is_active=True)
-        .order_by(SchoolYear.start_date.desc())
-        .first()
-    )
-
-
-def record_leave_ledger_entry(
-    *,
-    user_id,
-    entry_type,
-    hours,
-    description,
-    created_by_id=None,
-    created_at=None,
-):
-    """Create or update one uniquely identified ledger transaction."""
-    school_year = get_active_school_year()
-    if school_year is None:
-        return None
-
-    entry = LeaveLedger.query.filter_by(
-        school_year_id=school_year.id,
-        user_id=user_id,
-        entry_type=entry_type,
-    ).first()
-
-    if entry is None:
-        entry = LeaveLedger(
-            school_year_id=school_year.id,
-            user_id=user_id,
-            entry_type=entry_type,
-        )
-        db.session.add(entry)
-
-    entry.hours = normalize_hours(hours or 0.0)
-    entry.description = description
-    entry.created_by_id = created_by_id
-    entry.created_at = created_at or datetime.utcnow()
-    return entry
-
-
-def ledger_entry_label(entry_type):
-    if entry_type == "beginning_balance":
-        return "Beginning Balance"
-    if entry_type.startswith("approved_request_"):
-        return "Approved Leave"
-    if entry_type.startswith("cancelled_request_"):
-        return "Cancelled Leave Restored"
-    if entry_type.startswith("manual_adjustment_deleted_"):
-        return "Adjustment Reversed"
-    if entry_type.startswith("manual_adjustment_restored_"):
-        return "Adjustment Restored"
-    if entry_type.startswith("manual_adjustment_"):
-        return "Manual Adjustment"
-    return "Ledger Entry"
-
-
-app.jinja_env.globals["ledger_entry_label"] = ledger_entry_label
-
-
-# ---------- Leave Ledger ----------
-@app.route("/admin/leave-ledger")
-@login_required
-def leave_ledger():
-    if current_user.role != Role.admin:
-        flash("Admins only.", "warning")
-        return redirect(url_for("dashboard"))
-
-    years = SchoolYear.query.order_by(SchoolYear.start_date.desc()).all()
-    selected_year_id = request.args.get("school_year_id", type=int)
-    selected_user_id = request.args.get("user_id", type=int)
-
-    selected_year = None
-    if selected_year_id:
-        selected_year = SchoolYear.query.get(selected_year_id)
-    if selected_year is None:
-        selected_year = get_active_school_year()
-    if selected_year is None and years:
-        selected_year = years[0]
-
-    users = User.query.order_by(
-        func.coalesce(User.staff_name, User.username)
-    ).all()
-
-    query = LeaveLedger.query
-    if selected_year is not None:
-        query = query.filter(LeaveLedger.school_year_id == selected_year.id)
-    if selected_user_id:
-        query = query.filter(LeaveLedger.user_id == selected_user_id)
-
-    entries = query.order_by(
-        LeaveLedger.created_at.desc(),
-        LeaveLedger.id.desc(),
-    ).all()
-
-    total_change = normalize_hours(sum((entry.hours or 0.0) for entry in entries))
-    selected_user = User.query.get(selected_user_id) if selected_user_id else None
-
-    return render_template(
-        "leave_ledger.html",
-        title="Leave Ledger",
-        years=years,
-        users=users,
-        selected_year=selected_year,
-        selected_user=selected_user,
-        selected_user_id=selected_user_id,
-        entries=entries,
-        total_change=total_change,
-    )
-
-
-# ---------- School Year Setup ----------
-@app.route("/admin/school-year", methods=["GET", "POST"])
-@login_required
-def school_year_setup():
-    if current_user.role != Role.admin:
-        flash("Admins only.", "warning")
-        return redirect(url_for("dashboard"))
-
-    if request.method == "POST":
-        year_name = (request.form.get("year_name") or "").strip()
-
-        try:
-            start_date = datetime.strptime(
-                request.form.get("start_date", ""), "%Y-%m-%d"
-            ).date()
-            end_date = datetime.strptime(
-                request.form.get("end_date", ""), "%Y-%m-%d"
-            ).date()
-        except ValueError:
-            flash("Please enter valid school-year dates.", "warning")
-            return redirect(url_for("school_year_setup"))
-
-        if not year_name:
-            flash("Please enter a school-year name.", "warning")
-            return redirect(url_for("school_year_setup"))
-
-        if end_date < start_date:
-            flash("The school-year end date must be after the start date.", "warning")
-            return redirect(url_for("school_year_setup"))
-
-        try:
-            SchoolYear.query.update({SchoolYear.is_active: False})
-
-            school_year = SchoolYear.query.filter_by(name=year_name).first()
-            if school_year is None:
-                school_year = SchoolYear(
-                    name=year_name,
-                    start_date=start_date,
-                    end_date=end_date,
-                    is_active=True,
-                )
-                db.session.add(school_year)
-                db.session.flush()
-            else:
-                school_year.start_date = start_date
-                school_year.end_date = end_date
-                school_year.is_active = True
-                db.session.flush()
-
-            users = User.query.order_by(
-                func.coalesce(User.staff_name, User.username)
-            ).all()
-
-            updated_count = 0
-
-            for employee in users:
-                raw_balance = (request.form.get(f"balance_{employee.id}") or "").strip()
-                if raw_balance == "":
-                    continue
-
-                try:
-                    beginning_balance = normalize_hours(raw_balance)
-                except (TypeError, ValueError):
-                    raise ValueError(
-                        f"Invalid beginning balance for "
-                        f"{employee.staff_name or employee.username}."
-                    )
-
-                note = (request.form.get(f"note_{employee.id}") or "").strip()
-
-                saved_balance = SchoolYearBalance.query.filter_by(
-                    school_year_id=school_year.id,
-                    user_id=employee.id,
-                ).first()
-
-                if saved_balance is None:
-                    saved_balance = SchoolYearBalance(
-                        school_year_id=school_year.id,
-                        user_id=employee.id,
-                    )
-                    db.session.add(saved_balance)
-
-                saved_balance.beginning_balance = beginning_balance
-                saved_balance.note = note or None
-                saved_balance.updated_at = datetime.utcnow()
-
-                employee.starting_balance = beginning_balance
-                employee.hours_balance = beginning_balance
-
-                ledger_entry = LeaveLedger.query.filter_by(
-                    school_year_id=school_year.id,
-                    user_id=employee.id,
-                    entry_type="beginning_balance",
-                ).first()
-
-                description = f"Beginning balance for {school_year.name}"
-                if note:
-                    description += f" — {note}"
-
-                if ledger_entry is None:
-                    ledger_entry = LeaveLedger(
-                        school_year_id=school_year.id,
-                        user_id=employee.id,
-                        entry_type="beginning_balance",
-                        created_by_id=current_user.id,
-                    )
-                    db.session.add(ledger_entry)
-
-                ledger_entry.hours = beginning_balance
-                ledger_entry.description = description
-                ledger_entry.created_by_id = current_user.id
-                ledger_entry.created_at = datetime.utcnow()
-
-                updated_count += 1
-
-            db.session.commit()
-            flash(
-                f"{school_year.name} was saved. "
-                f"{updated_count} beginning balance(s) were updated.",
-                "success",
-            )
-            return redirect(url_for("school_year_setup"))
-
-        except ValueError as exc:
-            db.session.rollback()
-            flash(str(exc), "warning")
-        except Exception as exc:
-            db.session.rollback()
-            app.logger.exception("School-year setup failed")
-            flash(f"School-year setup could not be saved: {exc}", "danger")
-
-    active_year = (
-        SchoolYear.query.filter_by(is_active=True)
-        .order_by(SchoolYear.start_date.desc())
-        .first()
-    )
-
-    users = User.query.order_by(
-        func.coalesce(User.staff_name, User.username)
-    ).all()
-
-    balances = {}
-    if active_year:
-        balances = {
-            row.user_id: row
-            for row in SchoolYearBalance.query.filter_by(
-                school_year_id=active_year.id
-            ).all()
-        }
-
-    return render_template(
-        "school_year_setup.html",
-        title="School Year Setup",
+        "admin.html",
+        title="Admin",
+        pending=pending,
+        open_absence_count=open_absence_count,
+        coverage_needed_count=coverage_needed_count,
+        employees_out_today=employees_out_today,
+        substitute_hours_month=normalize_hours(substitute_hours_month or 0.0),
+        school_related_hours_month=normalize_hours(
+            school_related_hours_month or 0.0
+        ),
+        negative_balance_count=negative_balance_count,
         active_year=active_year,
-        users=users,
-        balances=balances,
+        recent_activity=recent_activity,
+        today=today,
     )
 
 # Admin email test endpoint (needed by template button)
