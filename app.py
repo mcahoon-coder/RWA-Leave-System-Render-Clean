@@ -16,6 +16,7 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from sqlalchemy import text, func
 import xlsxwriter  # Excel export (in-memory, safe on Render)
+from twilio.rest import Client
 
 # =========================================================
 # App & DB config
@@ -92,6 +93,206 @@ def send_email(to_addrs, subject, body):
     except Exception as e:
         app.logger.error(f"Email send failed: {e}")
         return False, str(e)
+
+# =========================================================
+# SMS settings (Twilio + Render environment variables)
+# =========================================================
+SMS_ENABLED = os.environ.get("SMS_ENABLED", "FALSE").lower() in ("true", "1", "yes")
+SMS_TIMEZONE = os.environ.get("SMS_TIMEZONE", "America/New_York")
+SMS_ALERT_START = os.environ.get("SMS_ALERT_START", "15:15")
+SMS_ALERT_END = os.environ.get("SMS_ALERT_END", "07:00")
+
+TWILIO_ACCOUNT_SID = os.environ.get("TWILIO_ACCOUNT_SID", "").strip()
+TWILIO_AUTH_TOKEN = os.environ.get("TWILIO_AUTH_TOKEN", "").strip()
+TWILIO_FROM_NUMBER = os.environ.get("TWILIO_FROM_NUMBER", "").strip()
+
+ADMIN_SMS_NUMBERS_ENV = [
+    value.strip()
+    for value in os.environ.get("ADMIN_SMS_NUMBERS", "").split(",")
+    if value.strip()
+]
+
+
+def normalize_phone_number(value):
+    """Normalize a US phone number to E.164 format for Twilio."""
+    raw = (value or "").strip()
+    if not raw:
+        return None
+
+    if raw.startswith("+"):
+        digits = "+" + "".join(ch for ch in raw[1:] if ch.isdigit())
+        return digits if len(digits) >= 11 else None
+
+    digits = "".join(ch for ch in raw if ch.isdigit())
+    if len(digits) == 10:
+        return f"+1{digits}"
+    if len(digits) == 11 and digits.startswith("1"):
+        return f"+{digits}"
+    return None
+
+
+def admin_sms_numbers():
+    """Return unique, valid administrator SMS numbers."""
+    seen = set()
+    numbers = []
+    for value in ADMIN_SMS_NUMBERS_ENV:
+        normalized = normalize_phone_number(value)
+        if normalized and normalized not in seen:
+            seen.add(normalized)
+            numbers.append(normalized)
+    return numbers
+
+
+def parse_sms_clock(value, fallback):
+    try:
+        hour_text, minute_text = (value or "").split(":")
+        return dt_time(int(hour_text), int(minute_text))
+    except Exception:
+        hour_text, minute_text = fallback.split(":")
+        return dt_time(int(hour_text), int(minute_text))
+
+
+def is_after_hours(local_now=None):
+    """True from the configured afternoon start through the next morning end."""
+    tz = ZoneInfo(SMS_TIMEZONE)
+    now = local_now or datetime.now(tz)
+    current = now.timetz().replace(tzinfo=None)
+    start = parse_sms_clock(SMS_ALERT_START, "15:15")
+    end = parse_sms_clock(SMS_ALERT_END, "07:00")
+
+    if start < end:
+        return start <= current < end
+    return current >= start or current < end
+
+
+def sms_configuration_status():
+    missing = []
+    if not TWILIO_ACCOUNT_SID:
+        missing.append("TWILIO_ACCOUNT_SID")
+    if not TWILIO_AUTH_TOKEN:
+        missing.append("TWILIO_AUTH_TOKEN")
+    if not normalize_phone_number(TWILIO_FROM_NUMBER):
+        missing.append("TWILIO_FROM_NUMBER")
+    if not admin_sms_numbers():
+        missing.append("ADMIN_SMS_NUMBERS")
+
+    return {
+        "enabled": SMS_ENABLED,
+        "ready": SMS_ENABLED and not missing,
+        "missing": missing,
+        "timezone": SMS_TIMEZONE,
+        "start": SMS_ALERT_START,
+        "end": SMS_ALERT_END,
+        "recipient_count": len(admin_sms_numbers()),
+        "from_number": normalize_phone_number(TWILIO_FROM_NUMBER),
+    }
+
+
+def send_sms_message(to_number, body):
+    """Send one SMS message with Twilio."""
+    if not SMS_ENABLED:
+        return False, "SMS is disabled"
+
+    status = sms_configuration_status()
+    if not status["ready"]:
+        return False, "SMS configuration is incomplete"
+
+    normalized_to = normalize_phone_number(to_number)
+    normalized_from = normalize_phone_number(TWILIO_FROM_NUMBER)
+    if not normalized_to:
+        return False, "Invalid destination phone number"
+
+    try:
+        client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
+        message = client.messages.create(
+            body=body,
+            from_=normalized_from,
+            to=normalized_to,
+        )
+        app.logger.info("SMS sent to %s with SID %s", normalized_to, message.sid)
+        return True, message.sid
+    except Exception as exc:
+        app.logger.exception("SMS send failed")
+        return False, str(exc)
+
+
+def send_admin_sms_alert(body):
+    """Send an SMS alert to every configured administrator."""
+    recipients = admin_sms_numbers()
+    if not recipients:
+        return False, "No administrator phone numbers are configured"
+
+    failures = []
+    sent_count = 0
+    for number in recipients:
+        sent, detail = send_sms_message(number, body)
+        if sent:
+            sent_count += 1
+        else:
+            failures.append(f"{number}: {detail}")
+
+    if sent_count == len(recipients):
+        return True, f"Sent to {sent_count} administrator(s)"
+    if sent_count:
+        return False, f"Sent to {sent_count}; failures: {'; '.join(failures)}"
+    return False, "; ".join(failures)
+
+
+def maybe_send_leave_request_sms(leave_request):
+    """Send one after-hours alert for a newly submitted leave request."""
+    if leave_request.sms_alert_sent_at:
+        return
+
+    if not is_after_hours():
+        leave_request.sms_alert_status = "Outside alert window"
+        return
+
+    employee_name = leave_request.user.staff_name or leave_request.user.username
+    date_text = leave_request.start_date.strftime("%b %d, %Y")
+    if leave_request.end_date != leave_request.start_date:
+        date_text += f"–{leave_request.end_date.strftime('%b %d, %Y')}"
+
+    school_text = " School-related." if leave_request.is_school_related else ""
+    body = (
+        f"RWA Leave Alert: {employee_name} submitted leave for {date_text}, "
+        f"{leave_request.hours:.2f}h.{school_text} Coverage may be needed. "
+        f"Request #{leave_request.id}."
+    )
+
+    sent, detail = send_admin_sms_alert(body)
+    leave_request.sms_alert_status = "Sent" if sent else "Failed"
+    leave_request.sms_alert_error = None if sent else detail[:500]
+    if sent:
+        leave_request.sms_alert_sent_at = datetime.utcnow()
+
+
+def maybe_send_absence_notice_sms(notice):
+    """Send one after-hours alert for an office-recorded absence notice."""
+    if notice.sms_alert_sent_at:
+        return
+
+    if not is_after_hours():
+        notice.sms_alert_status = "Outside alert window"
+        return
+
+    employee_name = notice.user.staff_name or notice.user.username
+    date_text = notice.start_date.strftime("%b %d, %Y")
+    if notice.end_date != notice.start_date:
+        date_text += f"–{notice.end_date.strftime('%b %d, %Y')}"
+
+    body = (
+        f"RWA Absence Alert: {employee_name} was recorded absent for {date_text}. "
+        "A leave request may still be needed and coverage may be needed. "
+        f"Notice #{notice.id}."
+    )
+
+    sent, detail = send_admin_sms_alert(body)
+    notice.sms_alert_status = "Sent" if sent else "Failed"
+    notice.sms_alert_error = None if sent else detail[:500]
+    if sent:
+        notice.sms_alert_sent_at = datetime.utcnow()
+
+
 # =========================================================
 # Models & constants
 # =========================================================
@@ -145,6 +346,9 @@ class LeaveRequest(db.Model):
     # Flags/extra
     is_school_related = db.Column(db.Boolean, default=False, nullable=False)
     substitute = db.Column(db.String(120))  # legacy single substitute text (optional)
+    sms_alert_sent_at = db.Column(db.DateTime)
+    sms_alert_status = db.Column(db.String(50))
+    sms_alert_error = db.Column(db.String(500))
 
     # eager-load user to avoid DetachedInstanceError in templates
     user = db.relationship("User", backref="leave_requests", lazy="joined")
@@ -200,6 +404,9 @@ class AbsenceNotice(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     reminder_sent_at = db.Column(db.DateTime)
     resolved_at = db.Column(db.DateTime)
+    sms_alert_sent_at = db.Column(db.DateTime)
+    sms_alert_status = db.Column(db.String(50))
+    sms_alert_error = db.Column(db.String(500))
 
     user = db.relationship(
         "User",
@@ -346,49 +553,74 @@ def _column_exists(table_name: str, column_name: str) -> bool:
         return db.session.execute(q, {"t": table_name, "c": column_name}).first() is not None
 
 def ensure_db():
-    # Create tables (including sub_assignment)
     db.create_all()
 
-       # Add newly introduced columns if missing
     try:
         if db.engine.dialect.name == "sqlite":
-            if not _column_exists("leave_request", "start_time"):
-                db.session.execute(text("ALTER TABLE leave_request ADD COLUMN start_time VARCHAR(5)"))
-            if not _column_exists("leave_request", "end_time"):
-                db.session.execute(text("ALTER TABLE leave_request ADD COLUMN end_time VARCHAR(5)"))
-            if not _column_exists("leave_request", "is_school_related"):
-                db.session.execute(text("ALTER TABLE leave_request ADD COLUMN is_school_related BOOLEAN DEFAULT 0 NOT NULL"))
-            if not _column_exists("leave_request", "substitute"):
-                db.session.execute(text("ALTER TABLE leave_request ADD COLUMN substitute VARCHAR(120)"))
-            if not _column_exists("user", "staff_name"):
-                db.session.execute(text("ALTER TABLE user ADD COLUMN staff_name VARCHAR(150)"))
-            if not _column_exists("user", "starting_balance"):
-                db.session.execute(text("ALTER TABLE user ADD COLUMN starting_balance FLOAT DEFAULT 0 NOT NULL"))
-            db.session.commit()
+            sqlite_columns = [
+                ("leave_request", "start_time", "VARCHAR(5)"),
+                ("leave_request", "end_time", "VARCHAR(5)"),
+                ("leave_request", "is_school_related", "BOOLEAN DEFAULT 0 NOT NULL"),
+                ("leave_request", "substitute", "VARCHAR(120)"),
+                ("leave_request", "sms_alert_sent_at", "DATETIME"),
+                ("leave_request", "sms_alert_status", "VARCHAR(50)"),
+                ("leave_request", "sms_alert_error", "VARCHAR(500)"),
+                ("user", "staff_name", "VARCHAR(150)"),
+                ("user", "starting_balance", "FLOAT DEFAULT 0 NOT NULL"),
+                ("absence_notice", "sms_alert_sent_at", "DATETIME"),
+                ("absence_notice", "sms_alert_status", "VARCHAR(50)"),
+                ("absence_notice", "sms_alert_error", "VARCHAR(500)"),
+            ]
+
+            for table_name, column_name, definition in sqlite_columns:
+                if not _column_exists(table_name, column_name):
+                    db.session.execute(
+                        text(
+                            f"ALTER TABLE {table_name} "
+                            f"ADD COLUMN {column_name} {definition}"
+                        )
+                    )
         else:
-            db.session.execute(text("ALTER TABLE leave_request ADD COLUMN IF NOT EXISTS start_time VARCHAR(5)"))
-            db.session.execute(text("ALTER TABLE leave_request ADD COLUMN IF NOT EXISTS end_time VARCHAR(5)"))
-            db.session.execute(text("ALTER TABLE leave_request ADD COLUMN IF NOT EXISTS is_school_related BOOLEAN NOT NULL DEFAULT FALSE"))
-            db.session.execute(text("ALTER TABLE leave_request ADD COLUMN IF NOT EXISTS substitute VARCHAR(120)"))
-            db.session.execute(text('ALTER TABLE "user" ADD COLUMN IF NOT EXISTS staff_name VARCHAR(150)'))
-            db.session.execute(text('ALTER TABLE "user" ADD COLUMN IF NOT EXISTS starting_balance DOUBLE PRECISION NOT NULL DEFAULT 0'))
-            db.session.commit()
+            postgres_statements = [
+                "ALTER TABLE leave_request ADD COLUMN IF NOT EXISTS start_time VARCHAR(5)",
+                "ALTER TABLE leave_request ADD COLUMN IF NOT EXISTS end_time VARCHAR(5)",
+                "ALTER TABLE leave_request ADD COLUMN IF NOT EXISTS is_school_related BOOLEAN NOT NULL DEFAULT FALSE",
+                "ALTER TABLE leave_request ADD COLUMN IF NOT EXISTS substitute VARCHAR(120)",
+                "ALTER TABLE leave_request ADD COLUMN IF NOT EXISTS sms_alert_sent_at TIMESTAMP",
+                "ALTER TABLE leave_request ADD COLUMN IF NOT EXISTS sms_alert_status VARCHAR(50)",
+                "ALTER TABLE leave_request ADD COLUMN IF NOT EXISTS sms_alert_error VARCHAR(500)",
+                'ALTER TABLE "user" ADD COLUMN IF NOT EXISTS staff_name VARCHAR(150)',
+                'ALTER TABLE "user" ADD COLUMN IF NOT EXISTS starting_balance DOUBLE PRECISION NOT NULL DEFAULT 0',
+                "ALTER TABLE absence_notice ADD COLUMN IF NOT EXISTS sms_alert_sent_at TIMESTAMP",
+                "ALTER TABLE absence_notice ADD COLUMN IF NOT EXISTS sms_alert_status VARCHAR(50)",
+                "ALTER TABLE absence_notice ADD COLUMN IF NOT EXISTS sms_alert_error VARCHAR(500)",
+            ]
+
+            for statement in postgres_statements:
+                db.session.execute(text(statement))
+
+        db.session.commit()
     except Exception:
         db.session.rollback()
+        app.logger.exception("Database compatibility update failed")
 
-    # Seed admin ONLY if there are no users at all (first boot)
     if User.query.count() == 0:
         bootstrap_username = os.environ.get("BOOTSTRAP_ADMIN_USERNAME", "mc-admin")
         bootstrap_password = os.environ.get("BOOTSTRAP_ADMIN_PASSWORD", "RWAadmin2")
-        bootstrap_email    = os.environ.get("BOOTSTRAP_ADMIN_EMAIL", (ADMIN_EMAILS_ENV[0] if ADMIN_EMAILS_ENV else ""))
+        bootstrap_email = os.environ.get(
+            "BOOTSTRAP_ADMIN_EMAIL",
+            (ADMIN_EMAILS_ENV[0] if ADMIN_EMAILS_ENV else ""),
+        )
 
-        db.session.add(User(
-            username=bootstrap_username,
-            password_hash=generate_password_hash(bootstrap_password),
-            role=Role.admin,
-            hours_balance=160.0,
-            email=bootstrap_email or None
-        ))
+        db.session.add(
+            User(
+                username=bootstrap_username,
+                password_hash=generate_password_hash(bootstrap_password),
+                role=Role.admin,
+                hours_balance=160.0,
+                email=bootstrap_email or None,
+            )
+        )
         db.session.commit()
 
 with app.app_context():
@@ -603,6 +835,53 @@ def admin_hub():
     return render_template("admin.html", title="Admin", pending=pending)
 
 
+# ---------- SMS Settings and Test ----------
+@app.get("/admin/sms-settings")
+@login_required
+def sms_settings():
+    if current_user.role != Role.admin:
+        flash("Admins only.", "warning")
+        return redirect(url_for("dashboard"))
+
+    return render_template(
+        "sms_settings.html",
+        title="SMS Settings",
+        sms_status=sms_configuration_status(),
+        sms_numbers=admin_sms_numbers(),
+    )
+
+
+@app.post("/admin/sms-test")
+@login_required
+def admin_sms_test():
+    if current_user.role != Role.admin:
+        flash("Admins only.", "warning")
+        return redirect(url_for("dashboard"))
+
+    test_number = normalize_phone_number(request.form.get("test_number"))
+    if not test_number:
+        numbers = admin_sms_numbers()
+        test_number = numbers[0] if numbers else None
+
+    if not test_number:
+        flash("No valid test phone number is available.", "warning")
+        return redirect(url_for("sms_settings"))
+
+    now_text = datetime.now(ZoneInfo(SMS_TIMEZONE)).strftime("%b %d, %Y at %I:%M %p")
+    sent, detail = send_sms_message(
+        test_number,
+        f"RWA Leave System test text sent {now_text}. SMS setup is working.",
+    )
+
+    if sent:
+        flash(f"Test text sent to {test_number}.", "success")
+    else:
+        flash(f"Test text failed: {detail}", "danger")
+
+    return redirect(url_for("sms_settings"))
+
+
+
 
 
 
@@ -656,6 +935,9 @@ def absence_notices():
             created_by_id=current_user.id,
         )
         db.session.add(notice)
+        db.session.commit()
+
+        maybe_send_absence_notice_sms(notice)
         db.session.commit()
 
         if send_now:
@@ -1303,6 +1585,9 @@ def new_request():
             is_school_related=is_school,
         )
         db.session.add(req)
+        db.session.commit()
+
+        maybe_send_leave_request_sms(req)
         db.session.commit()
 
         # Notify admins
