@@ -1,124 +1,201 @@
 {% extends "base.html" %}
 {% block content %}
+<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:14px;flex-wrap:wrap;margin-bottom:20px;">
+  <div>
+    <h1 style="margin:0 0 4px 0;">Administration Dashboard</h1>
+    <p style="margin:0;color:var(--muted);">
+      {% if active_year %}
+        {{ active_year.name }} school year command center
+      {% else %}
+        School year setup is still needed
+      {% endif %}
+    </p>
+  </div>
+  <div class="btn-row">
+    <a class="btn btn-primary" href="{{ url_for('school_year_setup') }}">School Year Setup</a>
+    <a class="btn" href="{{ url_for('google_sheets_reports') }}">Reports Center</a>
+  </div>
+</div>
 
-<h1 style="margin-top:0;">Admin</h1>
+<div class="metric-grid" style="margin-bottom:20px;">
+  <div class="metric-card">
+    <div class="metric-label">Pending Requests</div>
+    <div class="metric-value">{{ pending|length }}</div>
+    <div class="metric-note">Waiting for an administrator decision</div>
+  </div>
+
+  <div class="metric-card">
+    <div class="metric-label">Open Absence Notices</div>
+    <div class="metric-value">{{ open_absence_count }}</div>
+    <div class="metric-note">Employees still needing leave requests</div>
+  </div>
+
+  <div class="metric-card">
+    <div class="metric-label">Coverage Needed</div>
+    <div class="metric-value">{{ coverage_needed_count }}</div>
+    <div class="metric-note">Approved requests not fully covered</div>
+  </div>
+
+  <div class="metric-card">
+    <div class="metric-label">Out Today</div>
+    <div class="metric-value">{{ employees_out_today|length }}</div>
+    <div class="metric-note">{{ today.strftime("%B %d, %Y") }}</div>
+  </div>
+
+  <div class="metric-card">
+    <div class="metric-label">Substitute Hours</div>
+    <div class="metric-value">{{ "%.2f"|format(substitute_hours_month) }}</div>
+    <div class="metric-note">Assigned this month</div>
+  </div>
+
+  <div class="metric-card">
+    <div class="metric-label">School-Related Hours</div>
+    <div class="metric-value">{{ "%.2f"|format(school_related_hours_month) }}</div>
+    <div class="metric-note">Approved this month</div>
+  </div>
+
+  <div class="metric-card">
+    <div class="metric-label">Negative Balances</div>
+    <div class="metric-value">{{ negative_balance_count }}</div>
+    <div class="metric-note">Employees requiring review</div>
+  </div>
+</div>
+
+<div class="card">
+  <h2 style="margin-top:0;">Administrative Tools</h2>
+  <div class="action-grid">
+    <a class="action-card" href="{{ url_for('manage_users') }}">
+      <div class="action-icon">👥</div>
+      <div class="action-title">Employees</div>
+      <div class="action-copy">Accounts, names, emails, roles, and balances</div>
+    </a>
+
+    <a class="action-card" href="{{ url_for('coverage_center') }}">
+      <div class="action-icon">🧑‍🏫</div>
+      <div class="action-title">Coverage Center</div>
+      <div class="action-copy">Assign and review substitute coverage hours</div>
+    </a>
+
+    <a class="action-card" href="{{ url_for('absence_notices') }}">
+      <div class="action-icon">🔔</div>
+      <div class="action-title">Absence Notices</div>
+      <div class="action-copy">Record absences before leave is submitted</div>
+    </a>
+
+    <a class="action-card" href="{{ url_for('leave_ledger') }}">
+      <div class="action-icon">📘</div>
+      <div class="action-title">Leave Ledger</div>
+      <div class="action-copy">Audit all additions, deductions, and restorations</div>
+    </a>
+
+    <a class="action-card" href="{{ url_for('google_sheets_reports') }}">
+      <div class="action-icon">📊</div>
+      <div class="action-title">Google Sheets Reports</div>
+      <div class="action-copy">Create monthly professional reports</div>
+    </a>
+
+    <a class="action-card" href="{{ url_for('calendar') }}">
+      <div class="action-icon">📅</div>
+      <div class="action-title">Team Calendar</div>
+      <div class="action-copy">Review approved leave by date</div>
+    </a>
+
+    <a class="action-card" href="{{ url_for('admin_email_test') }}">
+      <div class="action-icon">✉️</div>
+      <div class="action-title">Test Email</div>
+      <div class="action-copy">Verify the current email configuration</div>
+    </a>
+  </div>
+</div>
 
 <div class="grid-2">
-  <!-- APPROVALS -->
   <div class="card">
-    <h2 style="margin-top:0;">Approvals <small style="font-weight:normal; opacity:.8;">(BUTTONS)</small></h2>
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">
+      <h2 style="margin:0;">Pending Approvals</h2>
+      <a class="btn btn-sm" href="{{ url_for('my_requests', day='all', status='pending') }}">View Request List</a>
+    </div>
 
-    {% if pending|length == 0 %}
-      <p>No pending requests right now.</p>
-    {% else %}
-      <div class="table-wrap">
-        <table class="table tight">
+    {% if pending %}
+      <div class="table-wrap" style="margin-top:14px;">
+        <table class="table">
           <thead>
             <tr>
-              <th>#</th>
-              <th>User</th>
-              <th>Kind</th>
-              <th>Leave Type</th>
-              <th>Hours</th>
-              <th>School</th>
+              <th>Employee</th>
               <th>Dates</th>
+              <th>Hours</th>
               <th>Submitted</th>
-              <th>Subs</th>
-              <th>Actions</th>
+              <th>Decision</th>
             </tr>
           </thead>
           <tbody>
-          {% for r in pending %}
-            <tr>
-              <td>{{ r.id }}</td>
-              <td>{{ r.user.username }}</td>
-              <td>{{ r.kind }}</td>
-              <td>
-                {% if r.mode == 'daily' %}Full Day(s){% elif r.mode == 'hourly' %}Hourly{% else %}Legacy {{ r.mode|title }}{% endif %}
-              </td>
-              <td>
-                {% set bal = r.user.hours_balance or 0 %}
-                {% set post = (bal - (0 if r.is_school_related else (r.hours or 0))) %}
-                <span class="{% if post < 0 %}text-red{% else %}text-green{% endif %}">
-                  {{ r.hours or 0 }}h
-                </span>
-              </td>
-              <td>{% if r.is_school_related %}Yes{% else %}No{% endif %}</td>
-              <td>{{ r.start_date }} → {{ r.end_date }}</td>
-              <td>{{ r.created_at.strftime('%b %d, %Y %I:%M %p') if r.created_at else '—' }}</td>
-              <td>
-                {% if r.subs and r.subs|length %}
-                  {{ r.subs|map(attribute='name')|join(', ') }}
-                {% elif r.substitute %}
-                  {{ r.substitute }}
-                {% else %}
-                  —
-                {% endif %}
-              </td>
-              <td class="nowrap">
-                <form method="post" action="{{ url_for('approve', req_id=r.id) }}" style="display:inline;">
-                  <button class="btn btn-success btn-sm" type="submit">Approve</button>
-                </form>
-                <form method="post" action="{{ url_for('disapprove', req_id=r.id) }}" style="display:inline; margin-left:.25rem;">
-                  <button class="btn btn-danger btn-sm" type="submit">Disapprove</button>
-                </form>
-              </td>
-            </tr>
-            <!-- quick sub add (optional) -->
-            <tr class="sub-row">
-              <td colspan="10">
-                <form method="post" action="{{ url_for('add_substitute', req_id=r.id) }}" class="inline-form">
-                  <label>Substitute:</label>
-                  <input name="sub_name" type="text" placeholder="Name" class="input input-sm">
-                  <input name="sub_hours" type="number" step="0.25" min="0" placeholder="Hours" class="input input-sm" style="width:7rem;">
-                  <button type="submit" class="btn btn-secondary btn-sm">Add</button>
-                </form>
-              </td>
-            </tr>
-          {% endfor %}
+            {% for r in pending %}
+              <tr>
+                <td>
+                  <strong>{{ r.user.staff_name or r.user.username }}</strong>
+                  {% if r.is_school_related %}
+                    <div><span class="badge badge-blue">School Related</span></div>
+                  {% endif %}
+                </td>
+                <td>
+                  {{ r.start_date }}
+                  {% if r.end_date != r.start_date %} → {{ r.end_date }}{% endif %}
+                </td>
+                <td>{{ "%.2f"|format(r.hours or 0) }}</td>
+                <td>{{ r.created_at.strftime("%b %d, %I:%M %p") if r.created_at else "—" }}</td>
+                <td class="nowrap">
+                  <form method="post" action="{{ url_for('approve', req_id=r.id) }}" style="display:inline;">
+                    <button class="btn btn-success btn-sm" type="submit">Approve</button>
+                  </form>
+                  <form method="post" action="{{ url_for('disapprove', req_id=r.id) }}" style="display:inline;">
+                    <button class="btn btn-danger btn-sm" type="submit">Disapprove</button>
+                  </form>
+                </td>
+              </tr>
+            {% endfor %}
           </tbody>
         </table>
       </div>
+    {% else %}
+      <p style="margin-bottom:0;">There are no pending requests.</p>
     {% endif %}
   </div>
 
-  <!-- REPORTS -->
-  <div class="card">
-    <h2 style="margin-top:0;">Reports</h2>
-    <p>Download data for analysis.</p>
-    <div class="btn-row">
-      <a class="btn" href="{{ url_for('export_requests_csv') }}">All Requests (CSV)</a>
-      <a class="btn" href="{{ url_for('export_requests_xlsx') }}">All Requests (Excel)</a>
-      <!-- NEW: Monthly report button (Option 2) -->
-      <a class="btn btn-primary" href="{{ url_for('export_monthly') }}">Monthly Report (CSV)</a>
+  <div>
+    <div class="card">
+      <h2 style="margin-top:0;">Employees Out Today</h2>
+      {% if employees_out_today %}
+        {% for r in employees_out_today %}
+          <div style="padding:10px 0;border-top:1px solid var(--border);">
+            <strong>{{ r.user.staff_name or r.user.username }}</strong>
+            <div class="text-muted">
+              {{ "%.2f"|format(r.hours or 0) }}h
+              {% if r.is_school_related %} · School Related{% endif %}
+            </div>
+          </div>
+        {% endfor %}
+      {% else %}
+        <p style="margin-bottom:0;">No approved absences are scheduled today.</p>
+      {% endif %}
     </div>
-    <p style="margin-top:1rem; opacity:.8; font-size:.95rem;">
-      Tip: You can filter another month with <code>?start=YYYY-MM-DD&amp;end=YYYY-MM-DD</code>.
-    </p>
+
+    <div class="card">
+      <h2 style="margin-top:0;">Recent Ledger Activity</h2>
+      {% if recent_activity %}
+        {% for entry in recent_activity %}
+          <div style="display:flex;justify-content:space-between;gap:12px;padding:9px 0;border-top:1px solid var(--border);">
+            <div>
+              <strong>{{ entry.user.staff_name or entry.user.username }}</strong>
+              <div class="text-muted" style="font-size:.83rem;">
+                {{ ledger_entry_label(entry.entry_type) }}
+              </div>
+            </div>
+            <div style="font-weight:850;">{{ "%+.2f"|format(entry.hours or 0) }}h</div>
+          </div>
+        {% endfor %}
+      {% else %}
+        <p style="margin-bottom:0;">No ledger activity is available yet.</p>
+      {% endif %}
+    </div>
   </div>
 </div>
-
-<div class="grid-2" style="margin-top:1.25rem;">
-  <!-- USER MANAGEMENT QUICK LINKS -->
-  <div class="card">
-    <h3 style="margin-top:0;">School Year &amp; Users</h3>
-    <p>Enter official beginning balances, then manage employee accounts and passwords.</p>
-    <div class="btn-row">
-      <a class="btn btn-primary" href="{{ url_for('school_year_setup') }}">School Year Setup</a>
-      <a class="btn" href="{{ url_for('leave_ledger') }}">Leave Ledger</a>
-      <a class="btn" href="{{ url_for('coverage_center') }}">Coverage Center</a>
-      <a class="btn" href="{{ url_for('absence_notices') }}">Absence Notices</a>
-      <a class="btn btn-primary" href="{{ url_for('google_sheets_reports') }}">Google Sheets Reports</a>
-      <a class="btn" href="{{ url_for('manage_users') }}">Manage Users</a>
-    </div>
-  </div>
-
-  <!-- UTILITIES -->
-  <div class="card">
-    <h3 style="margin-top:0;">Utilities</h3>
-    <p>Send yourself a test email using current SMTP settings.</p>
-    <a class="btn" href="{{ url_for('admin_email_test') }}">Send Test Email</a>
-  </div>
-</div>
-
 {% endblock %}
