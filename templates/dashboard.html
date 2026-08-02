@@ -1,87 +1,150 @@
 {% extends "base.html" %}
 {% block content %}
-<div class="container mt-4">
-  <h2>Dashboard</h2>
-
-  <div class="mb-3">
-    <p><strong>Welcome:</strong> {{ me.staff_name or me.username }}</p>
-    <p><strong>Leave Balance:</strong> {{ "%.2f"|format(me.hours_balance) }} hours</p>
-  </div>
-
-  <h4>Recent Requests</h4>
-  <table class="table table-striped table-bordered align-middle">
-    <thead class="table-light">
-      <tr>
-        <th>Kind</th>
-        <th>Mode</th>
-        <th>Hours</th>
-        <th>Dates</th>
-        <th>Time Window</th>
-        <th>Status</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for r in recent %}
-      <tr>
-        <td>{{ r.kind }}</td>
-        <td>{{ r.mode }}</td>
-        <td>{{ "%.2f"|format(r.hours) }}</td>
-        <td>{{ r.start_date }} → {{ r.end_date }}</td>
-        <td>
-          {% if r.mode == "hourly" and r.start_time and r.end_time %}
-            {{ r.start_time|h12 }} – {{ r.end_time|h12 }} ({{ "%.2f"|format(r.hours) }}h)
-          {% else %}
-            –
-          {% endif %}
-        </td>
-        <td>{{ r.status }}</td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-
-  {% if my_adjustments and my_adjustments|length > 0 %}
-  <div class="card mt-4">
-    <div class="card-body">
-      <h4 style="margin-top:0;">Recent Manual Adjustments</h4>
-      <p class="text-muted" style="margin-top:-0.25rem; margin-bottom:.75rem;">
-        Time added or deducted manually by an administrator.
+<div style="max-width:1200px;margin:0 auto;">
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:14px;flex-wrap:wrap;margin-bottom:20px;">
+    <div>
+      <h1 style="margin:0 0 4px 0;">Welcome, {{ me.staff_name or me.username }}</h1>
+      <p style="margin:0;opacity:.72;">
+        {% if active_year %}{{ active_year.name }} School Year{% else %}Current leave information{% endif %}
       </p>
-      <div class="table-responsive">
-        <table class="table table-striped align-middle">
-          <thead class="table-light">
-            <tr>
-              <th>Date</th>
-              <th>Hours</th>
-              <th>Note</th>
-              <th>Added By</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for a in my_adjustments %}
-            <tr>
-              <td>{{ a.timestamp.strftime('%b %d, %Y %I:%M %p') if a.timestamp else '' }}</td>
-              <td>
-                <span class="{% if a.hours >= 0 %}text-success{% else %}text-danger{% endif %}">
-                  {{ "%+.2f"|format(a.hours) }}h
-                </span>
-              </td>
-              <td>{{ a.note }}</td>
-              <td>
-                {% if a.admin_id %}
-                  {% set admin_user = User.query.get(a.admin_id) %}
-                  {{ admin_user.username if admin_user else "Unknown" }}
-                {% else %}
-                  –
-                {% endif %}
-              </td>
-            </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      </div>
+    </div>
+
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <a class="btn btn-primary" href="{{ url_for('new_request') }}">New Leave Request</a>
+      <a class="btn" href="{{ url_for('my_leave_ledger') }}">My Leave Ledger</a>
+      <a class="btn" href="{{ url_for('calendar') }}">Team Calendar</a>
     </div>
   </div>
+
+  {% if open_absence_notices %}
+    <div class="card" style="margin-bottom:18px;border-left:5px solid #f59e0b;">
+      <h3 style="margin-top:0;">Leave Request Needed</h3>
+      {% for notice in open_absence_notices %}
+        <div style="margin-top:8px;">
+          The office recorded an absence for
+          <strong>{{ notice.start_date.strftime("%b %d, %Y") }}</strong>
+          {% if notice.end_date != notice.start_date %}
+            through <strong>{{ notice.end_date.strftime("%b %d, %Y") }}</strong>
+          {% endif %}.
+          Please submit the matching leave request.
+        </div>
+      {% endfor %}
+    </div>
   {% endif %}
+
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:14px;margin-bottom:18px;">
+    <div class="card">
+      <div style="font-size:.9rem;opacity:.7;">Current Balance</div>
+      <div style="font-size:2rem;font-weight:800;">{{ "%.2f"|format(me.hours_balance or 0) }}h</div>
+    </div>
+
+    <div class="card">
+      <div style="font-size:.9rem;opacity:.7;">Beginning Balance</div>
+      <div style="font-size:2rem;font-weight:800;">{{ "%.2f"|format(beginning_balance or 0) }}h</div>
+    </div>
+
+    <div class="card">
+      <div style="font-size:.9rem;opacity:.7;">Pending Requests</div>
+      <div style="font-size:2rem;font-weight:800;">{{ pending_count }}</div>
+    </div>
+
+    <div class="card">
+      <div style="font-size:.9rem;opacity:.7;">School-Related Hours</div>
+      <div style="font-size:2rem;font-weight:800;">{{ "%.2f"|format(school_related_total or 0) }}h</div>
+    </div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:18px;">
+    <div class="card">
+      <h2 style="margin-top:0;">Upcoming Approved Leave</h2>
+      {% if upcoming %}
+        {% for r in upcoming %}
+          <div style="padding:10px 0;border-top:1px solid #e5e7eb;">
+            <div style="font-weight:700;">
+              {{ r.start_date.strftime("%b %d, %Y") }}
+              {% if r.end_date != r.start_date %}
+                – {{ r.end_date.strftime("%b %d, %Y") }}
+              {% endif %}
+            </div>
+            <div style="font-size:.92rem;opacity:.75;">
+              {{ "Full Day(s)" if r.mode == "daily" else "Hourly" }}
+              · {{ "%.2f"|format(r.hours or 0) }}h
+              {% if r.is_school_related %} · School Related{% endif %}
+            </div>
+          </div>
+        {% endfor %}
+      {% else %}
+        <p>No upcoming approved leave.</p>
+      {% endif %}
+    </div>
+
+    <div class="card">
+      <h2 style="margin-top:0;">Recent Leave Activity</h2>
+      {% if recent_ledger %}
+        {% for entry in recent_ledger %}
+          <div style="display:flex;justify-content:space-between;gap:12px;padding:10px 0;border-top:1px solid #e5e7eb;">
+            <div>
+              <div style="font-weight:700;">{{ ledger_entry_label(entry.entry_type) }}</div>
+              <div style="font-size:.86rem;opacity:.7;">
+                {{ entry.created_at.strftime("%b %d, %Y") if entry.created_at else "" }}
+              </div>
+            </div>
+            <div style="font-weight:800;">
+              {{ "%+.2f"|format(entry.hours or 0) }}h
+            </div>
+          </div>
+        {% endfor %}
+      {% else %}
+        <p>No ledger activity is available yet.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:18px;overflow-x:auto;">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">
+      <h2 style="margin-top:0;">Recent Requests</h2>
+      <a class="btn btn-sm" href="{{ url_for('my_requests') }}">View All</a>
+    </div>
+
+    {% if recent %}
+      <table class="table" style="min-width:760px;">
+        <thead>
+          <tr>
+            <th>Submitted</th>
+            <th>Type</th>
+            <th>Dates</th>
+            <th>Hours</th>
+            <th>Status</th>
+            <th>School Related</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in recent %}
+            <tr>
+              <td>{{ r.created_at.strftime("%b %d, %Y") if r.created_at else "" }}</td>
+              <td>{{ "Full Day(s)" if r.mode == "daily" else "Hourly" }}</td>
+              <td>
+                {{ r.start_date }}
+                {% if r.end_date != r.start_date %} → {{ r.end_date }}{% endif %}
+              </td>
+              <td>{{ "%.2f"|format(r.hours or 0) }}</td>
+              <td>{{ r.status }}</td>
+              <td>{{ "Yes" if r.is_school_related else "No" }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% else %}
+      <p>No leave requests have been submitted.</p>
+    {% endif %}
+  </div>
 </div>
+
+<style>
+  @media (max-width: 780px) {
+    div[style*="grid-template-columns:minmax(0,1fr) minmax(0,1fr)"] {
+      grid-template-columns: 1fr !important;
+    }
+  }
+</style>
 {% endblock %}
