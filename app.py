@@ -1005,30 +1005,100 @@ def logout():
 @login_required
 def dashboard():
     me = current_user
+    today = date.today()
 
-    # Recent leave requests for this user
     recent = (
         LeaveRequest.query
         .filter_by(user_id=me.id)
         .order_by(LeaveRequest.created_at.desc())
-        .limit(10)
+        .limit(8)
         .all()
     )
 
-    # Manual adjustments for this user (add/subtract time)
     my_adjustments = (
         ManualAdjustment.query
         .filter_by(user_id=me.id)
         .order_by(ManualAdjustment.timestamp.desc())
-        .limit(10)
+        .limit(6)
         .all()
     )
+
+    pending_count = (
+        LeaveRequest.query
+        .filter_by(user_id=me.id, status=RequestStatus.pending)
+        .count()
+    )
+
+    upcoming = (
+        LeaveRequest.query
+        .filter(
+            LeaveRequest.user_id == me.id,
+            LeaveRequest.status == RequestStatus.approved,
+            LeaveRequest.end_date >= today,
+        )
+        .order_by(LeaveRequest.start_date.asc())
+        .limit(5)
+        .all()
+    )
+
+    school_related_total = (
+        db.session.query(func.coalesce(func.sum(LeaveRequest.hours), 0.0))
+        .filter(
+            LeaveRequest.user_id == me.id,
+            LeaveRequest.status == RequestStatus.approved,
+            LeaveRequest.is_school_related.is_(True),
+        )
+        .scalar()
+    )
+
+    open_absence_notices = (
+        AbsenceNotice.query
+        .filter_by(user_id=me.id, status="Open")
+        .order_by(AbsenceNotice.start_date.asc())
+        .all()
+    )
+
+    active_year = get_active_school_year()
+    beginning_balance = 0.0
+    recent_ledger = []
+
+    if active_year:
+        year_balance = SchoolYearBalance.query.filter_by(
+            school_year_id=active_year.id,
+            user_id=me.id,
+        ).first()
+
+        if year_balance:
+            beginning_balance = normalize_hours(
+                year_balance.beginning_balance or 0.0
+            )
+
+        recent_ledger = (
+            LeaveLedger.query
+            .filter_by(
+                school_year_id=active_year.id,
+                user_id=me.id,
+            )
+            .order_by(
+                LeaveLedger.created_at.desc(),
+                LeaveLedger.id.desc(),
+            )
+            .limit(8)
+            .all()
+        )
 
     return render_template(
         "dashboard.html",
         me=me,
         recent=recent,
         my_adjustments=my_adjustments,
+        pending_count=pending_count,
+        upcoming=upcoming,
+        school_related_total=normalize_hours(school_related_total or 0.0),
+        open_absence_notices=open_absence_notices,
+        active_year=active_year,
+        beginning_balance=beginning_balance,
+        recent_ledger=recent_ledger,
     )
 
 # ---------- Admin HUB ----------
@@ -2282,37 +2352,117 @@ def undo_delete_adjustment():
 
     return redirect(url_for("user_requests", user_id=data["user_id"]))
 
+
+# ---------- Employee Self-Service Ledger ----------
+@app.get("/my-ledger")
+@login_required
+def my_leave_ledger():
+    active_year = get_active_school_year()
+    entries = []
+    beginning_balance = 0.0
+
+    if active_year:
+        year_balance = SchoolYearBalance.query.filter_by(
+            school_year_id=active_year.id,
+            user_id=current_user.id,
+        ).first()
+
+        if year_balance:
+            beginning_balance = normalize_hours(
+                year_balance.beginning_balance or 0.0
+            )
+
+        entries = (
+            LeaveLedger.query
+            .filter_by(
+                school_year_id=active_year.id,
+                user_id=current_user.id,
+            )
+            .order_by(
+                LeaveLedger.created_at.desc(),
+                LeaveLedger.id.desc(),
+            )
+            .all()
+        )
+
+    return render_template(
+        "my_leave_ledger.html",
+        title="My Leave Ledger",
+        active_year=active_year,
+        beginning_balance=beginning_balance,
+        entries=entries,
+        me=current_user,
+    )
+
+
 # =========================================================
 # Show individual user's leave history (admin only)
 # =========================================================
 @app.route("/user/<int:user_id>/requests")
 @login_required
 def user_requests(user_id):
-    # Fetch user safely
+    is_admin = current_user.role == Role.admin
+
+    if not is_admin and current_user.id != user_id:
+        abort(403)
+
     user = User.query.get_or_404(user_id)
 
-    # Determine if current user is admin
-    is_admin = getattr(current_user, "role", "") == "admin"
+    reqs = (
+        LeaveRequest.query
+        .filter_by(user_id=user.id)
+        .order_by(
+            LeaveRequest.start_date.desc(),
+            LeaveRequest.created_at.desc(),
+        )
+        .all()
+    )
 
-    # Pull all this user’s leave requests
-    reqs = LeaveRequest.query.filter_by(user_id=user.id).order_by(LeaveRequest.start_date.desc()).all()
+    adjustments = (
+        ManualAdjustment.query
+        .filter_by(user_id=user.id)
+        .order_by(ManualAdjustment.timestamp.desc())
+        .all()
+    )
 
-    # Pull manual adjustments (if the table exists)
-    adjustments = []
-    try:
-        if "manual_adjustment" in db.metadata.tables:
-            adjustments = ManualAdjustment.query.filter_by(user_id=user.id).order_by(ManualAdjustment.timestamp.desc()).all()
-    except Exception as e:
-        app.logger.warning(f"ManualAdjustment query failed: {e}")
+    active_year = get_active_school_year()
+    ledger_entries = []
+    beginning_balance = 0.0
 
-    # Render the history page
+    if active_year:
+        year_balance = SchoolYearBalance.query.filter_by(
+            school_year_id=active_year.id,
+            user_id=user.id,
+        ).first()
+
+        if year_balance:
+            beginning_balance = normalize_hours(
+                year_balance.beginning_balance or 0.0
+            )
+
+        ledger_entries = (
+            LeaveLedger.query
+            .filter_by(
+                school_year_id=active_year.id,
+                user_id=user.id,
+            )
+            .order_by(
+                LeaveLedger.created_at.desc(),
+                LeaveLedger.id.desc(),
+            )
+            .all()
+        )
+
     return render_template(
         "user_requests.html",
         user=user,
         requests=reqs,
         adjustments=adjustments,
+        ledger_entries=ledger_entries,
+        beginning_balance=beginning_balance,
+        active_year=active_year,
         is_admin=is_admin,
-        me=current_user
+        me=current_user,
     )
 
 @app.route("/user/<int:user_id>/requests/export")
