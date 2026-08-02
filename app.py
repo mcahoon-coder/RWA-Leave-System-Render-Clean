@@ -16,7 +16,8 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from sqlalchemy import text, func
 import xlsxwriter  # Excel export (in-memory, safe on Render)
-from twilio.rest import Client
+from google.oauth2 import service_account
+from googleapiclient.discovery import build
 
 # =========================================================
 # App & DB config
@@ -93,204 +94,427 @@ def send_email(to_addrs, subject, body):
     except Exception as e:
         app.logger.error(f"Email send failed: {e}")
         return False, str(e)
-
 # =========================================================
-# SMS settings (Twilio + Render environment variables)
+# Google Sheets settings
 # =========================================================
-SMS_ENABLED = os.environ.get("SMS_ENABLED", "FALSE").lower() in ("true", "1", "yes")
-SMS_TIMEZONE = os.environ.get("SMS_TIMEZONE", "America/New_York")
-SMS_ALERT_START = os.environ.get("SMS_ALERT_START", "15:15")
-SMS_ALERT_END = os.environ.get("SMS_ALERT_END", "07:00")
+GOOGLE_SHEETS_ENABLED = os.environ.get(
+    "GOOGLE_SHEETS_ENABLED", "FALSE"
+).lower() in ("true", "1", "yes")
 
-TWILIO_ACCOUNT_SID = os.environ.get("TWILIO_ACCOUNT_SID", "").strip()
-TWILIO_AUTH_TOKEN = os.environ.get("TWILIO_AUTH_TOKEN", "").strip()
-TWILIO_FROM_NUMBER = os.environ.get("TWILIO_FROM_NUMBER", "").strip()
+GOOGLE_SERVICE_ACCOUNT_JSON = os.environ.get(
+    "GOOGLE_SERVICE_ACCOUNT_JSON", ""
+).strip()
 
-ADMIN_SMS_NUMBERS_ENV = [
-    value.strip()
-    for value in os.environ.get("ADMIN_SMS_NUMBERS", "").split(",")
-    if value.strip()
+GOOGLE_REPORT_FOLDER_ID = os.environ.get(
+    "GOOGLE_REPORT_FOLDER_ID", ""
+).strip()
+
+GOOGLE_REPORT_SHARE_EMAIL = os.environ.get(
+    "GOOGLE_REPORT_SHARE_EMAIL", ""
+).strip()
+
+GOOGLE_API_SCOPES = [
+    "https://www.googleapis.com/auth/spreadsheets",
+    "https://www.googleapis.com/auth/drive",
 ]
 
 
-def normalize_phone_number(value):
-    """Normalize a US phone number to E.164 format for Twilio."""
-    raw = (value or "").strip()
-    if not raw:
-        return None
-
-    if raw.startswith("+"):
-        digits = "+" + "".join(ch for ch in raw[1:] if ch.isdigit())
-        return digits if len(digits) >= 11 else None
-
-    digits = "".join(ch for ch in raw if ch.isdigit())
-    if len(digits) == 10:
-        return f"+1{digits}"
-    if len(digits) == 11 and digits.startswith("1"):
-        return f"+{digits}"
-    return None
-
-
-def admin_sms_numbers():
-    """Return unique, valid administrator SMS numbers."""
-    seen = set()
-    numbers = []
-    for value in ADMIN_SMS_NUMBERS_ENV:
-        normalized = normalize_phone_number(value)
-        if normalized and normalized not in seen:
-            seen.add(normalized)
-            numbers.append(normalized)
-    return numbers
-
-
-def parse_sms_clock(value, fallback):
-    try:
-        hour_text, minute_text = (value or "").split(":")
-        return dt_time(int(hour_text), int(minute_text))
-    except Exception:
-        hour_text, minute_text = fallback.split(":")
-        return dt_time(int(hour_text), int(minute_text))
-
-
-def is_after_hours(local_now=None):
-    """True from the configured afternoon start through the next morning end."""
-    tz = ZoneInfo(SMS_TIMEZONE)
-    now = local_now or datetime.now(tz)
-    current = now.timetz().replace(tzinfo=None)
-    start = parse_sms_clock(SMS_ALERT_START, "15:15")
-    end = parse_sms_clock(SMS_ALERT_END, "07:00")
-
-    if start < end:
-        return start <= current < end
-    return current >= start or current < end
-
-
-def sms_configuration_status():
+def google_sheets_configuration_status():
     missing = []
-    if not TWILIO_ACCOUNT_SID:
-        missing.append("TWILIO_ACCOUNT_SID")
-    if not TWILIO_AUTH_TOKEN:
-        missing.append("TWILIO_AUTH_TOKEN")
-    if not normalize_phone_number(TWILIO_FROM_NUMBER):
-        missing.append("TWILIO_FROM_NUMBER")
-    if not admin_sms_numbers():
-        missing.append("ADMIN_SMS_NUMBERS")
+
+    if not GOOGLE_SERVICE_ACCOUNT_JSON:
+        missing.append("GOOGLE_SERVICE_ACCOUNT_JSON")
+
+    credentials_valid = False
+    service_account_email = None
+
+    if GOOGLE_SERVICE_ACCOUNT_JSON:
+        try:
+            credentials_info = json.loads(GOOGLE_SERVICE_ACCOUNT_JSON)
+            service_account_email = credentials_info.get("client_email")
+            credentials_valid = bool(
+                credentials_info.get("client_email")
+                and credentials_info.get("private_key")
+                and credentials_info.get("token_uri")
+            )
+            if not credentials_valid:
+                missing.append("valid service-account JSON")
+        except Exception:
+            missing.append("valid service-account JSON")
 
     return {
-        "enabled": SMS_ENABLED,
-        "ready": SMS_ENABLED and not missing,
+        "enabled": GOOGLE_SHEETS_ENABLED,
+        "ready": GOOGLE_SHEETS_ENABLED and not missing,
         "missing": missing,
-        "timezone": SMS_TIMEZONE,
-        "start": SMS_ALERT_START,
-        "end": SMS_ALERT_END,
-        "recipient_count": len(admin_sms_numbers()),
-        "from_number": normalize_phone_number(TWILIO_FROM_NUMBER),
+        "folder_id": GOOGLE_REPORT_FOLDER_ID,
+        "share_email": GOOGLE_REPORT_SHARE_EMAIL,
+        "service_account_email": service_account_email,
+        "credentials_valid": credentials_valid,
     }
 
 
-def send_sms_message(to_number, body):
-    """Send one SMS message with Twilio."""
-    if not SMS_ENABLED:
-        return False, "SMS is disabled"
-
-    status = sms_configuration_status()
+def get_google_credentials():
+    status = google_sheets_configuration_status()
     if not status["ready"]:
-        return False, "SMS configuration is incomplete"
-
-    normalized_to = normalize_phone_number(to_number)
-    normalized_from = normalize_phone_number(TWILIO_FROM_NUMBER)
-    if not normalized_to:
-        return False, "Invalid destination phone number"
-
-    try:
-        client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
-        message = client.messages.create(
-            body=body,
-            from_=normalized_from,
-            to=normalized_to,
+        raise RuntimeError(
+            "Google Sheets is disabled or its Render settings are incomplete."
         )
-        app.logger.info("SMS sent to %s with SID %s", normalized_to, message.sid)
-        return True, message.sid
-    except Exception as exc:
-        app.logger.exception("SMS send failed")
-        return False, str(exc)
 
-
-def send_admin_sms_alert(body):
-    """Send an SMS alert to every configured administrator."""
-    recipients = admin_sms_numbers()
-    if not recipients:
-        return False, "No administrator phone numbers are configured"
-
-    failures = []
-    sent_count = 0
-    for number in recipients:
-        sent, detail = send_sms_message(number, body)
-        if sent:
-            sent_count += 1
-        else:
-            failures.append(f"{number}: {detail}")
-
-    if sent_count == len(recipients):
-        return True, f"Sent to {sent_count} administrator(s)"
-    if sent_count:
-        return False, f"Sent to {sent_count}; failures: {'; '.join(failures)}"
-    return False, "; ".join(failures)
-
-
-def maybe_send_leave_request_sms(leave_request):
-    """Send one after-hours alert for a newly submitted leave request."""
-    if leave_request.sms_alert_sent_at:
-        return
-
-    if not is_after_hours():
-        leave_request.sms_alert_status = "Outside alert window"
-        return
-
-    employee_name = leave_request.user.staff_name or leave_request.user.username
-    date_text = leave_request.start_date.strftime("%b %d, %Y")
-    if leave_request.end_date != leave_request.start_date:
-        date_text += f"–{leave_request.end_date.strftime('%b %d, %Y')}"
-
-    school_text = " School-related." if leave_request.is_school_related else ""
-    body = (
-        f"RWA Leave Alert: {employee_name} submitted leave for {date_text}, "
-        f"{leave_request.hours:.2f}h.{school_text} Coverage may be needed. "
-        f"Request #{leave_request.id}."
+    credentials_info = json.loads(GOOGLE_SERVICE_ACCOUNT_JSON)
+    return service_account.Credentials.from_service_account_info(
+        credentials_info,
+        scopes=GOOGLE_API_SCOPES,
     )
 
-    sent, detail = send_admin_sms_alert(body)
-    leave_request.sms_alert_status = "Sent" if sent else "Failed"
-    leave_request.sms_alert_error = None if sent else detail[:500]
-    if sent:
-        leave_request.sms_alert_sent_at = datetime.utcnow()
+
+def google_services():
+    credentials = get_google_credentials()
+    sheets_service = build(
+        "sheets",
+        "v4",
+        credentials=credentials,
+        cache_discovery=False,
+    )
+    drive_service = build(
+        "drive",
+        "v3",
+        credentials=credentials,
+        cache_discovery=False,
+    )
+    return sheets_service, drive_service
 
 
-def maybe_send_absence_notice_sms(notice):
-    """Send one after-hours alert for an office-recorded absence notice."""
-    if notice.sms_alert_sent_at:
-        return
+def month_date_range(year, month):
+    start = date(year, month, 1)
+    if month == 12:
+        next_month = date(year + 1, 1, 1)
+    else:
+        next_month = date(year, month + 1, 1)
+    return start, next_month - timedelta(days=1)
 
-    if not is_after_hours():
-        notice.sms_alert_status = "Outside alert window"
-        return
 
-    employee_name = notice.user.staff_name or notice.user.username
-    date_text = notice.start_date.strftime("%b %d, %Y")
-    if notice.end_date != notice.start_date:
-        date_text += f"–{notice.end_date.strftime('%b %d, %Y')}"
+def format_report_date(value):
+    return value.strftime("%Y-%m-%d") if value else ""
 
-    body = (
-        f"RWA Absence Alert: {employee_name} was recorded absent for {date_text}. "
-        "A leave request may still be needed and coverage may be needed. "
-        f"Notice #{notice.id}."
+
+def format_report_datetime(value):
+    return value.strftime("%Y-%m-%d %I:%M %p") if value else ""
+
+
+def build_google_report_data(report_year, report_month):
+    start_date, end_date = month_date_range(report_year, report_month)
+
+    requests_rows = (
+        LeaveRequest.query
+        .filter(
+            LeaveRequest.start_date <= end_date,
+            LeaveRequest.end_date >= start_date,
+        )
+        .order_by(LeaveRequest.start_date, LeaveRequest.user_id)
+        .all()
     )
 
-    sent, detail = send_admin_sms_alert(body)
-    notice.sms_alert_status = "Sent" if sent else "Failed"
-    notice.sms_alert_error = None if sent else detail[:500]
-    if sent:
-        notice.sms_alert_sent_at = datetime.utcnow()
+    approved_requests = [
+        item for item in requests_rows
+        if item.status == RequestStatus.approved
+    ]
+
+    users = User.query.order_by(
+        func.coalesce(User.staff_name, User.username)
+    ).all()
+
+    beginning_by_user = {}
+    active_year = get_active_school_year()
+    if active_year:
+        beginning_by_user = {
+            row.user_id: float(row.beginning_balance or 0.0)
+            for row in SchoolYearBalance.query.filter_by(
+                school_year_id=active_year.id
+            ).all()
+        }
+
+    monthly_used_by_user = {}
+    monthly_school_by_user = {}
+
+    for leave_request in approved_requests:
+        hours = float(leave_request.hours or 0.0)
+        target = monthly_school_by_user if leave_request.is_school_related else monthly_used_by_user
+        target[leave_request.user_id] = target.get(leave_request.user_id, 0.0) + hours
+
+    manual_rows = (
+        ManualAdjustment.query
+        .filter(
+            ManualAdjustment.timestamp >= datetime.combine(start_date, datetime.min.time()),
+            ManualAdjustment.timestamp < datetime.combine(
+                end_date + timedelta(days=1), datetime.min.time()
+            ),
+        )
+        .order_by(ManualAdjustment.timestamp)
+        .all()
+    )
+
+    manual_by_user = {}
+    for adjustment in manual_rows:
+        manual_by_user[adjustment.user_id] = (
+            manual_by_user.get(adjustment.user_id, 0.0)
+            + float(adjustment.hours or 0.0)
+        )
+
+    summary_values = [[
+        "Employee", "Beginning Balance", "Manual Adjustments This Month",
+        "Leave Used This Month", "School-Related Hours", "Current Balance",
+    ]]
+    for employee in users:
+        summary_values.append([
+            employee.staff_name or employee.username,
+            round(beginning_by_user.get(employee.id, 0.0), 2),
+            round(manual_by_user.get(employee.id, 0.0), 2),
+            round(monthly_used_by_user.get(employee.id, 0.0), 2),
+            round(monthly_school_by_user.get(employee.id, 0.0), 2),
+            round(float(employee.hours_balance or 0.0), 2),
+        ])
+
+    leave_detail_values = [[
+        "Request ID", "Date Submitted", "Employee", "Kind", "Leave Type",
+        "Start Date", "End Date", "Start Time", "End Time", "Hours",
+        "Status", "School Related", "Reason",
+    ]]
+    for leave_request in requests_rows:
+        leave_type = (
+            "Full Day(s)" if leave_request.mode == RequestMode.daily
+            else "Hourly" if leave_request.mode == RequestMode.hourly
+            else leave_request.mode
+        )
+        leave_detail_values.append([
+            leave_request.id,
+            format_report_datetime(leave_request.created_at),
+            leave_request.user.staff_name or leave_request.user.username,
+            leave_request.kind,
+            leave_type,
+            format_report_date(leave_request.start_date),
+            format_report_date(leave_request.end_date),
+            leave_request.start_time or "",
+            leave_request.end_time or "",
+            round(float(leave_request.hours or 0.0), 2),
+            leave_request.status,
+            "Yes" if leave_request.is_school_related else "No",
+            leave_request.reason or "",
+        ])
+
+    substitute_values = [[
+        "Leave Request ID", "Coverage Date", "Employee Out",
+        "Substitute/Coverage Person", "Hours", "Leave Status", "School Related",
+    ]]
+    for leave_request in requests_rows:
+        for substitute in leave_request.subs:
+            substitute_values.append([
+                leave_request.id,
+                format_report_date(leave_request.start_date),
+                leave_request.user.staff_name or leave_request.user.username,
+                substitute.name,
+                round(float(substitute.hours or 0.0), 2),
+                leave_request.status,
+                "Yes" if leave_request.is_school_related else "No",
+            ])
+
+    school_related_values = [[
+        "Request ID", "Employee", "Start Date", "End Date",
+        "Hours", "Status", "Reason",
+    ]]
+    for leave_request in requests_rows:
+        if leave_request.is_school_related:
+            school_related_values.append([
+                leave_request.id,
+                leave_request.user.staff_name or leave_request.user.username,
+                format_report_date(leave_request.start_date),
+                format_report_date(leave_request.end_date),
+                round(float(leave_request.hours or 0.0), 2),
+                leave_request.status,
+                leave_request.reason or "",
+            ])
+
+    adjustment_values = [["Date", "Employee", "Hours", "Note", "Entered By"]]
+    for adjustment in manual_rows:
+        adjustment_values.append([
+            format_report_datetime(adjustment.timestamp),
+            adjustment.user.staff_name or adjustment.user.username,
+            round(float(adjustment.hours or 0.0), 2),
+            adjustment.note,
+            (adjustment.admin.staff_name or adjustment.admin.username)
+            if adjustment.admin else "",
+        ])
+
+    ledger_values = [[
+        "Date", "Employee", "Entry Type", "Hours", "Description", "Entered By",
+    ]]
+    if active_year:
+        ledger_rows = (
+            LeaveLedger.query
+            .filter(
+                LeaveLedger.school_year_id == active_year.id,
+                LeaveLedger.created_at >= datetime.combine(start_date, datetime.min.time()),
+                LeaveLedger.created_at < datetime.combine(
+                    end_date + timedelta(days=1), datetime.min.time()
+                ),
+            )
+            .order_by(LeaveLedger.created_at)
+            .all()
+        )
+        for entry in ledger_rows:
+            ledger_values.append([
+                format_report_datetime(entry.created_at),
+                entry.user.staff_name or entry.user.username,
+                ledger_entry_label(entry.entry_type),
+                round(float(entry.hours or 0.0), 2),
+                entry.description or "",
+                (entry.created_by.staff_name or entry.created_by.username)
+                if entry.created_by else "System",
+            ])
+
+    month_name = start_date.strftime("%B %Y")
+    return {
+        "title": f"RWA Leave Report - {month_name}",
+        "start_date": start_date,
+        "end_date": end_date,
+        "sheets": [
+            ("Employee Summary", summary_values),
+            ("Leave Detail", leave_detail_values),
+            ("Substitute Hours", substitute_values),
+            ("School Related", school_related_values),
+            ("Manual Adjustments", adjustment_values),
+            ("Leave Ledger", ledger_values),
+        ],
+    }
+
+
+def create_google_sheet_report(report_year, report_month):
+    report_data = build_google_report_data(report_year, report_month)
+    sheets_service, drive_service = google_services()
+
+    spreadsheet_body = {
+        "properties": {"title": report_data["title"]},
+        "sheets": [
+            {"properties": {"title": sheet_name}}
+            for sheet_name, _ in report_data["sheets"]
+        ],
+    }
+
+    spreadsheet = (
+        sheets_service.spreadsheets()
+        .create(body=spreadsheet_body, fields="spreadsheetId,spreadsheetUrl")
+        .execute()
+    )
+
+    spreadsheet_id = spreadsheet["spreadsheetId"]
+    spreadsheet_url = spreadsheet["spreadsheetUrl"]
+
+    metadata = (
+        sheets_service.spreadsheets()
+        .get(spreadsheetId=spreadsheet_id, fields="sheets(properties(sheetId,title))")
+        .execute()
+    )
+    sheet_ids = {
+        sheet["properties"]["title"]: sheet["properties"]["sheetId"]
+        for sheet in metadata.get("sheets", [])
+    }
+
+    value_data = []
+    formatting_requests = []
+    for sheet_name, values in report_data["sheets"]:
+        value_data.append({
+            "range": f"'{sheet_name}'!A1",
+            "majorDimension": "ROWS",
+            "values": values,
+        })
+        sheet_id = sheet_ids[sheet_name]
+        column_count = max((len(row) for row in values), default=1)
+        formatting_requests.extend([
+            {
+                "repeatCell": {
+                    "range": {"sheetId": sheet_id, "startRowIndex": 0, "endRowIndex": 1},
+                    "cell": {"userEnteredFormat": {
+                        "backgroundColor": {"red": 0.10, "green": 0.25, "blue": 0.45},
+                        "textFormat": {
+                            "foregroundColor": {"red": 1, "green": 1, "blue": 1},
+                            "bold": True,
+                        },
+                    }},
+                    "fields": "userEnteredFormat.backgroundColor,userEnteredFormat.textFormat",
+                }
+            },
+            {
+                "updateSheetProperties": {
+                    "properties": {"sheetId": sheet_id, "gridProperties": {"frozenRowCount": 1}},
+                    "fields": "gridProperties.frozenRowCount",
+                }
+            },
+            {
+                "setBasicFilter": {
+                    "filter": {"range": {
+                        "sheetId": sheet_id,
+                        "startRowIndex": 0,
+                        "endRowIndex": max(len(values), 1),
+                        "startColumnIndex": 0,
+                        "endColumnIndex": column_count,
+                    }}
+                }
+            },
+            {
+                "autoResizeDimensions": {
+                    "dimensions": {
+                        "sheetId": sheet_id,
+                        "dimension": "COLUMNS",
+                        "startIndex": 0,
+                        "endIndex": column_count,
+                    }
+                }
+            },
+        ])
+
+    sheets_service.spreadsheets().values().batchUpdate(
+        spreadsheetId=spreadsheet_id,
+        body={"valueInputOption": "USER_ENTERED", "data": value_data},
+    ).execute()
+
+    sheets_service.spreadsheets().batchUpdate(
+        spreadsheetId=spreadsheet_id,
+        body={"requests": formatting_requests},
+    ).execute()
+
+    if GOOGLE_REPORT_FOLDER_ID:
+        metadata = drive_service.files().get(
+            fileId=spreadsheet_id,
+            fields="parents",
+            supportsAllDrives=True,
+        ).execute()
+        previous_parents = ",".join(metadata.get("parents", []))
+        update_kwargs = {
+            "fileId": spreadsheet_id,
+            "addParents": GOOGLE_REPORT_FOLDER_ID,
+            "fields": "id,parents",
+            "supportsAllDrives": True,
+        }
+        if previous_parents:
+            update_kwargs["removeParents"] = previous_parents
+        drive_service.files().update(**update_kwargs).execute()
+
+    if GOOGLE_REPORT_SHARE_EMAIL:
+        drive_service.permissions().create(
+            fileId=spreadsheet_id,
+            body={
+                "type": "user",
+                "role": "writer",
+                "emailAddress": GOOGLE_REPORT_SHARE_EMAIL,
+            },
+            sendNotificationEmail=False,
+            supportsAllDrives=True,
+        ).execute()
+
+    return {
+        "spreadsheet_id": spreadsheet_id,
+        "spreadsheet_url": spreadsheet_url,
+        "title": report_data["title"],
+    }
 
 
 # =========================================================
@@ -346,9 +570,6 @@ class LeaveRequest(db.Model):
     # Flags/extra
     is_school_related = db.Column(db.Boolean, default=False, nullable=False)
     substitute = db.Column(db.String(120))  # legacy single substitute text (optional)
-    sms_alert_sent_at = db.Column(db.DateTime)
-    sms_alert_status = db.Column(db.String(50))
-    sms_alert_error = db.Column(db.String(500))
 
     # eager-load user to avoid DetachedInstanceError in templates
     user = db.relationship("User", backref="leave_requests", lazy="joined")
@@ -404,9 +625,6 @@ class AbsenceNotice(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     reminder_sent_at = db.Column(db.DateTime)
     resolved_at = db.Column(db.DateTime)
-    sms_alert_sent_at = db.Column(db.DateTime)
-    sms_alert_status = db.Column(db.String(50))
-    sms_alert_error = db.Column(db.String(500))
 
     user = db.relationship(
         "User",
@@ -477,6 +695,21 @@ class LeaveLedger(db.Model):
             name="uq_leave_ledger_year_user_type",
         ),
     )
+
+class GoogleSheetReport(db.Model):
+    __tablename__ = "google_sheet_report"
+
+    id = db.Column(db.Integer, primary_key=True)
+    report_year = db.Column(db.Integer, nullable=False)
+    report_month = db.Column(db.Integer, nullable=False)
+    spreadsheet_id = db.Column(db.String(255), nullable=False)
+    spreadsheet_url = db.Column(db.String(500), nullable=False)
+    title = db.Column(db.String(255), nullable=False)
+    generated_by_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    generated_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    generated_by = db.relationship("User", foreign_keys=[generated_by_id])
+
 
 app.jinja_env.globals["User"] = User
 
@@ -553,74 +786,49 @@ def _column_exists(table_name: str, column_name: str) -> bool:
         return db.session.execute(q, {"t": table_name, "c": column_name}).first() is not None
 
 def ensure_db():
+    # Create tables (including sub_assignment)
     db.create_all()
 
+       # Add newly introduced columns if missing
     try:
         if db.engine.dialect.name == "sqlite":
-            sqlite_columns = [
-                ("leave_request", "start_time", "VARCHAR(5)"),
-                ("leave_request", "end_time", "VARCHAR(5)"),
-                ("leave_request", "is_school_related", "BOOLEAN DEFAULT 0 NOT NULL"),
-                ("leave_request", "substitute", "VARCHAR(120)"),
-                ("leave_request", "sms_alert_sent_at", "DATETIME"),
-                ("leave_request", "sms_alert_status", "VARCHAR(50)"),
-                ("leave_request", "sms_alert_error", "VARCHAR(500)"),
-                ("user", "staff_name", "VARCHAR(150)"),
-                ("user", "starting_balance", "FLOAT DEFAULT 0 NOT NULL"),
-                ("absence_notice", "sms_alert_sent_at", "DATETIME"),
-                ("absence_notice", "sms_alert_status", "VARCHAR(50)"),
-                ("absence_notice", "sms_alert_error", "VARCHAR(500)"),
-            ]
-
-            for table_name, column_name, definition in sqlite_columns:
-                if not _column_exists(table_name, column_name):
-                    db.session.execute(
-                        text(
-                            f"ALTER TABLE {table_name} "
-                            f"ADD COLUMN {column_name} {definition}"
-                        )
-                    )
+            if not _column_exists("leave_request", "start_time"):
+                db.session.execute(text("ALTER TABLE leave_request ADD COLUMN start_time VARCHAR(5)"))
+            if not _column_exists("leave_request", "end_time"):
+                db.session.execute(text("ALTER TABLE leave_request ADD COLUMN end_time VARCHAR(5)"))
+            if not _column_exists("leave_request", "is_school_related"):
+                db.session.execute(text("ALTER TABLE leave_request ADD COLUMN is_school_related BOOLEAN DEFAULT 0 NOT NULL"))
+            if not _column_exists("leave_request", "substitute"):
+                db.session.execute(text("ALTER TABLE leave_request ADD COLUMN substitute VARCHAR(120)"))
+            if not _column_exists("user", "staff_name"):
+                db.session.execute(text("ALTER TABLE user ADD COLUMN staff_name VARCHAR(150)"))
+            if not _column_exists("user", "starting_balance"):
+                db.session.execute(text("ALTER TABLE user ADD COLUMN starting_balance FLOAT DEFAULT 0 NOT NULL"))
+            db.session.commit()
         else:
-            postgres_statements = [
-                "ALTER TABLE leave_request ADD COLUMN IF NOT EXISTS start_time VARCHAR(5)",
-                "ALTER TABLE leave_request ADD COLUMN IF NOT EXISTS end_time VARCHAR(5)",
-                "ALTER TABLE leave_request ADD COLUMN IF NOT EXISTS is_school_related BOOLEAN NOT NULL DEFAULT FALSE",
-                "ALTER TABLE leave_request ADD COLUMN IF NOT EXISTS substitute VARCHAR(120)",
-                "ALTER TABLE leave_request ADD COLUMN IF NOT EXISTS sms_alert_sent_at TIMESTAMP",
-                "ALTER TABLE leave_request ADD COLUMN IF NOT EXISTS sms_alert_status VARCHAR(50)",
-                "ALTER TABLE leave_request ADD COLUMN IF NOT EXISTS sms_alert_error VARCHAR(500)",
-                'ALTER TABLE "user" ADD COLUMN IF NOT EXISTS staff_name VARCHAR(150)',
-                'ALTER TABLE "user" ADD COLUMN IF NOT EXISTS starting_balance DOUBLE PRECISION NOT NULL DEFAULT 0',
-                "ALTER TABLE absence_notice ADD COLUMN IF NOT EXISTS sms_alert_sent_at TIMESTAMP",
-                "ALTER TABLE absence_notice ADD COLUMN IF NOT EXISTS sms_alert_status VARCHAR(50)",
-                "ALTER TABLE absence_notice ADD COLUMN IF NOT EXISTS sms_alert_error VARCHAR(500)",
-            ]
-
-            for statement in postgres_statements:
-                db.session.execute(text(statement))
-
-        db.session.commit()
+            db.session.execute(text("ALTER TABLE leave_request ADD COLUMN IF NOT EXISTS start_time VARCHAR(5)"))
+            db.session.execute(text("ALTER TABLE leave_request ADD COLUMN IF NOT EXISTS end_time VARCHAR(5)"))
+            db.session.execute(text("ALTER TABLE leave_request ADD COLUMN IF NOT EXISTS is_school_related BOOLEAN NOT NULL DEFAULT FALSE"))
+            db.session.execute(text("ALTER TABLE leave_request ADD COLUMN IF NOT EXISTS substitute VARCHAR(120)"))
+            db.session.execute(text('ALTER TABLE "user" ADD COLUMN IF NOT EXISTS staff_name VARCHAR(150)'))
+            db.session.execute(text('ALTER TABLE "user" ADD COLUMN IF NOT EXISTS starting_balance DOUBLE PRECISION NOT NULL DEFAULT 0'))
+            db.session.commit()
     except Exception:
         db.session.rollback()
-        app.logger.exception("Database compatibility update failed")
 
+    # Seed admin ONLY if there are no users at all (first boot)
     if User.query.count() == 0:
         bootstrap_username = os.environ.get("BOOTSTRAP_ADMIN_USERNAME", "mc-admin")
         bootstrap_password = os.environ.get("BOOTSTRAP_ADMIN_PASSWORD", "RWAadmin2")
-        bootstrap_email = os.environ.get(
-            "BOOTSTRAP_ADMIN_EMAIL",
-            (ADMIN_EMAILS_ENV[0] if ADMIN_EMAILS_ENV else ""),
-        )
+        bootstrap_email    = os.environ.get("BOOTSTRAP_ADMIN_EMAIL", (ADMIN_EMAILS_ENV[0] if ADMIN_EMAILS_ENV else ""))
 
-        db.session.add(
-            User(
-                username=bootstrap_username,
-                password_hash=generate_password_hash(bootstrap_password),
-                role=Role.admin,
-                hours_balance=160.0,
-                email=bootstrap_email or None,
-            )
-        )
+        db.session.add(User(
+            username=bootstrap_username,
+            password_hash=generate_password_hash(bootstrap_password),
+            role=Role.admin,
+            hours_balance=160.0,
+            email=bootstrap_email or None
+        ))
         db.session.commit()
 
 with app.app_context():
@@ -835,53 +1043,6 @@ def admin_hub():
     return render_template("admin.html", title="Admin", pending=pending)
 
 
-# ---------- SMS Settings and Test ----------
-@app.get("/admin/sms-settings")
-@login_required
-def sms_settings():
-    if current_user.role != Role.admin:
-        flash("Admins only.", "warning")
-        return redirect(url_for("dashboard"))
-
-    return render_template(
-        "sms_settings.html",
-        title="SMS Settings",
-        sms_status=sms_configuration_status(),
-        sms_numbers=admin_sms_numbers(),
-    )
-
-
-@app.post("/admin/sms-test")
-@login_required
-def admin_sms_test():
-    if current_user.role != Role.admin:
-        flash("Admins only.", "warning")
-        return redirect(url_for("dashboard"))
-
-    test_number = normalize_phone_number(request.form.get("test_number"))
-    if not test_number:
-        numbers = admin_sms_numbers()
-        test_number = numbers[0] if numbers else None
-
-    if not test_number:
-        flash("No valid test phone number is available.", "warning")
-        return redirect(url_for("sms_settings"))
-
-    now_text = datetime.now(ZoneInfo(SMS_TIMEZONE)).strftime("%b %d, %Y at %I:%M %p")
-    sent, detail = send_sms_message(
-        test_number,
-        f"RWA Leave System test text sent {now_text}. SMS setup is working.",
-    )
-
-    if sent:
-        flash(f"Test text sent to {test_number}.", "success")
-    else:
-        flash(f"Test text failed: {detail}", "danger")
-
-    return redirect(url_for("sms_settings"))
-
-
-
 
 
 
@@ -935,9 +1096,6 @@ def absence_notices():
             created_by_id=current_user.id,
         )
         db.session.add(notice)
-        db.session.commit()
-
-        maybe_send_absence_notice_sms(notice)
         db.session.commit()
 
         if send_now:
@@ -1585,9 +1743,6 @@ def new_request():
             is_school_related=is_school,
         )
         db.session.add(req)
-        db.session.commit()
-
-        maybe_send_leave_request_sms(req)
         db.session.commit()
 
         # Notify admins
@@ -2549,6 +2704,61 @@ def export_monthly():
     resp.headers["Content-Type"] = "text/csv"
     resp.headers["Content-Disposition"] = f"attachment; filename=leave_report_{start.strftime('%Y_%m')}.csv"
     return resp
+
+# ---------- Google Sheets Reports ----------
+@app.route("/admin/google-sheets", methods=["GET", "POST"])
+@login_required
+def google_sheets_reports():
+    if current_user.role != Role.admin:
+        flash("Admins only.", "warning")
+        return redirect(url_for("dashboard"))
+
+    if request.method == "POST":
+        report_year = request.form.get("report_year", type=int)
+        report_month = request.form.get("report_month", type=int)
+
+        if not report_year or not report_month or report_month not in range(1, 13):
+            flash("Please select a valid report month and year.", "warning")
+            return redirect(url_for("google_sheets_reports"))
+
+        if not google_sheets_configuration_status()["ready"]:
+            flash("Google Sheets is disabled or its Render settings are incomplete.", "warning")
+            return redirect(url_for("google_sheets_reports"))
+
+        try:
+            result = create_google_sheet_report(report_year, report_month)
+            report = GoogleSheetReport(
+                report_year=report_year,
+                report_month=report_month,
+                spreadsheet_id=result["spreadsheet_id"],
+                spreadsheet_url=result["spreadsheet_url"],
+                title=result["title"],
+                generated_by_id=current_user.id,
+            )
+            db.session.add(report)
+            db.session.commit()
+            flash("Google Sheet report created successfully.", "success")
+            return redirect(result["spreadsheet_url"])
+        except Exception as exc:
+            db.session.rollback()
+            app.logger.exception("Google Sheet report generation failed")
+            flash(f"Google Sheet report could not be created: {exc}", "danger")
+            return redirect(url_for("google_sheets_reports"))
+
+    today = date.today()
+    reports = GoogleSheetReport.query.order_by(
+        GoogleSheetReport.generated_at.desc()
+    ).limit(25).all()
+
+    return render_template(
+        "google_sheets_reports.html",
+        title="Google Sheets Reports",
+        google_status=google_sheets_configuration_status(),
+        reports=reports,
+        default_year=today.year,
+        default_month=today.month,
+    )
+
 
 # ---------- Errors ----------
 @app.errorhandler(404)
