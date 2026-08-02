@@ -1,1 +1,53 @@
+{% extends "base.html" %}
+{% block content %}
+<div style="max-width:1050px;margin:0 auto;">
+  <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:18px;">
+    <div>
+      <h1 style="margin-bottom:4px;">Google Sheets Reports</h1>
+      <p style="margin:0;opacity:.75;">Create a formatted monthly report directly in Google Sheets.</p>
+    </div>
+    <a class="btn" href="{{ url_for('admin_hub') }}">Back to Admin</a>
+  </div>
 
+  <div class="card" style="margin-bottom:18px;">
+    <h2 style="margin-top:0;">Connection Status</h2>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px;">
+      <div><div style="font-size:.9rem;opacity:.7;">Google Sheets Enabled</div><div style="font-size:1.25rem;font-weight:700;">{{ "Yes" if google_status.enabled else "No" }}</div></div>
+      <div><div style="font-size:.9rem;opacity:.7;">Configuration Ready</div><div style="font-size:1.25rem;font-weight:700;">{{ "Yes" if google_status.ready else "No" }}</div></div>
+      <div><div style="font-size:.9rem;opacity:.7;">Service Account</div><div style="font-size:.95rem;font-weight:700;word-break:break-word;">{{ google_status.service_account_email or "Not configured" }}</div></div>
+      <div><div style="font-size:.9rem;opacity:.7;">Shared With</div><div style="font-size:.95rem;font-weight:700;word-break:break-word;">{{ google_status.share_email or "Not configured" }}</div></div>
+    </div>
+    {% if google_status.missing %}
+      <div style="margin-top:16px;padding:12px;border:1px solid #f59e0b;border-radius:8px;"><strong>Missing or incomplete Render settings:</strong> {{ google_status.missing|join(", ") }}</div>
+    {% endif %}
+  </div>
+
+  <div class="card" style="margin-bottom:18px;">
+    <h2 style="margin-top:0;">Create Monthly Report</h2>
+    <form method="post">
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;align-items:end;">
+        <div>
+          <label for="report_month"><strong>Month</strong></label>
+          <select id="report_month" name="report_month" style="width:100%;" required>
+            {% for month_number, month_name in [(1,"January"),(2,"February"),(3,"March"),(4,"April"),(5,"May"),(6,"June"),(7,"July"),(8,"August"),(9,"September"),(10,"October"),(11,"November"),(12,"December")] %}
+              <option value="{{ month_number }}" {% if month_number == default_month %}selected{% endif %}>{{ month_name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div><label for="report_year"><strong>Year</strong></label><input id="report_year" name="report_year" type="number" min="2020" max="2100" value="{{ default_year }}" style="width:100%;" required></div>
+        <div><button class="btn btn-primary" type="submit" {% if not google_status.ready %}disabled{% endif %}>Create Google Sheet</button></div>
+      </div>
+    </form>
+    <p style="margin-bottom:0;margin-top:14px;opacity:.75;">The report contains Employee Summary, Leave Detail, Substitute Hours, School Related, Manual Adjustments, and Leave Ledger tabs.</p>
+  </div>
+
+  <div class="card">
+    <h2 style="margin-top:0;">Recent Google Sheets</h2>
+    {% if reports %}
+      <div style="overflow-x:auto;"><table class="table" style="min-width:700px;"><thead><tr><th>Report</th><th>Month</th><th>Created</th><th>Created By</th><th>Open</th></tr></thead><tbody>
+      {% for report in reports %}<tr><td>{{ report.title }}</td><td>{{ "%02d"|format(report.report_month) }}/{{ report.report_year }}</td><td>{{ report.generated_at.strftime("%b %d, %Y at %I:%M %p") }}</td><td>{{ report.generated_by.staff_name or report.generated_by.username }}</td><td><a class="btn btn-sm" href="{{ report.spreadsheet_url }}" target="_blank">Open Sheet</a></td></tr>{% endfor %}
+      </tbody></table></div>
+    {% else %}<p style="margin:0;">No Google Sheets reports have been created yet.</p>{% endif %}
+  </div>
+</div>
+{% endblock %}
