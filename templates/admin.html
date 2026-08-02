@@ -108,6 +108,7 @@
       <a class="btn" href="{{ url_for('leave_ledger') }}">Leave Ledger</a>
       <a class="btn" href="{{ url_for('coverage_center') }}">Coverage Center</a>
       <a class="btn" href="{{ url_for('absence_notices') }}">Absence Notices</a>
+      <a class="btn btn-primary" href="{{ url_for('google_sheets_reports') }}">Google Sheets Reports</a>
       <a class="btn" href="{{ url_for('manage_users') }}">Manage Users</a>
     </div>
   </div>
@@ -116,10 +117,7 @@
   <div class="card">
     <h3 style="margin-top:0;">Utilities</h3>
     <p>Send yourself a test email using current SMTP settings.</p>
-    <div class="btn-row">
-      <a class="btn" href="{{ url_for('admin_email_test') }}">Send Test Email</a>
-      <a class="btn btn-primary" href="{{ url_for('sms_settings') }}">SMS Settings</a>
-    </div>
+    <a class="btn" href="{{ url_for('admin_email_test') }}">Send Test Email</a>
   </div>
 </div>
 
