@@ -13,6 +13,7 @@
       <a class="btn btn-primary" href="{{ url_for('new_request') }}">New Leave Request</a>
       <a class="btn" href="{{ url_for('my_leave_ledger') }}">My Leave Ledger</a>
       <a class="btn" href="{{ url_for('calendar') }}">Team Calendar</a>
+      <a class="btn" href="{{ url_for('my_school_year_history') }}">Previous School Years</a>
     </div>
   </div>
 
@@ -31,6 +32,13 @@
       {% endfor %}
     </div>
   {% endif %}
+
+  {% if active_year %}
+  <div class="card" style="margin-bottom:18px;border-left:5px solid var(--gold-500);">
+    <strong>Current school year:</strong> {{ active_year.name }}.
+    Only records for this school year appear in the dashboard totals below.
+  </div>
+{% endif %}
 
   <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:14px;margin-bottom:18px;">
     <div class="card">
