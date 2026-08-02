@@ -1,128 +1,285 @@
 {% extends "base.html" %}
-{% block title %}Manage Users{% endblock %}
-
 {% block content %}
+<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:14px;flex-wrap:wrap;margin-bottom:20px;">
+  <div>
+    <h1 style="margin:0 0 4px 0;">Manage Employees</h1>
+    <p style="margin:0;color:var(--muted);">
+      Deactivate former employees instead of deleting their historical records.
+    </p>
+  </div>
+  <a class="btn" href="{{ url_for('admin_hub') }}">Back to Administration</a>
+</div>
+
+<div class="metric-grid" style="margin-bottom:18px;">
+  <div class="metric-card">
+    <div class="metric-label">Active Employees</div>
+    <div class="metric-value">{{ active_count }}</div>
+  </div>
+  <div class="metric-card">
+    <div class="metric-label">Inactive Employees</div>
+    <div class="metric-value">{{ inactive_count }}</div>
+  </div>
+  <div class="metric-card">
+    <div class="metric-label">Active Administrators</div>
+    <div class="metric-value">{{ admin_count }}</div>
+  </div>
+</div>
+
 <div class="grid-2">
-  <!-- Create User -->
   <div class="card">
-    <h2 class="card-title">Add User</h2>
-    <form method="post" action="{{ url_for('admin_create_user') }}" class="form-grid">
-      <label>Username
-        <input type="text" name="username" required>
-      </label>
+    <h2 style="margin-top:0;">Add Employee</h2>
 
-      <!-- NEW: Staff Name -->
-      <label>Staff Name (display)
-        <input type="text" name="staff_name" placeholder="e.g., Jane Doe">
-      </label>
+    <form method="post" action="{{ url_for('admin_create_user') }}">
+      <div class="grid-2">
+        <div>
+          <label for="username">Username</label>
+          <input id="username" name="username" type="text" required style="width:100%;">
+        </div>
 
-      <label>Email
-        <input type="email" name="email" placeholder="name@example.com">
-      </label>
+        <div>
+          <label for="staff_name">Staff Name</label>
+          <input id="staff_name" name="staff_name" type="text" style="width:100%;">
+        </div>
 
-      <label>Role
-        <select name="role">
-          <option value="faculty_staff">Faculty/Staff</option>
-          <option value="admin">Admin</option>
+        <div>
+          <label for="email">Email</label>
+          <input id="email" name="email" type="email" style="width:100%;">
+        </div>
+
+        <div>
+          <label for="hire_date">Hire Date</label>
+          <input id="hire_date" name="hire_date" type="date" style="width:100%;">
+        </div>
+
+        <div>
+          <label for="role">Role</label>
+          <select id="role" name="role" style="width:100%;">
+            <option value="faculty_staff">Faculty/Staff</option>
+            <option value="admin">Administrator</option>
+          </select>
+        </div>
+
+        <div>
+          <label for="hours_balance">Current Balance</label>
+          <input id="hours_balance" name="hours_balance"
+                 type="number" step="0.25" value="160.00"
+                 style="width:100%;">
+        </div>
+
+        <div>
+          <label for="password">Temporary Password</label>
+          <input id="password" name="password" type="text" required style="width:100%;">
+        </div>
+      </div>
+
+      <button class="btn btn-primary" type="submit" style="margin-top:14px;">
+        Create Employee
+      </button>
+    </form>
+  </div>
+
+  <div class="card">
+    <h2 style="margin-top:0;">Find Employees</h2>
+
+    <form method="get" action="{{ url_for('manage_users') }}">
+      <div style="margin-bottom:12px;">
+        <label for="q">Name, username, or email</label>
+        <input id="q" name="q" type="text"
+               value="{{ q or '' }}"
+               placeholder="Search employees"
+               style="width:100%;">
+      </div>
+
+      <div style="margin-bottom:14px;">
+        <label for="status">Employment Status</label>
+        <select id="status" name="status" style="width:100%;">
+          <option value="active" {% if status_filter == "active" %}selected{% endif %}>
+            Active Employees
+          </option>
+          <option value="inactive" {% if status_filter == "inactive" %}selected{% endif %}>
+            Inactive Employees
+          </option>
+          <option value="all" {% if status_filter == "all" %}selected{% endif %}>
+            All Employees
+          </option>
         </select>
-      </label>
+      </div>
 
-      <label>Starting Hours Balance
-        <input type="number" step="0.01" name="hours_balance" placeholder="160.00">
-      </label>
-
-      <label>Password
-        <input type="text" name="password" required>
-      </label>
-
-      <div class="actions">
-        <button class="btn">Create</button>
+      <div class="btn-row">
+        <button class="btn btn-primary" type="submit">Apply</button>
+        <a class="btn btn-secondary" href="{{ url_for('manage_users') }}">Clear</a>
       </div>
     </form>
-  </div>
 
-  <!-- Search -->
-  <div class="card">
-    <h2 class="card-title">Search</h2>
-    <form method="get" action="{{ url_for('manage_users') }}" class="form-inline">
-      <input type="text" name="q" placeholder="username contains…" value="{{ q or '' }}">
-      <button class="btn">Find</button>
-    </form>
+    <div style="margin-top:18px;padding:12px;border:1px solid var(--border);border-radius:10px;background:#f8fafc;">
+      <strong>Why deactivate?</strong>
+      <p style="margin:5px 0 0 0;color:var(--muted);">
+        Deactivation blocks login and removes the employee from normal active lists,
+        while preserving leave requests, balances, ledgers, reports, and substitute history.
+      </p>
+    </div>
   </div>
 </div>
 
-<!-- Users list -->
 <div class="card">
-  <h3 class="card-title">All Users</h3>
-  <div class="table-scroll">
-    <table class="table tight">
-      <thead>
-        <tr>
-          <th>Username</th>
-          <th>Staff Name</th> <!-- NEW: show staff name -->
-          <th>Email</th>
-          <th>Role</th>
-          <th>Hours</th>
-          <th style="width:1%">Actions</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for u in users %}
-        <tr>
-          <td><strong>@{{ u.username }}</strong></td>
-          <td>{{ u.staff_name or '—' }}</td> <!-- NEW -->
-          <td>{{ u.email or '—' }}</td>
-          <td>{{ 'Admin' if u.role=='admin' else 'Faculty/Staff' }}</td>
-          <td>{{ '%.2f'|format(u.hours_balance or 0) }}</td>
-          <td class="nowrap">
-            <!-- Inline update (NO username change field) -->
-            <form method="post" action="{{ url_for('admin_update_user', user_id=u.id) }}" class="inline form-mini">
-              <input type="text" name="staff_name" placeholder="Staff name" value="{{ u.staff_name or '' }}" class="w-12">
-              <input type="email" name="email" placeholder="email" value="{{ u.email or '' }}" class="w-12">
-              <select name="role" class="w-10">
-                <option value="faculty_staff" {{ 'selected' if u.role=='faculty_staff' else '' }}>Staff</option>
-                <option value="admin" {{ 'selected' if u.role=='admin' else '' }}>Admin</option>
-              </select>
-              <input type="number" step="0.01" name="hours_balance" value="{{ '%.2f'|format(u.hours_balance or 0) }}" class="w-10">
-              <button class="btn btn-soft btn-xs">Save</button>
-            </form>
-
-            <!-- Reset password -->
-            <form method="post" action="{{ url_for('admin_reset_password', user_id=u.id) }}" class="inline form-mini">
-              <input type="text" name="new_password" placeholder="new password" class="w-12" required>
-              <button class="btn btn-outline btn-xs">Set PW</button>
-            </form>
-
-            <!-- Delete (guard) -->
-            {% if u.id != current_user.id and not (u.role=='admin' and users|selectattr('role','equalto','admin')|list|length <= 1) %}
-              <form method="post" action="{{ url_for('admin_delete_user', user_id=u.id) }}" class="inline">
-                <button class="btn btn-danger btn-xs"
-                        onclick="return confirm('Delete {{ u.username }}? This also deletes their requests.')">
-                  Delete
-                </button>
-              </form>
-            {% else %}
-              <span class="subtle">Protected</span>
-            {% endif %}
-          </td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
+  <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">
+    <h2 style="margin:0;">
+      {% if status_filter == "inactive" %}
+        Inactive Employee Archive
+      {% elif status_filter == "all" %}
+        All Employees
+      {% else %}
+        Active Employees
+      {% endif %}
+    </h2>
+    <span class="badge badge-gray">{{ users|length }} shown</span>
   </div>
-</div>
 
-<style>
-  .grid-2 { display:grid; grid-template-columns:1fr 1fr; gap:1rem; }
-  .table-scroll { overflow:auto; }
-  .table.tight th, .table.tight td { padding:.45rem .6rem; }
-  .nowrap { white-space: nowrap; }
-  .form-grid { display:grid; grid-template-columns:1fr 1fr; gap:.75rem; }
-  .form-grid label { display:flex; flex-direction:column; gap:.35rem; }
-  .form-inline { display:flex; gap:.5rem; align-items:center; }
-  .form-mini input, .form-mini select { margin-right:.25rem; height:2rem; }
-  .w-12 { width:12rem; } .w-10 { width:10rem; }
-  .btn-xs { padding:.25rem .5rem; font-size:.85em; }
-  .subtle { color:#555; font-size:.9em; }
-</style>
+  {% if users %}
+    <div class="table-wrap" style="margin-top:14px;">
+      <table class="table" style="min-width:1100px;">
+        <thead>
+          <tr>
+            <th>Employee</th>
+            <th>Contact</th>
+            <th>Role</th>
+            <th>Status</th>
+            <th>Hire Date</th>
+            <th>Balance</th>
+            <th>Update</th>
+            <th>Password</th>
+            <th>Employment Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for u in users %}
+            <tr>
+              <td>
+                <a href="{{ url_for('user_requests', user_id=u.id) }}">
+                  <strong>{{ u.staff_name or u.username }}</strong>
+                </a>
+                <div class="text-muted">@{{ u.username }}</div>
+              </td>
+
+              <td>{{ u.email or "—" }}</td>
+
+              <td>
+                {{ "Administrator" if u.role == "admin" else "Faculty/Staff" }}
+              </td>
+
+              <td>
+                {% if u.is_active %}
+                  <span class="badge badge-green">Active</span>
+                {% else %}
+                  <span class="badge badge-gray">Inactive</span>
+                  {% if u.inactive_at %}
+                    <div class="text-muted" style="font-size:.8rem;margin-top:4px;">
+                      {{ u.inactive_at.strftime("%b %d, %Y") }}
+                    </div>
+                  {% endif %}
+                  {% if u.inactive_reason %}
+                    <div class="text-muted" style="font-size:.8rem;">
+                      {{ u.inactive_reason }}
+                    </div>
+                  {% endif %}
+                {% endif %}
+              </td>
+
+              <td>{{ u.hire_date.strftime("%b %d, %Y") if u.hire_date else "—" }}</td>
+
+              <td>{{ "%.2f"|format(u.hours_balance or 0) }}h</td>
+
+              <td>
+                <form method="post"
+                      action="{{ url_for('admin_update_user', user_id=u.id) }}"
+                      style="min-width:240px;">
+                  <input name="staff_name" type="text"
+                         value="{{ u.staff_name or '' }}"
+                         placeholder="Staff name"
+                         style="width:100%;margin-bottom:6px;">
+
+                  <input name="email" type="email"
+                         value="{{ u.email or '' }}"
+                         placeholder="Email"
+                         style="width:100%;margin-bottom:6px;">
+
+                  <input name="hire_date" type="date"
+                         value="{{ u.hire_date.isoformat() if u.hire_date else '' }}"
+                         style="width:100%;margin-bottom:6px;">
+
+                  <select name="role" style="width:100%;margin-bottom:6px;">
+                    <option value="faculty_staff"
+                      {% if u.role == "faculty_staff" %}selected{% endif %}>
+                      Faculty/Staff
+                    </option>
+                    <option value="admin"
+                      {% if u.role == "admin" %}selected{% endif %}>
+                      Administrator
+                    </option>
+                  </select>
+
+                  <input name="hours_balance" type="number"
+                         step="0.25"
+                         value="{{ '%.2f'|format(u.hours_balance or 0) }}"
+                         style="width:100%;margin-bottom:7px;">
+
+                  <button class="btn btn-sm" type="submit">Save</button>
+                </form>
+              </td>
+
+              <td>
+                <form method="post"
+                      action="{{ url_for('admin_reset_password', user_id=u.id) }}"
+                      style="min-width:180px;">
+                  <input name="new_password" type="text"
+                         placeholder="New password"
+                         required style="width:100%;margin-bottom:7px;">
+                  <button class="btn btn-secondary btn-sm" type="submit">
+                    Set Password
+                  </button>
+                </form>
+              </td>
+
+              <td>
+                {% if u.is_active %}
+                  {% if u.id == current_user.id %}
+                    <span class="badge badge-yellow">Current Account</span>
+                  {% else %}
+                    <form method="post"
+                          action="{{ url_for('admin_deactivate_user', user_id=u.id) }}"
+                          onsubmit="return confirm('Deactivate {{ u.staff_name or u.username }}? Historical records will remain available.');"
+                          style="min-width:190px;">
+                      <select name="inactive_reason" required
+                              style="width:100%;margin-bottom:7px;">
+                        <option value="">Select reason</option>
+                        <option value="Resigned">Resigned</option>
+                        <option value="Retired">Retired</option>
+                        <option value="Terminated">Terminated</option>
+                        <option value="Seasonal employment ended">Seasonal employment ended</option>
+                        <option value="Other">Other</option>
+                      </select>
+                      <button class="btn btn-danger btn-sm" type="submit">
+                        Deactivate
+                      </button>
+                    </form>
+                  {% endif %}
+                {% else %}
+                  <form method="post"
+                        action="{{ url_for('admin_reactivate_user', user_id=u.id) }}"
+                        onsubmit="return confirm('Reactivate {{ u.staff_name or u.username }}?');">
+                    <button class="btn btn-success btn-sm" type="submit">
+                      Reactivate
+                    </button>
+                  </form>
+                {% endif %}
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <p style="margin-bottom:0;">No employees match this filter.</p>
+  {% endif %}
+</div>
 {% endblock %}
