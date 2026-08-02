@@ -1,1 +1,147 @@
+{% extends "base.html" %}
+{% block content %}
+<div style="max-width:1150px;margin:0 auto;">
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:14px;flex-wrap:wrap;margin-bottom:18px;">
+    <div>
+      <h1 style="margin:0 0 4px 0;">Previous School Years</h1>
+      <p style="margin:0;color:var(--muted);">
+        Your earlier leave records are stored here and do not appear in current-year dashboard totals.
+      </p>
+    </div>
+    <a class="btn" href="{{ url_for('dashboard') }}">Back to Dashboard</a>
+  </div>
 
+  <form method="get" class="card">
+    <div style="display:flex;align-items:end;gap:10px;flex-wrap:wrap;">
+      <div style="min-width:260px;">
+        <label for="school_year_id">School Year</label>
+        <select id="school_year_id" name="school_year_id" style="width:100%;">
+          {% for year in years %}
+            <option value="{{ year.id }}"
+              {% if selected_year and selected_year.id == year.id %}selected{% endif %}>
+              {{ year.name }}{% if year.is_active %} — Current{% endif %}
+            </option>
+          {% endfor %}
+        </select>
+      </div>
+      <button class="btn btn-primary" type="submit">View Year</button>
+    </div>
+  </form>
+
+  {% if not selected_year %}
+    <div class="card">
+      <p style="margin:0;">No previous school-year records are available yet.</p>
+    </div>
+  {% else %}
+    <div class="metric-grid" style="margin-bottom:18px;">
+      <div class="metric-card">
+        <div class="metric-label">School Year</div>
+        <div class="metric-value" style="font-size:1.45rem;">{{ selected_year.name }}</div>
+      </div>
+
+      <div class="metric-card">
+        <div class="metric-label">Beginning Balance</div>
+        <div class="metric-value">{{ "%.2f"|format(beginning_balance or 0) }}h</div>
+      </div>
+
+      <div class="metric-card">
+        <div class="metric-label">Leave Requests</div>
+        <div class="metric-value">{{ requests_list|length }}</div>
+      </div>
+
+      <div class="metric-card">
+        <div class="metric-label">Ledger Entries</div>
+        <div class="metric-value">{{ ledger_entries|length }}</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2 style="margin-top:0;">Leave Requests</h2>
+      {% if requests_list %}
+        <div class="table-wrap">
+          <table class="table" style="min-width:850px;">
+            <thead>
+              <tr>
+                <th>Submitted</th>
+                <th>Type</th>
+                <th>Dates</th>
+                <th>Hours</th>
+                <th>Status</th>
+                <th>School Related</th>
+                <th>Reason</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for r in requests_list %}
+                <tr>
+                  <td>{{ r.created_at.strftime("%b %d, %Y") if r.created_at else "" }}</td>
+                  <td>{{ "Full Day(s)" if r.mode == "daily" else "Hourly" }}</td>
+                  <td>
+                    {{ r.start_date }}
+                    {% if r.end_date != r.start_date %} → {{ r.end_date }}{% endif %}
+                  </td>
+                  <td>{{ "%.2f"|format(r.hours or 0) }}</td>
+                  <td>{{ r.status }}</td>
+                  <td>{{ "Yes" if r.is_school_related else "No" }}</td>
+                  <td>{{ r.reason or "—" }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <p style="margin-bottom:0;">No leave requests were found for this school year.</p>
+      {% endif %}
+    </div>
+
+    <div class="grid-2">
+      <div class="card">
+        <h2 style="margin-top:0;">Manual Adjustments</h2>
+        {% if adjustments %}
+          {% for adjustment in adjustments %}
+            <div style="display:flex;justify-content:space-between;gap:12px;padding:9px 0;border-top:1px solid var(--border);">
+              <div>
+                <strong>{{ adjustment.note }}</strong>
+                <div class="text-muted">
+                  {{ adjustment.timestamp.strftime("%b %d, %Y") if adjustment.timestamp else "" }}
+                </div>
+              </div>
+              <div style="font-weight:850;">
+                {{ "%+.2f"|format(adjustment.hours or 0) }}h
+              </div>
+            </div>
+          {% endfor %}
+        {% else %}
+          <p style="margin-bottom:0;">No manual adjustments were found.</p>
+        {% endif %}
+      </div>
+
+      <div class="card">
+        <h2 style="margin-top:0;">Leave Ledger</h2>
+        {% if ledger_entries %}
+          {% for entry in ledger_entries %}
+            <div style="display:flex;justify-content:space-between;gap:12px;padding:9px 0;border-top:1px solid var(--border);">
+              <div>
+                <strong>{{ ledger_entry_label(entry.entry_type) }}</strong>
+                <div class="text-muted">
+                  {{ entry.created_at.strftime("%b %d, %Y") if entry.created_at else "" }}
+                </div>
+                {% if entry.description %}
+                  <div class="text-muted" style="font-size:.83rem;">
+                    {{ entry.description }}
+                  </div>
+                {% endif %}
+              </div>
+              <div style="font-weight:850;">
+                {{ "%+.2f"|format(entry.hours or 0) }}h
+              </div>
+            </div>
+          {% endfor %}
+        {% else %}
+          <p style="margin-bottom:0;">No ledger entries were found.</p>
+        {% endif %}
+      </div>
+    </div>
+  {% endif %}
+</div>
+{% endblock %}
