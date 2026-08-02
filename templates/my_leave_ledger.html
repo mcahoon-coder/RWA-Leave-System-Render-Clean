@@ -1,1 +1,54 @@
+{% extends "base.html" %}
+{% block content %}
+<div style="max-width:1000px;margin:0 auto;">
+  <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:18px;">
+    <div>
+      <h1 style="margin:0 0 4px 0;">My Leave Ledger</h1>
+      <p style="margin:0;opacity:.72;">
+        {% if active_year %}{{ active_year.name }}{% else %}No active school year{% endif %}
+      </p>
+    </div>
+    <a class="btn" href="{{ url_for('dashboard') }}">Back to Dashboard</a>
+  </div>
 
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;margin-bottom:18px;">
+    <div class="card">
+      <div style="font-size:.9rem;opacity:.7;">Beginning Balance</div>
+      <div style="font-size:1.8rem;font-weight:800;">{{ "%.2f"|format(beginning_balance or 0) }}h</div>
+    </div>
+    <div class="card">
+      <div style="font-size:.9rem;opacity:.7;">Current Balance</div>
+      <div style="font-size:1.8rem;font-weight:800;">{{ "%.2f"|format(me.hours_balance or 0) }}h</div>
+    </div>
+  </div>
+
+  <div class="card" style="overflow-x:auto;">
+    {% if entries %}
+      <table class="table" style="min-width:760px;">
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Activity</th>
+            <th>Description</th>
+            <th style="text-align:right;">Hours</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for entry in entries %}
+            <tr>
+              <td>{{ entry.created_at.strftime("%b %d, %Y") if entry.created_at else "" }}</td>
+              <td>{{ ledger_entry_label(entry.entry_type) }}</td>
+              <td>{{ entry.description or "" }}</td>
+              <td style="text-align:right;font-weight:800;">
+                {{ "%+.2f"|format(entry.hours or 0) }}
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% else %}
+      <p style="margin:0;">No ledger entries are available yet.</p>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
