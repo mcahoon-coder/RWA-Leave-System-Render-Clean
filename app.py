@@ -105,6 +105,11 @@ GOOGLE_SERVICE_ACCOUNT_JSON = os.environ.get(
     "GOOGLE_SERVICE_ACCOUNT_JSON", ""
 ).strip()
 
+GOOGLE_SERVICE_ACCOUNT_FILE = os.environ.get(
+    "GOOGLE_SERVICE_ACCOUNT_FILE",
+    "/etc/secrets/google-service-account.json",
+).strip()
+
 GOOGLE_REPORT_FOLDER_ID = os.environ.get(
     "GOOGLE_REPORT_FOLDER_ID", ""
 ).strip()
@@ -119,53 +124,101 @@ GOOGLE_API_SCOPES = [
 ]
 
 
+def _load_google_service_account_info():
+    """
+    Load Google service-account credentials from Render Secret Files first.
+    Falls back to GOOGLE_SERVICE_ACCOUNT_JSON if needed.
+    """
+    if (
+        GOOGLE_SERVICE_ACCOUNT_FILE
+        and os.path.exists(GOOGLE_SERVICE_ACCOUNT_FILE)
+    ):
+        try:
+            with open(
+                GOOGLE_SERVICE_ACCOUNT_FILE,
+                "r",
+                encoding="utf-8",
+            ) as credential_file:
+                return json.load(credential_file), "secret_file"
+        except Exception as exc:
+            app.logger.exception(
+                "Could not read Google service-account secret file"
+            )
+            return None, f"secret_file_error: {exc}"
+
+    if GOOGLE_SERVICE_ACCOUNT_JSON:
+        try:
+            return (
+                json.loads(GOOGLE_SERVICE_ACCOUNT_JSON),
+                "environment",
+            )
+        except Exception as exc:
+            app.logger.exception(
+                "Could not parse GOOGLE_SERVICE_ACCOUNT_JSON"
+            )
+            return None, f"environment_error: {exc}"
+
+    return None, "missing"
+
+
 def google_sheets_configuration_status():
     missing = []
 
-    if not GOOGLE_SERVICE_ACCOUNT_JSON:
-        missing.append("GOOGLE_SERVICE_ACCOUNT_JSON")
+    credentials_info, credential_source = (
+        _load_google_service_account_info()
+    )
 
     credentials_valid = False
     service_account_email = None
 
-    if GOOGLE_SERVICE_ACCOUNT_JSON:
-        try:
-            credentials_info = json.loads(GOOGLE_SERVICE_ACCOUNT_JSON)
-            service_account_email = credentials_info.get("client_email")
-            credentials_valid = bool(
-                credentials_info.get("client_email")
-                and credentials_info.get("private_key")
-                and credentials_info.get("token_uri")
-            )
-            if not credentials_valid:
-                missing.append("valid service-account JSON")
-        except Exception:
+    if credentials_info:
+        service_account_email = credentials_info.get("client_email")
+        credentials_valid = bool(
+            credentials_info.get("type") == "service_account"
+            and credentials_info.get("client_email")
+            and credentials_info.get("private_key")
+            and credentials_info.get("token_uri")
+        )
+
+    if not credentials_valid:
+        if credential_source == "missing":
+            missing.append("Google service-account secret file")
+        else:
             missing.append("valid service-account JSON")
 
     return {
         "enabled": GOOGLE_SHEETS_ENABLED,
-        "ready": GOOGLE_SHEETS_ENABLED and not missing,
+        "ready": GOOGLE_SHEETS_ENABLED and credentials_valid,
         "missing": missing,
         "folder_id": GOOGLE_REPORT_FOLDER_ID,
         "share_email": GOOGLE_REPORT_SHARE_EMAIL,
         "service_account_email": service_account_email,
         "credentials_valid": credentials_valid,
+        "credential_source": credential_source,
+        "credential_file": GOOGLE_SERVICE_ACCOUNT_FILE,
     }
 
 
 def get_google_credentials():
     status = google_sheets_configuration_status()
+
     if not status["ready"]:
         raise RuntimeError(
-            "Google Sheets is disabled or its Render settings are incomplete."
+            "Google Sheets is disabled or its Google credentials "
+            "are incomplete."
         )
 
-    credentials_info = json.loads(GOOGLE_SERVICE_ACCOUNT_JSON)
+    credentials_info, _ = _load_google_service_account_info()
+
+    if not credentials_info:
+        raise RuntimeError(
+            "Google service-account credentials could not be loaded."
+        )
+
     return service_account.Credentials.from_service_account_info(
         credentials_info,
         scopes=GOOGLE_API_SCOPES,
     )
-
 
 def google_services():
     credentials = get_google_credentials()
