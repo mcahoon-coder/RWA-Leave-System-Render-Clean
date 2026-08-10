@@ -19,6 +19,7 @@ from sqlalchemy import text, func
 import xlsxwriter  # Excel export (in-memory, safe on Render)
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
 
 # =========================================================
 # App & DB config
@@ -630,6 +631,7 @@ class LeaveRequest(db.Model):
     # Flags/extra
     is_school_related = db.Column(db.Boolean, default=False, nullable=False)
     substitute = db.Column(db.String(120))  # legacy single substitute text (optional)
+    no_substitute_needed = db.Column(db.Boolean, default=False, nullable=False)
 
     # eager-load user to avoid DetachedInstanceError in templates
     user = db.relationship("User", backref="leave_requests", lazy="joined")
@@ -675,6 +677,8 @@ class AbsenceNotice(db.Model):
     end_time = db.Column(db.String(5))
     reason = db.Column(db.String(500))
     office_note = db.Column(db.String(500))
+    substitute = db.Column(db.String(120))
+    no_substitute_needed = db.Column(db.Boolean, default=False, nullable=False)
     status = db.Column(db.String(20), default="Open", nullable=False)
     leave_request_id = db.Column(
         db.Integer,
@@ -874,6 +878,17 @@ def ensure_db():
                 ("user", "hire_date", "DATE"),
                 ("user", "inactive_at", "DATETIME"),
                 ("user", "inactive_reason", "VARCHAR(255)"),
+                (
+                    "leave_request",
+                    "no_substitute_needed",
+                    "BOOLEAN DEFAULT 0 NOT NULL",
+                ),
+                ("absence_notice", "substitute", "VARCHAR(120)"),
+                (
+                    "absence_notice",
+                    "no_substitute_needed",
+                    "BOOLEAN DEFAULT 0 NOT NULL",
+                ),
             ]
 
             for table_name, column_name, definition in sqlite_columns:
@@ -928,6 +943,20 @@ def ensure_db():
                 (
                     'ALTER TABLE "user" '
                     "ADD COLUMN IF NOT EXISTS inactive_reason VARCHAR(255)"
+                ),
+                (
+                    "ALTER TABLE leave_request "
+                    "ADD COLUMN IF NOT EXISTS no_substitute_needed "
+                    "BOOLEAN NOT NULL DEFAULT FALSE"
+                ),
+                (
+                    "ALTER TABLE absence_notice "
+                    "ADD COLUMN IF NOT EXISTS substitute VARCHAR(120)"
+                ),
+                (
+                    "ALTER TABLE absence_notice "
+                    "ADD COLUMN IF NOT EXISTS no_substitute_needed "
+                    "BOOLEAN NOT NULL DEFAULT FALSE"
                 ),
             ]
 
@@ -1431,7 +1460,12 @@ def absence_notices():
         end_time = (request.form.get("end_time") or "").strip() or None
         reason = (request.form.get("reason") or "").strip()
         office_note = (request.form.get("office_note") or "").strip()
+        substitute = (request.form.get("substitute") or "").strip()
+        no_substitute_needed = request.form.get("no_substitute_needed") == "yes"
         send_now = request.form.get("send_email") == "yes"
+
+        if no_substitute_needed:
+            substitute = ""
 
         employee = db.session.get(User, user_id) if user_id else None
         if employee is None:
@@ -1461,6 +1495,8 @@ def absence_notices():
             end_time=end_time,
             reason=reason or None,
             office_note=office_note or None,
+            substitute=substitute or None,
+            no_substitute_needed=no_substitute_needed,
             status="Open",
             created_by_id=current_user.id,
         )
@@ -1696,12 +1732,19 @@ def coverage_center():
     for leave_request in requests_list:
         assigned_hours = sum((sub.hours or 0.0) for sub in leave_request.subs)
         leave_request.coverage_hours = normalize_hours(assigned_hours)
-        leave_request.coverage_complete = (
-            assigned_hours >= (leave_request.hours or 0.0)
-            and (leave_request.hours or 0.0) > 0
+        leave_request.coverage_complete = bool(
+            leave_request.no_substitute_needed
+            or (
+                assigned_hours >= (leave_request.hours or 0.0)
+                and (leave_request.hours or 0.0) > 0
+            )
         )
-        leave_request.coverage_remaining = normalize_hours(
-            max((leave_request.hours or 0.0) - assigned_hours, 0.0)
+        leave_request.coverage_remaining = (
+            0.0
+            if leave_request.no_substitute_needed
+            else normalize_hours(
+                max((leave_request.hours or 0.0) - assigned_hours, 0.0)
+            )
         )
 
         if leave_request.coverage_complete:
@@ -2191,8 +2234,14 @@ def my_requests():
     # -----------------------------
     staff_overview = None
     if is_admin:
-        # All users, sorted by username
-        users = User.query.order_by(User.username.asc()).all()
+        # Active employees only. Former employees remain available
+        # under Admin -> Manage Employees -> Inactive Employees.
+        users = (
+            User.query
+            .filter(User.is_active.is_(True))
+            .order_by(User.username.asc())
+            .all()
+        )
 
         # Who has at least one pending request?
         pending_user_ids = {
@@ -2278,10 +2327,41 @@ def add_substitute(req_id):
         hours = float(hrs_s) if hrs_s else 0.0
     except Exception:
         flash("Invalid hours.", "warning"); return redirect(request.referrer or url_for("my_requests"))
+    r.no_substitute_needed = False
     db.session.add(SubAssignment(request_id=r.id, name=name, hours=hours))
     db.session.commit()
     flash("Substitute added.", "success")
     return redirect(request.referrer or url_for("my_requests"))
+
+@app.post("/requests/<int:req_id>/no-substitute-needed")
+@login_required
+def set_no_substitute_needed(req_id):
+    if current_user.role != Role.admin:
+        flash("Admins only.", "warning")
+        return redirect(url_for("my_requests"))
+
+    leave_request = LeaveRequest.query.get_or_404(req_id)
+    value = request.form.get("value") == "yes"
+
+    leave_request.no_substitute_needed = value
+
+    if value:
+        # A request marked "No Substitute Needed" should not continue
+        # to show old substitute assignments.
+        for assignment in list(leave_request.subs):
+            db.session.delete(assignment)
+        leave_request.substitute = None
+
+    db.session.commit()
+
+    flash(
+        "Coverage marked as No Substitute Needed."
+        if value
+        else "No Substitute Needed was removed.",
+        "success",
+    )
+    return redirect(request.referrer or url_for("coverage_center"))
+
 
 @app.post("/requests/<int:req_id>/subs/<int:sub_id>/update")
 @login_required
@@ -3488,10 +3568,48 @@ def google_sheets_reports():
             db.session.commit()
             flash("Google Sheet report created successfully.", "success")
             return redirect(result["spreadsheet_url"])
+        except HttpError as exc:
+            db.session.rollback()
+            detail = ""
+            try:
+                detail = exc.content.decode("utf-8", errors="replace")
+            except Exception:
+                detail = repr(exc)
+
+            app.logger.exception(
+                "Google Sheet report generation failed with Google API error. "
+                "Status=%s Detail=%s",
+                getattr(exc.resp, "status", "unknown"),
+                detail,
+            )
+
+            user_message = str(exc).strip()
+            if not user_message:
+                user_message = (
+                    f"Google API returned HTTP "
+                    f"{getattr(exc.resp, 'status', 'error')}."
+                )
+
+            flash(
+                f"Google Sheet report could not be created: {user_message}",
+                "danger",
+            )
+            return redirect(url_for("google_sheets_reports"))
+
         except Exception as exc:
             db.session.rollback()
-            app.logger.exception("Google Sheet report generation failed")
-            flash(f"Google Sheet report could not be created: {exc}", "danger")
+            app.logger.exception(
+                "Google Sheet report generation failed. "
+                "Exception type=%s repr=%r",
+                type(exc).__name__,
+                exc,
+            )
+
+            user_message = str(exc).strip() or repr(exc)
+            flash(
+                f"Google Sheet report could not be created: {user_message}",
+                "danger",
+            )
             return redirect(url_for("google_sheets_reports"))
 
     today = date.today()
