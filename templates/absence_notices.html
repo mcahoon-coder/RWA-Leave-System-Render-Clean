@@ -50,6 +50,21 @@
           <label for="end_time"><strong>End Time</strong> (optional)</label>
           <input id="end_time" name="end_time" type="time" step="900" style="width:100%;">
         </div>
+        <div>
+          <label for="substitute"><strong>Substitute / Coverage Person</strong> (optional)</label>
+          <input id="substitute" name="substitute" type="text"
+                 placeholder="Enter substitute name" style="width:100%;">
+        </div>
+
+        <div>
+          <label><strong>Coverage</strong></label>
+          <label style="display:flex;align-items:center;gap:8px;margin-top:8px;">
+            <input type="checkbox" id="no_substitute_needed"
+                   name="no_substitute_needed" value="yes"
+                   onchange="document.getElementById('substitute').disabled=this.checked;">
+            No Substitute Needed
+          </label>
+        </div>
       </div>
 
       <div style="margin-top:14px;">
@@ -115,6 +130,14 @@
               <div style="margin-top:4px;">
                 {{ notice.start_time|h12 }} to {{ notice.end_time|h12 }}
               </div>
+            {% endif %}
+
+            {% if notice.no_substitute_needed %}
+              <div style="margin-top:8px;"><strong>Coverage:</strong> No Substitute Needed</div>
+            {% elif notice.substitute %}
+              <div style="margin-top:8px;"><strong>Substitute:</strong> {{ notice.substitute }}</div>
+            {% else %}
+              <div style="margin-top:8px;"><strong>Substitute:</strong> Not entered yet</div>
             {% endif %}
 
             {% if notice.reason %}
