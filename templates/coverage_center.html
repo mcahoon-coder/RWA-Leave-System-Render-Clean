@@ -171,9 +171,16 @@
             {% if not r.no_substitute_needed %}
             <form method="post" action="{{ url_for('add_substitute', req_id=r.id) }}">
               <div style="margin-bottom:10px;">
-                <label for="sub_name_{{ r.id }}"><strong>Substitute or Coverage Person</strong></label>
+                <label for="coverage_type_{{ r.id }}"><strong>Coverage Type</strong></label>
+                <select id="coverage_type_{{ r.id }}" name="coverage_type"
+                        required style="width:100%; margin-bottom:10px;">
+                  <option value="employee">Employee Coverage</option>
+                  <option value="substitute">Substitute Coverage</option>
+                </select>
+
+                <label for="sub_name_{{ r.id }}"><strong>Person Providing Coverage</strong></label>
                 <input id="sub_name_{{ r.id }}" name="sub_name" type="text"
-                       placeholder="Enter name" required style="width:100%;">
+                       placeholder="Enter employee or substitute name" required style="width:100%;">
               </div>
 
               <div style="margin-bottom:12px;">
