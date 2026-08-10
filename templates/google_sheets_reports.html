@@ -4,7 +4,7 @@
   <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:18px;">
     <div>
       <h1 style="margin-bottom:4px;">Google Sheets Reports</h1>
-      <p style="margin:0;opacity:.75;">Create a formatted monthly report directly in Google Sheets.</p>
+      <p style="margin:0;opacity:.75;">Create or refresh monthly tabs inside your master Google Sheets workbook.</p>
     </div>
     <a class="btn" href="{{ url_for('admin_hub') }}">Back to Admin</a>
   </div>
@@ -15,7 +15,7 @@
       <div><div style="font-size:.9rem;opacity:.7;">Google Sheets Enabled</div><div style="font-size:1.25rem;font-weight:700;">{{ "Yes" if google_status.enabled else "No" }}</div></div>
       <div><div style="font-size:.9rem;opacity:.7;">Configuration Ready</div><div style="font-size:1.25rem;font-weight:700;">{{ "Yes" if google_status.ready else "No" }}</div></div>
       <div><div style="font-size:.9rem;opacity:.7;">Service Account</div><div style="font-size:.95rem;font-weight:700;word-break:break-word;">{{ google_status.service_account_email or "Not configured" }}</div></div>
-      <div><div style="font-size:.9rem;opacity:.7;">Shared With</div><div style="font-size:.95rem;font-weight:700;word-break:break-word;">{{ google_status.share_email or "Not configured" }}</div></div>
+      <div><div style="font-size:.9rem;opacity:.7;">Master Spreadsheet</div><div style="font-size:.95rem;font-weight:700;word-break:break-word;">{{ "Configured" if google_status.master_spreadsheet_id else "Not configured" }}</div></div>
     </div>
     {% if google_status.missing %}
       <div style="margin-top:16px;padding:12px;border:1px solid #f59e0b;border-radius:8px;"><strong>Missing or incomplete Render settings:</strong> {{ google_status.missing|join(", ") }}</div>
@@ -35,7 +35,7 @@
           </select>
         </div>
         <div><label for="report_year"><strong>Year</strong></label><input id="report_year" name="report_year" type="number" min="2020" max="2100" value="{{ default_year }}" style="width:100%;" required></div>
-        <div><button class="btn btn-primary" type="submit" {% if not google_status.ready %}disabled{% endif %}>Create Google Sheet</button></div>
+        <div><button class="btn btn-primary" type="submit" {% if not google_status.ready %}disabled{% endif %}>Create / Refresh Monthly Tabs</button></div>
       </div>
     </form>
     <p style="margin-bottom:0;margin-top:14px;opacity:.75;">The report contains Employee Summary, Leave Detail, Substitute Hours, School Related, Manual Adjustments, and Leave Ledger tabs.</p>
