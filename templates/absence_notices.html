@@ -51,9 +51,16 @@
           <input id="end_time" name="end_time" type="time" step="900" style="width:100%;">
         </div>
         <div>
-          <label for="substitute"><strong>Substitute / Coverage Person</strong> (optional)</label>
+          <label for="coverage_type"><strong>Coverage Type</strong> (optional)</label>
+          <select id="coverage_type" name="coverage_type" style="width:100%; margin-bottom:8px;">
+            <option value="">Select coverage type</option>
+            <option value="employee">Employee Coverage</option>
+            <option value="substitute">Substitute Coverage</option>
+          </select>
+
+          <label for="substitute"><strong>Person Providing Coverage</strong> (optional)</label>
           <input id="substitute" name="substitute" type="text"
-                 placeholder="Enter substitute name" style="width:100%;">
+                 placeholder="Enter employee or substitute name" style="width:100%;">
         </div>
 
         <div>
@@ -135,7 +142,10 @@
             {% if notice.no_substitute_needed %}
               <div style="margin-top:8px;"><strong>Coverage:</strong> No Substitute Needed</div>
             {% elif notice.substitute %}
-              <div style="margin-top:8px;"><strong>Substitute:</strong> {{ notice.substitute }}</div>
+              <div style="margin-top:8px;">
+                <strong>{{ "Employee Coverage" if notice.coverage_type == "employee" else "Substitute Coverage" }}:</strong>
+                {{ notice.substitute }}
+              </div>
             {% else %}
               <div style="margin-top:8px;"><strong>Substitute:</strong> Not entered yet</div>
             {% endif %}
