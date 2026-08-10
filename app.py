@@ -120,6 +120,10 @@ GOOGLE_REPORT_SHARE_EMAIL = os.environ.get(
     "GOOGLE_REPORT_SHARE_EMAIL", ""
 ).strip()
 
+GOOGLE_MASTER_SPREADSHEET_ID = os.environ.get(
+    "GOOGLE_MASTER_SPREADSHEET_ID", ""
+).strip()
+
 GOOGLE_API_SCOPES = [
     "https://www.googleapis.com/auth/spreadsheets",
     "https://www.googleapis.com/auth/drive",
@@ -188,9 +192,16 @@ def google_sheets_configuration_status():
         else:
             missing.append("valid service-account JSON")
 
+    if not GOOGLE_MASTER_SPREADSHEET_ID:
+        missing.append("GOOGLE_MASTER_SPREADSHEET_ID")
+
     return {
         "enabled": GOOGLE_SHEETS_ENABLED,
-        "ready": GOOGLE_SHEETS_ENABLED and credentials_valid,
+        "ready": (
+            GOOGLE_SHEETS_ENABLED
+            and credentials_valid
+            and bool(GOOGLE_MASTER_SPREADSHEET_ID)
+        ),
         "missing": missing,
         "folder_id": GOOGLE_REPORT_FOLDER_ID,
         "share_email": GOOGLE_REPORT_SHARE_EMAIL,
@@ -198,6 +209,7 @@ def google_sheets_configuration_status():
         "credentials_valid": credentials_valid,
         "credential_source": credential_source,
         "credential_file": GOOGLE_SERVICE_ACCOUNT_FILE,
+        "master_spreadsheet_id": GOOGLE_MASTER_SPREADSHEET_ID,
     }
 
 
@@ -442,76 +454,196 @@ def build_google_report_data(report_year, report_month):
     }
 
 
-def create_google_sheet_report(report_year, report_month):
-    report_data = build_google_report_data(report_year, report_month)
-    sheets_service, drive_service = google_services()
-
-    spreadsheet_body = {
-        "properties": {"title": report_data["title"]},
-        "sheets": [
-            {"properties": {"title": sheet_name}}
-            for sheet_name, _ in report_data["sheets"]
-        ],
-    }
-
-    spreadsheet = (
-        sheets_service.spreadsheets()
-        .create(body=spreadsheet_body, fields="spreadsheetId,spreadsheetUrl")
-        .execute()
+def _safe_sheet_title(title):
+    """Return a Google Sheets-safe title no longer than 100 characters."""
+    cleaned = (
+        title.replace(":", " -")
+        .replace("\\", "-")
+        .replace("/", "-")
+        .replace("?", "")
+        .replace("*", "")
+        .replace("[", "(")
+        .replace("]", ")")
     )
+    return cleaned[:100]
 
-    spreadsheet_id = spreadsheet["spreadsheetId"]
-    spreadsheet_url = spreadsheet["spreadsheetUrl"]
 
+def _ensure_sheet_tabs(sheets_service, spreadsheet_id, desired_titles):
+    """Create missing tabs and return a title -> sheetId mapping."""
     metadata = (
         sheets_service.spreadsheets()
-        .get(spreadsheetId=spreadsheet_id, fields="sheets(properties(sheetId,title))")
+        .get(
+            spreadsheetId=spreadsheet_id,
+            fields="properties(title),sheets(properties(sheetId,title))",
+        )
         .execute()
     )
-    sheet_ids = {
-        sheet["properties"]["title"]: sheet["properties"]["sheetId"]
-        for sheet in metadata.get("sheets", [])
+
+    existing = {
+        item["properties"]["title"]: item["properties"]["sheetId"]
+        for item in metadata.get("sheets", [])
     }
+
+    requests_to_add = []
+    for title in desired_titles:
+        if title not in existing:
+            requests_to_add.append({
+                "addSheet": {
+                    "properties": {
+                        "title": title,
+                    }
+                }
+            })
+
+    if requests_to_add:
+        (
+            sheets_service.spreadsheets()
+            .batchUpdate(
+                spreadsheetId=spreadsheet_id,
+                body={"requests": requests_to_add},
+            )
+            .execute()
+        )
+
+        metadata = (
+            sheets_service.spreadsheets()
+            .get(
+                spreadsheetId=spreadsheet_id,
+                fields="sheets(properties(sheetId,title))",
+            )
+            .execute()
+        )
+        existing = {
+            item["properties"]["title"]: item["properties"]["sheetId"]
+            for item in metadata.get("sheets", [])
+        }
+
+    return existing
+
+
+def create_google_sheet_report(report_year, report_month):
+    """
+    Update the user-owned master spreadsheet instead of asking the service
+    account to create a new Drive file.
+    """
+    report_data = build_google_report_data(report_year, report_month)
+    sheets_service, _drive_service = google_services()
+
+    spreadsheet_id = GOOGLE_MASTER_SPREADSHEET_ID
+    if not spreadsheet_id:
+        raise RuntimeError(
+            "GOOGLE_MASTER_SPREADSHEET_ID is not configured in Render."
+        )
+
+    month_label = report_data["start_date"].strftime("%B %Y")
+    month_prefix = report_data["start_date"].strftime("%b %Y")
+
+    renamed_sheets = []
+    for sheet_name, values in report_data["sheets"]:
+        if sheet_name == "Employee Summary":
+            title = _safe_sheet_title(month_label)
+        else:
+            short_map = {
+                "Leave Detail": "Leave Detail",
+                "Substitute Hours": "Subs",
+                "School Related": "School",
+                "Manual Adjustments": "Adjustments",
+                "Leave Ledger": "Ledger",
+            }
+            title = _safe_sheet_title(
+                f"{month_prefix} - {short_map.get(sheet_name, sheet_name)}"
+            )
+        renamed_sheets.append((title, values))
+
+    desired_titles = [title for title, _ in renamed_sheets]
+    sheet_ids = _ensure_sheet_tabs(
+        sheets_service,
+        spreadsheet_id,
+        desired_titles,
+    )
+
+    # Clear old data in the month's tabs so rerunning a month refreshes it.
+    for title in desired_titles:
+        (
+            sheets_service.spreadsheets()
+            .values()
+            .clear(
+                spreadsheetId=spreadsheet_id,
+                range=f"'{title}'",
+                body={},
+            )
+            .execute()
+        )
 
     value_data = []
     formatting_requests = []
-    for sheet_name, values in report_data["sheets"]:
+
+    for title, values in renamed_sheets:
         value_data.append({
-            "range": f"'{sheet_name}'!A1",
+            "range": f"'{title}'!A1",
             "majorDimension": "ROWS",
             "values": values,
         })
-        sheet_id = sheet_ids[sheet_name]
+
+        sheet_id = sheet_ids[title]
         column_count = max((len(row) for row in values), default=1)
+        row_count = max(len(values), 1)
+
         formatting_requests.extend([
             {
                 "repeatCell": {
-                    "range": {"sheetId": sheet_id, "startRowIndex": 0, "endRowIndex": 1},
-                    "cell": {"userEnteredFormat": {
-                        "backgroundColor": {"red": 0.10, "green": 0.25, "blue": 0.45},
-                        "textFormat": {
-                            "foregroundColor": {"red": 1, "green": 1, "blue": 1},
-                            "bold": True,
-                        },
-                    }},
-                    "fields": "userEnteredFormat.backgroundColor,userEnteredFormat.textFormat",
+                    "range": {
+                        "sheetId": sheet_id,
+                        "startRowIndex": 0,
+                        "endRowIndex": 1,
+                        "startColumnIndex": 0,
+                        "endColumnIndex": column_count,
+                    },
+                    "cell": {
+                        "userEnteredFormat": {
+                            "backgroundColor": {
+                                "red": 0.06,
+                                "green": 0.16,
+                                "blue": 0.26,
+                            },
+                            "textFormat": {
+                                "foregroundColor": {
+                                    "red": 1,
+                                    "green": 1,
+                                    "blue": 1,
+                                },
+                                "bold": True,
+                            },
+                        }
+                    },
+                    "fields": (
+                        "userEnteredFormat.backgroundColor,"
+                        "userEnteredFormat.textFormat"
+                    ),
                 }
             },
             {
                 "updateSheetProperties": {
-                    "properties": {"sheetId": sheet_id, "gridProperties": {"frozenRowCount": 1}},
+                    "properties": {
+                        "sheetId": sheet_id,
+                        "gridProperties": {
+                            "frozenRowCount": 1,
+                        },
+                    },
                     "fields": "gridProperties.frozenRowCount",
                 }
             },
             {
                 "setBasicFilter": {
-                    "filter": {"range": {
-                        "sheetId": sheet_id,
-                        "startRowIndex": 0,
-                        "endRowIndex": max(len(values), 1),
-                        "startColumnIndex": 0,
-                        "endColumnIndex": column_count,
-                    }}
+                    "filter": {
+                        "range": {
+                            "sheetId": sheet_id,
+                            "startRowIndex": 0,
+                            "endRowIndex": row_count,
+                            "startColumnIndex": 0,
+                            "endColumnIndex": column_count,
+                        }
+                    }
                 }
             },
             {
@@ -526,49 +658,39 @@ def create_google_sheet_report(report_year, report_month):
             },
         ])
 
-    sheets_service.spreadsheets().values().batchUpdate(
-        spreadsheetId=spreadsheet_id,
-        body={"valueInputOption": "USER_ENTERED", "data": value_data},
-    ).execute()
-
-    sheets_service.spreadsheets().batchUpdate(
-        spreadsheetId=spreadsheet_id,
-        body={"requests": formatting_requests},
-    ).execute()
-
-    if GOOGLE_REPORT_FOLDER_ID:
-        metadata = drive_service.files().get(
-            fileId=spreadsheet_id,
-            fields="parents",
-            supportsAllDrives=True,
-        ).execute()
-        previous_parents = ",".join(metadata.get("parents", []))
-        update_kwargs = {
-            "fileId": spreadsheet_id,
-            "addParents": GOOGLE_REPORT_FOLDER_ID,
-            "fields": "id,parents",
-            "supportsAllDrives": True,
-        }
-        if previous_parents:
-            update_kwargs["removeParents"] = previous_parents
-        drive_service.files().update(**update_kwargs).execute()
-
-    if GOOGLE_REPORT_SHARE_EMAIL:
-        drive_service.permissions().create(
-            fileId=spreadsheet_id,
+    (
+        sheets_service.spreadsheets()
+        .values()
+        .batchUpdate(
+            spreadsheetId=spreadsheet_id,
             body={
-                "type": "user",
-                "role": "writer",
-                "emailAddress": GOOGLE_REPORT_SHARE_EMAIL,
+                "valueInputOption": "USER_ENTERED",
+                "data": value_data,
             },
-            sendNotificationEmail=False,
-            supportsAllDrives=True,
-        ).execute()
+        )
+        .execute()
+    )
+
+    if formatting_requests:
+        (
+            sheets_service.spreadsheets()
+            .batchUpdate(
+                spreadsheetId=spreadsheet_id,
+                body={"requests": formatting_requests},
+            )
+            .execute()
+        )
+
+    spreadsheet_url = (
+        f"https://docs.google.com/spreadsheets/d/{spreadsheet_id}/edit"
+    )
 
     return {
         "spreadsheet_id": spreadsheet_id,
         "spreadsheet_url": spreadsheet_url,
-        "title": report_data["title"],
+        "title": f"RWA Leave Reports - {month_label}",
+        "start_date": report_data["start_date"],
+        "end_date": report_data["end_date"],
     }
 
 
