@@ -369,20 +369,48 @@ def build_google_report_data(report_year, report_month):
         ])
 
     substitute_values = [[
-        "Leave Request ID", "Coverage Date", "Employee Out",
-        "Substitute/Coverage Person", "Hours", "Leave Status", "School Related",
+        "Leave Request ID", "Coverage Date", "Employee Out", "Time Out",
+        "Leave Hours", "Employee Coverage", "Employee Coverage Hours",
+        "Substitute Coverage", "Substitute Hours", "Coverage Status",
+        "Leave Status", "School Related",
     ]]
     for leave_request in requests_rows:
-        for substitute in leave_request.subs:
+        time_out = (
+            f"{leave_request.start_time} - {leave_request.end_time}"
+            if leave_request.mode == RequestMode.hourly
+            and leave_request.start_time and leave_request.end_time
+            else "Full Day"
+        )
+
+        if leave_request.no_substitute_needed:
             substitute_values.append([
                 leave_request.id,
                 format_report_date(leave_request.start_date),
                 leave_request.user.staff_name or leave_request.user.username,
-                substitute.name,
-                round(float(substitute.hours or 0.0), 2),
+                time_out,
+                round(float(leave_request.hours or 0.0), 2),
+                "", "", "", "",
+                "No Substitute Needed",
                 leave_request.status,
                 "Yes" if leave_request.is_school_related else "No",
             ])
+        elif leave_request.subs:
+            for coverage in leave_request.subs:
+                is_employee = coverage.coverage_type == "employee"
+                substitute_values.append([
+                    leave_request.id,
+                    format_report_date(leave_request.start_date),
+                    leave_request.user.staff_name or leave_request.user.username,
+                    time_out,
+                    round(float(leave_request.hours or 0.0), 2),
+                    coverage.name if is_employee else "",
+                    round(float(coverage.hours or 0.0), 2) if is_employee else "",
+                    coverage.name if not is_employee else "",
+                    round(float(coverage.hours or 0.0), 2) if not is_employee else "",
+                    "Covered",
+                    leave_request.status,
+                    "Yes" if leave_request.is_school_related else "No",
+                ])
 
     school_related_values = [[
         "Request ID", "Employee", "Start Date", "End Date",
@@ -772,6 +800,7 @@ class SubAssignment(db.Model):
     request_id = db.Column(db.Integer, db.ForeignKey("leave_request.id"), nullable=False)
     name = db.Column(db.String(120), nullable=False)
     hours = db.Column(db.Float, nullable=False, default=0.0)
+    coverage_type = db.Column(db.String(30), nullable=False, default="substitute")
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 class ManualAdjustment(db.Model):
@@ -800,6 +829,7 @@ class AbsenceNotice(db.Model):
     reason = db.Column(db.String(500))
     office_note = db.Column(db.String(500))
     substitute = db.Column(db.String(120))
+    coverage_type = db.Column(db.String(30))
     no_substitute_needed = db.Column(db.Boolean, default=False, nullable=False)
     status = db.Column(db.String(20), default="Open", nullable=False)
     leave_request_id = db.Column(
@@ -1006,6 +1036,8 @@ def ensure_db():
                     "BOOLEAN DEFAULT 0 NOT NULL",
                 ),
                 ("absence_notice", "substitute", "VARCHAR(120)"),
+                ("absence_notice", "coverage_type", "VARCHAR(30)"),
+                ("sub_assignment", "coverage_type", "VARCHAR(30) DEFAULT 'substitute' NOT NULL"),
                 (
                     "absence_notice",
                     "no_substitute_needed",
@@ -1074,6 +1106,15 @@ def ensure_db():
                 (
                     "ALTER TABLE absence_notice "
                     "ADD COLUMN IF NOT EXISTS substitute VARCHAR(120)"
+                ),
+                (
+                    "ALTER TABLE absence_notice "
+                    "ADD COLUMN IF NOT EXISTS coverage_type VARCHAR(30)"
+                ),
+                (
+                    "ALTER TABLE sub_assignment "
+                    "ADD COLUMN IF NOT EXISTS coverage_type VARCHAR(30) "
+                    "NOT NULL DEFAULT 'substitute'"
                 ),
                 (
                     "ALTER TABLE absence_notice "
@@ -1583,11 +1624,16 @@ def absence_notices():
         reason = (request.form.get("reason") or "").strip()
         office_note = (request.form.get("office_note") or "").strip()
         substitute = (request.form.get("substitute") or "").strip()
+        coverage_type = (request.form.get("coverage_type") or "").strip().lower()
         no_substitute_needed = request.form.get("no_substitute_needed") == "yes"
         send_now = request.form.get("send_email") == "yes"
 
+        if coverage_type not in {"employee", "substitute"}:
+            coverage_type = ""
+
         if no_substitute_needed:
             substitute = ""
+            coverage_type = ""
 
         employee = db.session.get(User, user_id) if user_id else None
         if employee is None:
@@ -1618,6 +1664,7 @@ def absence_notices():
             reason=reason or None,
             office_note=office_note or None,
             substitute=substitute or None,
+            coverage_type=coverage_type or None,
             no_substitute_needed=no_substitute_needed,
             status="Open",
             created_by_id=current_user.id,
@@ -2443,6 +2490,9 @@ def add_substitute(req_id):
     r = LeaveRequest.query.get_or_404(req_id)
     name = (request.form.get("sub_name") or "").strip()
     hrs_s = (request.form.get("sub_hours") or "").strip()
+    coverage_type = (request.form.get("coverage_type") or "substitute").strip().lower()
+    if coverage_type not in {"employee", "substitute"}:
+        coverage_type = "substitute"
     if not name:
         flash("Substitute name required.", "warning"); return redirect(request.referrer or url_for("my_requests"))
     try:
@@ -2450,9 +2500,16 @@ def add_substitute(req_id):
     except Exception:
         flash("Invalid hours.", "warning"); return redirect(request.referrer or url_for("my_requests"))
     r.no_substitute_needed = False
-    db.session.add(SubAssignment(request_id=r.id, name=name, hours=hours))
+    db.session.add(
+        SubAssignment(
+            request_id=r.id,
+            name=name,
+            hours=hours,
+            coverage_type=coverage_type,
+        )
+    )
     db.session.commit()
-    flash("Substitute added.", "success")
+    flash("Coverage added.", "success")
     return redirect(request.referrer or url_for("my_requests"))
 
 @app.post("/requests/<int:req_id>/no-substitute-needed")
