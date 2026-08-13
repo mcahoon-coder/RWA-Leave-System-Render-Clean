@@ -782,6 +782,7 @@ class LeaveRequest(db.Model):
     is_school_related = db.Column(db.Boolean, default=False, nullable=False)
     substitute = db.Column(db.String(120))  # legacy single substitute text (optional)
     no_substitute_needed = db.Column(db.Boolean, default=False, nullable=False)
+    coverage_followup_done = db.Column(db.Boolean, default=False, nullable=False)
 
     # eager-load user to avoid DetachedInstanceError in templates
     user = db.relationship("User", backref="leave_requests", lazy="joined")
@@ -1035,6 +1036,11 @@ def ensure_db():
                     "no_substitute_needed",
                     "BOOLEAN DEFAULT 0 NOT NULL",
                 ),
+                (
+                    "leave_request",
+                    "coverage_followup_done",
+                    "BOOLEAN DEFAULT 0 NOT NULL",
+                ),
                 ("absence_notice", "substitute", "VARCHAR(120)"),
                 ("absence_notice", "coverage_type", "VARCHAR(30)"),
                 ("sub_assignment", "coverage_type", "VARCHAR(30) DEFAULT 'substitute' NOT NULL"),
@@ -1101,6 +1107,11 @@ def ensure_db():
                 (
                     "ALTER TABLE leave_request "
                     "ADD COLUMN IF NOT EXISTS no_substitute_needed "
+                    "BOOLEAN NOT NULL DEFAULT FALSE"
+                ),
+                (
+                    "ALTER TABLE leave_request "
+                    "ADD COLUMN IF NOT EXISTS coverage_followup_done "
                     "BOOLEAN NOT NULL DEFAULT FALSE"
                 ),
                 (
@@ -1584,10 +1595,32 @@ def admin_hub():
         .all()
     )
 
+    coverage_followup_query = LeaveRequest.query.filter(
+        LeaveRequest.status == RequestStatus.approved,
+        LeaveRequest.coverage_followup_done.is_(False),
+    )
+
+    if active_year:
+        coverage_followup_query = coverage_followup_query.filter(
+            LeaveRequest.start_date <= active_year.end_date,
+            LeaveRequest.end_date >= active_year.start_date,
+        )
+
+    coverage_followups = (
+        coverage_followup_query
+        .order_by(
+            LeaveRequest.start_date.asc(),
+            LeaveRequest.created_at.asc(),
+        )
+        .all()
+    )
+
     return render_template(
         "admin.html",
         title="Admin",
         pending=pending,
+        coverage_followups=coverage_followups,
+        coverage_followup_count=len(coverage_followups),
         open_absence_count=open_absence_count,
         coverage_needed_count=coverage_needed_count,
         employees_out_today=employees_out_today,
@@ -1830,6 +1863,42 @@ def delete_absence_notice(notice_id):
     db.session.commit()
     flash("The absence notice was deleted.", "success")
     return redirect(url_for("absence_notices"))
+
+
+
+# ---------- Coverage Follow-Up ----------
+@app.post("/admin/coverage-followup/<int:req_id>/done")
+@login_required
+def coverage_followup_done(req_id):
+    if current_user.role != Role.admin:
+        flash("Admins only.", "warning")
+        return redirect(url_for("dashboard"))
+
+    leave_request = LeaveRequest.query.get_or_404(req_id)
+    leave_request.coverage_followup_done = True
+    db.session.commit()
+
+    flash(
+        f"Coverage follow-up completed for "
+        f"{leave_request.user.staff_name or leave_request.user.username}.",
+        "success",
+    )
+    return redirect(request.referrer or url_for("admin_hub"))
+
+
+@app.post("/admin/coverage-followup/<int:req_id>/reopen")
+@login_required
+def coverage_followup_reopen(req_id):
+    if current_user.role != Role.admin:
+        flash("Admins only.", "warning")
+        return redirect(url_for("dashboard"))
+
+    leave_request = LeaveRequest.query.get_or_404(req_id)
+    leave_request.coverage_followup_done = False
+    db.session.commit()
+
+    flash("Coverage follow-up reopened.", "success")
+    return redirect(request.referrer or url_for("admin_hub"))
 
 
 # ---------- Coverage Center ----------
