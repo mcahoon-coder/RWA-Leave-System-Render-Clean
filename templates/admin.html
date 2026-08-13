@@ -37,6 +37,12 @@
   </div>
 
   <div class="metric-card">
+    <div class="metric-label">Coverage Follow-Up</div>
+    <div class="metric-value">{{ coverage_followup_count }}</div>
+    <div class="metric-note">Approved requests waiting for Admin to mark Done</div>
+  </div>
+
+  <div class="metric-card">
     <div class="metric-label">Out Today</div>
     <div class="metric-value">{{ employees_out_today|length }}</div>
     <div class="metric-note">{{ today.strftime("%B %d, %Y") }}</div>
@@ -76,6 +82,12 @@
       <div class="action-copy">Assign and review substitute coverage hours</div>
     </a>
 
+    <a class="action-card" href="#coverage-followup">
+      <div class="action-icon">✅</div>
+      <div class="action-title">Coverage Follow-Up</div>
+      <div class="action-copy">Approved leave waiting to be marked complete</div>
+    </a>
+
     <a class="action-card" href="{{ url_for('absence_notices') }}">
       <div class="action-icon">🔔</div>
       <div class="action-title">Absence Notices</div>
@@ -106,6 +118,128 @@
       <div class="action-copy">Verify the current email configuration</div>
     </a>
   </div>
+</div>
+
+
+<div class="card" id="coverage-followup">
+  <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">
+    <div>
+      <h2 style="margin:0;">Coverage Follow-Up</h2>
+      <p style="margin:.35rem 0 0;color:var(--muted);">
+        Approved leave stays here until an administrator clicks Done.
+        This applies whether coverage is entered or no substitute is needed.
+      </p>
+    </div>
+    <span class="badge badge-yellow">{{ coverage_followup_count }} Open</span>
+  </div>
+
+  {% if coverage_followups %}
+    <div class="table-wrap" style="margin-top:14px;">
+      <table class="table" style="min-width:1000px;">
+        <thead>
+          <tr>
+            <th>Employee</th>
+            <th>Leave Date</th>
+            <th>Time Out</th>
+            <th>Leave Hours</th>
+            <th>Coverage Status</th>
+            <th>Coverage Person</th>
+            <th>Coverage Hours</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in coverage_followups %}
+            {% set assigned_hours = r.subs|sum(attribute='hours') if r.subs else 0 %}
+            <tr>
+              <td>
+                <strong>{{ r.user.staff_name or r.user.username }}</strong>
+                {% if r.is_school_related %}
+                  <div><span class="badge badge-blue">School Related</span></div>
+                {% endif %}
+              </td>
+
+              <td>
+                {{ r.start_date.strftime("%b %d, %Y") }}
+                {% if r.end_date != r.start_date %}
+                  → {{ r.end_date.strftime("%b %d, %Y") }}
+                {% endif %}
+              </td>
+
+              <td>
+                {% if r.mode == 'hourly' and r.start_time and r.end_time %}
+                  {{ r.start_time|h12 }} – {{ r.end_time|h12 }}
+                {% else %}
+                  Full Day
+                {% endif %}
+              </td>
+
+              <td>{{ "%.2f"|format(r.hours or 0) }}h</td>
+
+              <td>
+                {% if r.no_substitute_needed %}
+                  <span class="badge badge-green">No Substitute Needed</span>
+                {% elif r.subs and r.subs|length %}
+                  <span class="badge badge-green">Coverage Entered</span>
+                {% else %}
+                  <span class="badge badge-yellow">Coverage Not Entered</span>
+                {% endif %}
+              </td>
+
+              <td>
+                {% if r.no_substitute_needed %}
+                  —
+                {% elif r.subs and r.subs|length %}
+                  {% for s in r.subs %}
+                    <div>
+                      {{ s.name }}
+                      <span class="text-muted">
+                        ({{ "Employee" if s.coverage_type == "employee" else "Substitute" }})
+                      </span>
+                    </div>
+                  {% endfor %}
+                {% else %}
+                  <span class="text-muted">Not entered</span>
+                {% endif %}
+              </td>
+
+              <td>
+                {% if r.no_substitute_needed %}
+                  —
+                {% elif r.subs and r.subs|length %}
+                  {{ "%.2f"|format(assigned_hours or 0) }}h
+                {% else %}
+                  —
+                {% endif %}
+              </td>
+
+              <td>
+                {% if not r.no_substitute_needed and not (r.subs and r.subs|length) %}
+                  <a class="btn btn-sm" href="{{ url_for('coverage_center') }}">
+                    Add Coverage
+                  </a>
+                {% endif %}
+
+                <form method="post"
+                      action="{{ url_for('coverage_followup_done', req_id=r.id) }}"
+                      style="display:inline;"
+                      onsubmit="return confirm('Mark this coverage follow-up as done?');">
+                  <button class="btn btn-success btn-sm" type="submit">
+                    Done
+                  </button>
+                </form>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <div style="margin-top:14px;padding:16px;border:1px solid var(--border);border-radius:10px;background:#f8fafc;">
+      <strong>All caught up.</strong>
+      <div class="text-muted">There are no approved leave requests waiting for coverage follow-up.</div>
+    </div>
+  {% endif %}
 </div>
 
 <div class="grid-2">
