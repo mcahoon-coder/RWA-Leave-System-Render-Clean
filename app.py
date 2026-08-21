@@ -3589,13 +3589,13 @@ def calendar_data():
     events = []
     for r in q.all():
         if is_admin:
-            title = f"{r.user.username} - {r.kind} ({r.hours:.1f}h)"
+            title = f"{r.user.username} - {r.kind} ({float(r.hours or 0.0):.2f}h)"
             sub_text = sub_summary_text(r.subs, limit=2)
             if not sub_text and (r.substitute or "").strip():
                 sub_text = " – Sub: " + r.substitute.strip()
             title += sub_text
         else:
-            title = f"{r.kind} ({r.hours:.1f}h)"
+            title = f"{r.kind} ({float(r.hours or 0.0):.2f}h)"
         if r.is_school_related:
             title = "[School] " + title
 
