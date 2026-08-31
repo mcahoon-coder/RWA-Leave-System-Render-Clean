@@ -411,6 +411,21 @@ def build_google_report_data(report_year, report_month):
                     leave_request.status,
                     "Yes" if leave_request.is_school_related else "No",
                 ])
+        else:
+            substitute_values.append([
+                leave_request.id,
+                format_report_date(leave_request.start_date),
+                leave_request.user.staff_name or leave_request.user.username,
+                time_out,
+                round(float(leave_request.hours or 0.0), 2),
+                "",
+                "",
+                "",
+                "",
+                "Coverage Not Entered",
+                leave_request.status,
+                "Yes" if leave_request.is_school_related else "No",
+            ])
 
     school_related_values = [[
         "Request ID", "Employee", "Start Date", "End Date",
