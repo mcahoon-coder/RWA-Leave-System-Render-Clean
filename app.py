@@ -1275,35 +1275,103 @@ def normalize_hours(h: float) -> float:
     return h
 
 
-def manual_adjust_sum(user_id: int) -> float:
-    total = (
-        db.session.query(func.coalesce(func.sum(ManualAdjustment.hours), 0.0))
-        .filter(ManualAdjustment.user_id == user_id)
-        .scalar()
-    )
-    return float(total or 0.0)
+def manual_adjust_sum(user_id: int, school_year=None) -> float:
+    """Total manual adjustments for the active school year."""
+    q = db.session.query(
+        func.coalesce(func.sum(ManualAdjustment.hours), 0.0)
+    ).filter(ManualAdjustment.user_id == user_id)
 
-
-def approved_leave_sum(user_id: int) -> float:
-    total = (
-        db.session.query(func.coalesce(func.sum(LeaveRequest.hours), 0.0))
-        .filter(
-            LeaveRequest.user_id == user_id,
-            LeaveRequest.status == RequestStatus.approved,
-            LeaveRequest.is_school_related == False,  # noqa
+    school_year = school_year or get_active_school_year()
+    if school_year:
+        start_dt = datetime.combine(school_year.start_date, datetime.min.time())
+        end_dt = datetime.combine(
+            school_year.end_date + timedelta(days=1),
+            datetime.min.time(),
         )
-        .scalar()
+        q = q.filter(
+            ManualAdjustment.timestamp >= start_dt,
+            ManualAdjustment.timestamp < end_dt,
+        )
+
+    return float(q.scalar() or 0.0)
+
+
+def approved_leave_sum(user_id: int, school_year=None) -> float:
+    """Approved non-school-related leave used in the active school year."""
+    q = db.session.query(
+        func.coalesce(func.sum(LeaveRequest.hours), 0.0)
+    ).filter(
+        LeaveRequest.user_id == user_id,
+        LeaveRequest.status == RequestStatus.approved,
+        LeaveRequest.is_school_related.is_(False),
     )
-    return float(total or 0.0)
+
+    school_year = school_year or get_active_school_year()
+    if school_year:
+        q = q.filter(
+            LeaveRequest.start_date <= school_year.end_date,
+            LeaveRequest.end_date >= school_year.start_date,
+        )
+
+    return float(q.scalar() or 0.0)
 
 
-def expected_balance_for_user(u: User) -> float:
-    start = float(getattr(u, "starting_balance", 0.0) or 0.0)
-    manual = manual_adjust_sum(u.id)
-    taken = approved_leave_sum(u.id)
+def beginning_balance_for_user(user: User, school_year=None) -> float:
+    """Use the saved school-year beginning balance as the primary source."""
+    school_year = school_year or get_active_school_year()
 
-    expected = start + manual - taken
-    return normalize_hours(expected)
+    if school_year:
+        saved = SchoolYearBalance.query.filter_by(
+            school_year_id=school_year.id,
+            user_id=user.id,
+        ).first()
+        if saved is not None:
+            return normalize_hours(saved.beginning_balance or 0.0)
+
+    return normalize_hours(getattr(user, "starting_balance", 0.0) or 0.0)
+
+
+def expected_balance_for_user(user: User) -> float:
+    """
+    Current balance source of truth:
+    beginning balance + adjustments - approved non-school-related leave.
+    """
+    school_year = get_active_school_year()
+    beginning = beginning_balance_for_user(user, school_year)
+    adjustments = manual_adjust_sum(user.id, school_year)
+    leave_used = approved_leave_sum(user.id, school_year)
+    return normalize_hours(beginning + adjustments - leave_used)
+
+
+def reconcile_user_balance(user: User) -> tuple[float, bool]:
+    """Repair one stored balance from the underlying leave records."""
+    expected = expected_balance_for_user(user)
+    current = normalize_hours(user.hours_balance or 0.0)
+    changed = current != expected
+
+    if changed:
+        app.logger.warning(
+            "Leave balance reconciled for user_id=%s: stored=%s expected=%s",
+            user.id,
+            current,
+            expected,
+        )
+        user.hours_balance = expected
+
+    return expected, changed
+
+
+def reconcile_all_active_user_balances() -> int:
+    """Repair active employee balances and return the number changed."""
+    changed_count = 0
+
+    for user in User.query.filter(User.is_active.is_(True)).all():
+        _expected, changed = reconcile_user_balance(user)
+        if changed:
+            changed_count += 1
+
+    return changed_count
+
 
 # =========================================================
 # Nav + globals in templates
@@ -1518,6 +1586,16 @@ def admin_hub():
         flash("Admins only.", "warning")
         return redirect(url_for("dashboard"))
 
+    # Reconcile existing balances from the actual current-year records.
+    repaired_balances = reconcile_all_active_user_balances()
+    if repaired_balances:
+        db.session.commit()
+        flash(
+            f"Leave balances were automatically corrected for "
+            f"{repaired_balances} employee(s).",
+            "info",
+        )
+
     today = date.today()
     month_start = date(today.year, today.month, 1)
 
@@ -1550,6 +1628,9 @@ def admin_hub():
 
     coverage_needed_count = 0
     for leave_request in approved_active:
+        if leave_request.no_substitute_needed:
+            continue
+
         assigned_hours = sum(
             float(sub.hours or 0.0)
             for sub in leave_request.subs
@@ -2254,10 +2335,13 @@ def school_year_setup():
 
                 updated_count += 1
 
+            db.session.flush()
+            repaired_count = reconcile_all_active_user_balances()
             db.session.commit()
             flash(
                 f"{school_year.name} was saved. "
-                f"{updated_count} beginning balance(s) were updated.",
+                f"{updated_count} beginning balance(s) were updated. "
+                f"{repaired_count} current balance(s) were recalculated.",
                 "success",
             )
             return redirect(url_for("school_year_setup"))
@@ -2675,15 +2759,12 @@ def approve(req_id):
 
     u = User.query.get(r.user_id)
 
-    # Deduct hours only if NOT school-related
-    if not r.is_school_related:
-        u.hours_balance = normalize_hours(
-            (u.hours_balance or 0.0) - (r.hours or 0.0)
-        )
-
-    # Always approve the request
+    # Approve first, then calculate the balance from source records.
+    # This prevents missed deductions and duplicate deductions.
     r.status = RequestStatus.approved
     r.decided_at = datetime.utcnow()
+    db.session.flush()
+    reconcile_user_balance(u)
 
     ledger_hours = 0.0 if r.is_school_related else -(r.hours or 0.0)
     ledger_description = (
@@ -2768,18 +2849,16 @@ def cancel(req_id):
 
     u = User.query.get(r.user_id)
 
-    # Add hours back ONLY if it was approved and not school-related
-    if r.status == RequestStatus.approved and not r.is_school_related:
-        u.hours_balance = normalize_hours(
-            (u.hours_balance or 0.0) + (r.hours or 0.0)
-        )
-
     was_approved_and_deducted = (
         r.status == RequestStatus.approved and not r.is_school_related
     )
 
     r.status = RequestStatus.cancelled
     r.decided_at = datetime.utcnow()
+    db.session.flush()
+
+    # Recalculate instead of manually adding hours back.
+    reconcile_user_balance(u)
 
     if was_approved_and_deducted:
         record_leave_ledger_entry(
@@ -2830,12 +2909,31 @@ def edit_request(req_id):
     r = LeaveRequest.query.get_or_404(req_id)
 
     if request.method == "POST":
-        # Update times/dates/hours
-        r.start_date = request.form.get("start_date") or r.start_date
-        r.end_date = request.form.get("end_date") or r.end_date
-        r.start_time = request.form.get("start_time") or r.start_time
-        r.end_time = request.form.get("end_time") or r.end_time
-        r.hours = float(request.form.get("hours") or r.hours)
+        # Update dates/times/hours using the correct database types.
+        start_text = (request.form.get("start_date") or "").strip()
+        end_text = (request.form.get("end_date") or "").strip()
+
+        try:
+            if start_text:
+                r.start_date = datetime.strptime(start_text, "%Y-%m-%d").date()
+            if end_text:
+                r.end_date = datetime.strptime(end_text, "%Y-%m-%d").date()
+            r.start_time = request.form.get("start_time") or r.start_time
+            r.end_time = request.form.get("end_time") or r.end_time
+            r.hours = normalize_hours(
+                float(request.form.get("hours") or r.hours)
+            )
+        except (TypeError, ValueError):
+            flash("Please enter valid dates and leave hours.", "warning")
+            return redirect(url_for("edit_request", req_id=r.id))
+
+        if r.end_date < r.start_date:
+            flash("The end date cannot be before the start date.", "warning")
+            return redirect(url_for("edit_request", req_id=r.id))
+
+        db.session.flush()
+        if r.status == RequestStatus.approved:
+            reconcile_user_balance(r.user)
 
         db.session.commit()
         flash("Request updated successfully.", "success")
@@ -2873,9 +2971,9 @@ def add_manual_adjustment_for_user(user_id):
     )
     db.session.add(adj)
 
-    # Update the user's balance (normalized)
-    user.hours_balance = normalize_hours((user.hours_balance or 0.0) + float(hours or 0.0))
+    # Save the adjustment first, then recalculate from source records.
     db.session.flush()
+    reconcile_user_balance(user)
 
     record_leave_ledger_entry(
         user_id=user.id,
@@ -2946,10 +3044,9 @@ def delete_adjustment(user_id, adj_id):
     }
 
     try:
-        user.hours_balance = normalize_hours(
-        (user.hours_balance or 0.0) - adj.hours
-        )
         db.session.delete(adj)
+        db.session.flush()
+        reconcile_user_balance(user)
         db.session.commit()
         flash(
             f"Adjustment ({adj.hours:+.2f}h) deleted. "
@@ -2987,11 +3084,9 @@ def undo_delete_adjustment():
             timestamp=datetime.fromisoformat(data["timestamp"]) if data.get("timestamp") else datetime.now(),
         )
         user = User.query.get(data["user_id"])
-        user.hours_balance = normalize_hours(
-        (user.hours_balance or 0.0) + adj.hours
-        )
         db.session.add(adj)
         db.session.flush()
+        reconcile_user_balance(user)
 
         record_leave_ledger_entry(
             user_id=user.id,
@@ -3376,6 +3471,7 @@ def admin_create_user():
             else Role.staff
         ),
         hours_balance=hours_balance,
+        starting_balance=hours_balance,
         email=email or None,
         hire_date=hire_date,
         is_active=True,
@@ -3420,9 +3516,24 @@ def admin_update_user(user_id):
 
     try:
         if balance_text != "":
-            user.hours_balance = normalize_hours(
-                float(balance_text)
+            requested_balance = normalize_hours(float(balance_text))
+            current_expected = expected_balance_for_user(user)
+            balance_delta = normalize_hours(
+                requested_balance - current_expected
             )
+
+            if balance_delta != 0:
+                balance_adjustment = ManualAdjustment(
+                    user_id=user.id,
+                    admin_id=current_user.id,
+                    hours=balance_delta,
+                    note="Balance correction from Manage Employees",
+                    timestamp=datetime.utcnow(),
+                )
+                db.session.add(balance_adjustment)
+                db.session.flush()
+
+            reconcile_user_balance(user)
     except Exception:
         flash("The balance value was not valid.", "warning")
 
