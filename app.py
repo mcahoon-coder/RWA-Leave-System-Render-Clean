@@ -1979,7 +1979,10 @@ def coverage_followup_done(req_id):
         f"{leave_request.user.staff_name or leave_request.user.username}.",
         "success",
     )
-    return redirect(request.referrer or url_for("admin_hub"))
+    if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+        return jsonify({"ok": True, "request_id": req_id})
+
+    return redirect(url_for("admin_hub") + "#coverage-followup")
 
 
 @app.post("/admin/coverage-followup/<int:req_id>/reopen")
