@@ -572,3 +572,7 @@ textarea { resize: vertical; }
     min-height: 88px;
   }
 }
+/* Admin section anchors: account for sticky navigation */
+html { scroll-behavior: smooth; }
+#coverage-followup, #pending-approvals { scroll-margin-top: 96px; }
+[hidden] { display: none !important; }
