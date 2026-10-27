@@ -1,5 +1,7 @@
+
 {% extends "base.html" %}
 {% block content %}
+
 <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:14px;flex-wrap:wrap;margin-bottom:20px;">
   <div>
     <h1 style="margin:0 0 4px 0;">Administration Dashboard</h1>
@@ -38,7 +40,7 @@
 
   <div class="metric-card">
     <div class="metric-label">Coverage Follow-Up</div>
-    <div class="metric-value">{{ coverage_followup_count }}</div>
+    <div class="metric-value" data-followup-count>{{ coverage_followup_count }}</div>
     <div class="metric-note">Approved requests waiting for Admin to mark Done</div>
   </div>
 
@@ -70,6 +72,7 @@
 <div class="card">
   <h2 style="margin-top:0;">Administrative Tools</h2>
   <div class="action-grid">
+
     <a class="action-card" href="{{ url_for('manage_users') }}">
       <div class="action-icon">👥</div>
       <div class="action-title">Employees</div>
@@ -117,11 +120,11 @@
       <div class="action-title">Test Email</div>
       <div class="action-copy">Verify the current email configuration</div>
     </a>
+
   </div>
 </div>
 
-
-<div class="card" id="coverage-followup">
+<div class="card" id="coverage-followup" style="scroll-margin-top:100px;">
   <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">
     <div>
       <h2 style="margin:0;">Coverage Follow-Up</h2>
@@ -130,11 +133,13 @@
         This applies whether coverage is entered or no substitute is needed.
       </p>
     </div>
-    <span class="badge badge-yellow">{{ coverage_followup_count }} Open</span>
+    <span class="badge badge-yellow">
+      <span data-followup-count>{{ coverage_followup_count }}</span> Open
+    </span>
   </div>
 
   {% if coverage_followups %}
-    <div class="table-wrap" style="margin-top:14px;">
+    <div class="table-wrap" id="followup-table-wrap" style="margin-top:14px;">
       <table class="table" style="min-width:1000px;">
         <thead>
           <tr>
@@ -148,14 +153,16 @@
             <th>Action</th>
           </tr>
         </thead>
-        <tbody>
+        <tbody id="followup-rows">
           {% for r in coverage_followups %}
             {% set assigned_hours = r.subs|sum(attribute='hours') if r.subs else 0 %}
-            <tr>
+            <tr data-followup-row="{{ r.id }}">
               <td>
                 <strong>{{ r.user.staff_name or r.user.username }}</strong>
                 {% if r.is_school_related %}
-                  <div><span class="badge badge-blue">School Related</span></div>
+                  <div>
+                    <span class="badge badge-blue">School Related</span>
+                  </div>
                 {% endif %}
               </td>
 
@@ -220,10 +227,12 @@
                   </a>
                 {% endif %}
 
-                <form method="post"
-                      action="{{ url_for('coverage_followup_done', req_id=r.id) }}"
-                      style="display:inline;"
-                      onsubmit="return confirm('Mark this coverage follow-up as done?');">
+                <form
+                  method="post"
+                  action="{{ url_for('coverage_followup_done', req_id=r.id) }}"
+                  class="followup-done-form"
+                  style="display:inline;"
+                >
                   <button class="btn btn-success btn-sm" type="submit">
                     Done
                   </button>
@@ -234,19 +243,33 @@
         </tbody>
       </table>
     </div>
-  {% else %}
-    <div style="margin-top:14px;padding:16px;border:1px solid var(--border);border-radius:10px;background:#f8fafc;">
+
+    <div id="followup-empty" hidden
+         style="margin-top:14px;padding:16px;border:1px solid var(--border);border-radius:10px;background:#f8fafc;">
       <strong>All caught up.</strong>
-      <div class="text-muted">There are no approved leave requests waiting for coverage follow-up.</div>
+      <div class="text-muted">
+        There are no approved leave requests waiting for coverage follow-up.
+      </div>
+    </div>
+
+  {% else %}
+    <div id="followup-empty"
+         style="margin-top:14px;padding:16px;border:1px solid var(--border);border-radius:10px;background:#f8fafc;">
+      <strong>All caught up.</strong>
+      <div class="text-muted">
+        There are no approved leave requests waiting for coverage follow-up.
+      </div>
     </div>
   {% endif %}
 </div>
 
 <div class="grid-2">
-  <div class="card">
+  <div class="card" id="pending-approvals" style="scroll-margin-top:100px;">
     <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">
       <h2 style="margin:0;">Pending Approvals</h2>
-      <a class="btn btn-sm" href="{{ url_for('my_requests', day='all', status='pending') }}">View Request List</a>
+      <a class="btn btn-sm" href="{{ url_for('my_requests', day='all', status='pending') }}">
+        View Request List
+      </a>
     </div>
 
     {% if pending %}
@@ -272,16 +295,29 @@
                 </td>
                 <td>
                   {{ r.start_date }}
-                  {% if r.end_date != r.start_date %} → {{ r.end_date }}{% endif %}
+                  {% if r.end_date != r.start_date %}
+                    → {{ r.end_date }}
+                  {% endif %}
                 </td>
                 <td>{{ "%.2f"|format(r.hours or 0) }}</td>
-                <td>{{ r.created_at.strftime("%b %d, %I:%M %p") if r.created_at else "—" }}</td>
+                <td>
+                  {{ r.created_at.strftime("%b %d, %I:%M %p") if r.created_at else "—" }}
+                </td>
                 <td class="nowrap">
-                  <form method="post" action="{{ url_for('approve', req_id=r.id) }}" style="display:inline;">
-                    <button class="btn btn-success btn-sm" type="submit">Approve</button>
+                  <form method="post"
+                        action="{{ url_for('approve', req_id=r.id) }}"
+                        style="display:inline;">
+                    <button class="btn btn-success btn-sm" type="submit">
+                      Approve
+                    </button>
                   </form>
-                  <form method="post" action="{{ url_for('disapprove', req_id=r.id) }}" style="display:inline;">
-                    <button class="btn btn-danger btn-sm" type="submit">Disapprove</button>
+
+                  <form method="post"
+                        action="{{ url_for('disapprove', req_id=r.id) }}"
+                        style="display:inline;">
+                    <button class="btn btn-danger btn-sm" type="submit">
+                      Disapprove
+                    </button>
                   </form>
                 </td>
               </tr>
@@ -303,7 +339,9 @@
             <strong>{{ r.user.staff_name or r.user.username }}</strong>
             <div class="text-muted">
               {{ "%.2f"|format(r.hours or 0) }}h
-              {% if r.is_school_related %} · School Related{% endif %}
+              {% if r.is_school_related %}
+                · School Related
+              {% endif %}
             </div>
           </div>
         {% endfor %}
@@ -323,7 +361,9 @@
                 {{ ledger_entry_label(entry.entry_type) }}
               </div>
             </div>
-            <div style="font-weight:850;">{{ "%+.2f"|format(entry.hours or 0) }}h</div>
+            <div style="font-weight:850;">
+              {{ "%+.2f"|format(entry.hours or 0) }}h
+            </div>
           </div>
         {% endfor %}
       {% else %}
@@ -332,4 +372,85 @@
     </div>
   </div>
 </div>
+
+<script>
+(function () {
+  "use strict";
+
+  const section = document.getElementById("coverage-followup");
+  if (!section) return;
+
+  section.addEventListener("submit", async function (event) {
+    const form = event.target.closest("form.followup-done-form");
+    if (!form) return;
+
+    event.preventDefault();
+
+    if (!window.confirm("Mark this coverage follow-up as done?")) {
+      return;
+    }
+
+    const button = form.querySelector('button[type="submit"]');
+    const originalText = button.textContent;
+
+    button.disabled = true;
+    button.textContent = "Saving...";
+
+    try {
+      const response = await fetch(form.action, {
+        method: "POST",
+        credentials: "same-origin",
+        headers: {
+          "X-Requested-With": "XMLHttpRequest"
+        },
+        body: new FormData(form)
+      });
+
+      if (!response.ok) {
+        throw new Error("Server returned " + response.status);
+      }
+
+      const result = await response.json();
+
+      if (!result.ok) {
+        throw new Error("Could not save the change.");
+      }
+
+      const row = form.closest("[data-followup-row]");
+
+      if (row) {
+        row.remove();
+      }
+
+      const remaining = section.querySelectorAll("[data-followup-row]").length;
+
+      document.querySelectorAll("[data-followup-count]").forEach(function (element) {
+        element.textContent = remaining;
+      });
+
+      const emptyMessage = document.getElementById("followup-empty");
+
+      if (emptyMessage) {
+        emptyMessage.hidden = remaining !== 0;
+      }
+
+      const tableWrap = document.getElementById("followup-table-wrap");
+
+      if (tableWrap) {
+        tableWrap.hidden = remaining === 0;
+      }
+
+    } catch (error) {
+      button.disabled = false;
+      button.textContent = originalText;
+
+      alert(
+        "The follow-up could not be marked Done. " +
+        "Please try again. " + error.message
+      );
+    }
+  });
+})();
+</script>
+
 {% endblock %}
