@@ -169,7 +169,7 @@
             </form>
 
             {% if not r.no_substitute_needed %}
-            <form method="post" action="{{ url_for('add_substitute', req_id=r.id) }}">
+            <form id="coverage-entry-{{ r.id }}" method="post" action="{{ url_for('add_substitute', req_id=r.id) }}" style="scroll-margin-top:110px;">
               <div style="margin-bottom:10px;">
                 <label for="coverage_type_{{ r.id }}"><strong>Coverage Type</strong></label>
                 <select id="coverage_type_{{ r.id }}" name="coverage_type"

@@ -222,7 +222,7 @@
 
               <td>
                 {% if not r.no_substitute_needed and not (r.subs and r.subs|length) %}
-                  <a class="btn btn-sm" href="{{ url_for('coverage_center') }}">
+                  <a class="btn btn-sm" href="{{ url_for('coverage_center', start=r.start_date.isoformat(), end=r.end_date.isoformat(), status='approved') }}#coverage-entry-{{ r.id }}">
                     Add Coverage
                   </a>
                 {% endif %}
